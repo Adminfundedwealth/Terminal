@@ -1,0 +1,446 @@
+{
+  "timestamp": "2026-06-19T03:39:23.641Z",
+  "frontendUrl": "http://localhost:3000",
+  "serverUrl": "http://localhost:4000",
+  "tests": [
+    {
+      "category": "Infrastructure",
+      "name": "Server Health Endpoint",
+      "status": "PASS",
+      "details": "Uptime: 125s",
+      "time": "2026-06-19T03:39:23.870Z"
+    },
+    {
+      "category": "Infrastructure",
+      "name": "Supabase Connectivity",
+      "status": "PASS",
+      "details": "Connected",
+      "time": "2026-06-19T03:39:23.870Z"
+    },
+    {
+      "category": "Infrastructure",
+      "name": "Broker Feed Connectivity",
+      "status": "PASS",
+      "details": "Ticks: 596",
+      "time": "2026-06-19T03:39:23.870Z"
+    },
+    {
+      "category": "Infrastructure",
+      "name": "Socket.IO Server",
+      "status": "PASS",
+      "details": "Clients: 0",
+      "time": "2026-06-19T03:39:23.870Z"
+    },
+    {
+      "category": "Infrastructure",
+      "name": "Event Bus",
+      "status": "PASS",
+      "details": "{\"totalEmitted\":597,\"byChannel\":{\"market.tick\":596,\"order.created\":1},\"listenerCounts\":{\"market.tick\":1,\"order.created\":2,\"order.updated\":2,\"position.updated\":2,\"trade.executed\":1,\"challenge.updated\":2,\"risk.alert\":2},\"uptimeMs\":118288,\"redisConnected\":false}",
+      "time": "2026-06-19T03:39:23.870Z"
+    },
+    {
+      "category": "Infrastructure",
+      "name": "Event Bridge",
+      "status": "PASS",
+      "details": "{\"forwarded\":597,\"throttled\":0,\"byChannel\":{\"market.tick\":596,\"order.created\":1},\"throttleCacheSize\":0}",
+      "time": "2026-06-19T03:39:23.870Z"
+    },
+    {
+      "category": "Infrastructure",
+      "name": "Event Dispatcher",
+      "status": "PASS",
+      "details": "{\"initialized\":true,\"totalPersisted\":0,\"totalFailed\":1,\"byEvent\":{}}",
+      "time": "2026-06-19T03:39:23.870Z"
+    },
+    {
+      "category": "Auth",
+      "name": "Frontend Loads",
+      "status": "PASS",
+      "details": "Status: 200",
+      "time": "2026-06-19T03:39:54.806Z"
+    },
+    {
+      "category": "Auth",
+      "name": "Auth Loading State",
+      "status": "PASS",
+      "details": "Shows loading spinner",
+      "time": "2026-06-19T03:40:03.262Z"
+    },
+    {
+      "category": "Auth",
+      "name": "SSO Endpoint (no token)",
+      "status": "PASS",
+      "details": "Returns 400 missing_token as expected",
+      "time": "2026-06-19T03:40:03.268Z"
+    },
+    {
+      "category": "Auth",
+      "name": "Verify (no session)",
+      "status": "PASS",
+      "details": "Returns 401 as expected",
+      "time": "2026-06-19T03:40:03.272Z"
+    },
+    {
+      "category": "Auth",
+      "name": "Dev SSO Token Generation",
+      "status": "PASS",
+      "details": "Token generated, loginUrl: /auth/sso?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c3JfdGVzdF8wMDEiLCJhY2NvdW50SWQiOiIzMzMzMzMzMy0zMzMzLTMzMzMtMzMzMy0zMzMzMzMzMzMzMzMiLCJjaGFsbGVuZ2VJZCI6IjIyMjIyMjIyLTIyMjItMjIyMi0yMjIyLTIyMjIyMjIyMjIyMiIsIm5vbmNlIjoiNGUxOTQ5ZGYtZDJhNS00NDk1LTg1MTYtMDJkM2Y0Y2RkYzQ3IiwiaWF0IjoxNzgxODQwNDAzLCJleHAiOjE3ODE4NDA0NjN9.ngcC3JKPCGgaGZi4_o3ivMARBK_157Ob6xzsLDfWWLA",
+      "time": "2026-06-19T03:40:03.279Z"
+    },
+    {
+      "category": "Auth",
+      "name": "SSO Login Flow",
+      "status": "PASS",
+      "details": "Session cookie set, redirect to /",
+      "time": "2026-06-19T03:40:04.266Z"
+    },
+    {
+      "category": "Auth",
+      "name": "Terminal Access (graceful)",
+      "status": "PASS",
+      "details": "Terminal loaded via graceful degradation",
+      "time": "2026-06-19T03:40:29.239Z"
+    },
+    {
+      "category": "UI",
+      "name": "Watchlist Panel Visible",
+      "status": "PASS",
+      "details": "Watchlist component rendered",
+      "time": "2026-06-19T03:40:33.450Z"
+    },
+    {
+      "category": "UI",
+      "name": "Market Data in Watchlist",
+      "status": "WARN",
+      "details": "No live price elements detected",
+      "time": "2026-06-19T03:40:33.455Z"
+    },
+    {
+      "category": "UI",
+      "name": "TradingView Chart Canvas",
+      "status": "PASS",
+      "details": "Canvas element rendered",
+      "time": "2026-06-19T03:40:33.464Z"
+    },
+    {
+      "category": "UI",
+      "name": "Chart Panel Component",
+      "status": "PASS",
+      "details": "Chart panel present",
+      "time": "2026-06-19T03:40:33.490Z"
+    },
+    {
+      "category": "API",
+      "name": "Option Chain API",
+      "status": "PASS",
+      "details": "Returned 0 entries",
+      "time": "2026-06-19T03:40:33.699Z"
+    },
+    {
+      "category": "API",
+      "name": "Expiries API",
+      "status": "PASS",
+      "details": "Expiries endpoint accessible",
+      "time": "2026-06-19T03:40:33.703Z"
+    },
+    {
+      "category": "API",
+      "name": "Market Depth API",
+      "status": "PASS",
+      "details": "Data received for NIFTY",
+      "time": "2026-06-19T03:40:33.900Z"
+    },
+    {
+      "category": "UI",
+      "name": "Market Depth Panel",
+      "status": "WARN",
+      "details": "Depth panel not visible (may require symbol selection)",
+      "time": "2026-06-19T03:40:33.992Z"
+    },
+    {
+      "category": "UI",
+      "name": "Order Panel Visible",
+      "status": "PASS",
+      "details": "Order panel with BUY/SELL detected",
+      "time": "2026-06-19T03:40:34.077Z"
+    },
+    {
+      "category": "API",
+      "name": "Orders List API",
+      "status": "PASS",
+      "details": "Orders endpoint accessible",
+      "time": "2026-06-19T03:40:34.504Z"
+    },
+    {
+      "category": "API",
+      "name": "Positions API",
+      "status": "PASS",
+      "details": "Positions endpoint accessible",
+      "time": "2026-06-19T03:40:34.812Z"
+    },
+    {
+      "category": "API",
+      "name": "Trades API",
+      "status": "PASS",
+      "details": "Trades endpoint accessible",
+      "time": "2026-06-19T03:40:35.001Z"
+    },
+    {
+      "category": "UI",
+      "name": "Positions Tab",
+      "status": "PASS",
+      "details": "Positions tab visible",
+      "time": "2026-06-19T03:40:35.014Z"
+    },
+    {
+      "category": "UI",
+      "name": "Orders Tab",
+      "status": "PASS",
+      "details": "Orders tab visible",
+      "time": "2026-06-19T03:40:35.014Z"
+    },
+    {
+      "category": "Realtime",
+      "name": "WebSocket Connection",
+      "status": "PASS",
+      "details": "WS connected successfully",
+      "time": "2026-06-19T03:40:35.045Z"
+    },
+    {
+      "category": "Realtime",
+      "name": "Socket.IO Polling",
+      "status": "PASS",
+      "details": "Socket.IO endpoint accessible",
+      "time": "2026-06-19T03:40:35.054Z"
+    },
+    {
+      "category": "UI",
+      "name": "Status Bar",
+      "status": "PASS",
+      "details": "Status bar rendered",
+      "time": "2026-06-19T03:40:35.078Z"
+    },
+    {
+      "category": "UI",
+      "name": "Search Modal (Ctrl+K)",
+      "status": "PASS",
+      "details": "Search modal opens",
+      "time": "2026-06-19T03:40:37.459Z"
+    },
+    {
+      "category": "UI",
+      "name": "Risk Widget",
+      "status": "PASS",
+      "details": "Risk widget visible",
+      "time": "2026-06-19T03:40:37.914Z"
+    },
+    {
+      "category": "UI",
+      "name": "Top Bar / Branding",
+      "status": "PASS",
+      "details": "Top bar with branding visible",
+      "time": "2026-06-19T03:40:37.921Z"
+    },
+    {
+      "category": "Routes",
+      "name": "Route: /nonexistent-page",
+      "status": "PASS",
+      "details": "SPA handles unknown routes gracefully",
+      "time": "2026-06-19T03:40:38.265Z"
+    },
+    {
+      "category": "API",
+      "name": "Health Check",
+      "status": "PASS",
+      "details": "GET /health → 200",
+      "time": "2026-06-19T03:40:40.201Z"
+    },
+    {
+      "category": "API",
+      "name": "Market Live Status",
+      "status": "PASS",
+      "details": "GET /api/market/live → 200",
+      "time": "2026-06-19T03:40:40.204Z"
+    },
+    {
+      "category": "API",
+      "name": "Account Info",
+      "status": "PASS",
+      "details": "GET /api/account → 200",
+      "time": "2026-06-19T03:40:40.206Z"
+    },
+    {
+      "category": "API",
+      "name": "Instrument Search",
+      "status": "PASS",
+      "details": "GET /api/instruments/search?q=NIFTY → 200",
+      "time": "2026-06-19T03:40:40.208Z"
+    },
+    {
+      "category": "API",
+      "name": "Instruments List",
+      "status": "PASS",
+      "details": "GET /api/instruments?segment=NSE → 200",
+      "time": "2026-06-19T03:40:40.210Z"
+    },
+    {
+      "category": "API",
+      "name": "Historical Data",
+      "status": "PASS",
+      "details": "GET /api/market/history?token=99926000&tf=5 → 200",
+      "time": "2026-06-19T03:40:40.400Z"
+    },
+    {
+      "category": "API",
+      "name": "Positions",
+      "status": "PASS",
+      "details": "GET /api/positions → 200",
+      "time": "2026-06-19T03:40:40.598Z"
+    },
+    {
+      "category": "API",
+      "name": "Orders",
+      "status": "PASS",
+      "details": "GET /api/orders → 200",
+      "time": "2026-06-19T03:40:40.844Z"
+    },
+    {
+      "category": "API",
+      "name": "Trades",
+      "status": "PASS",
+      "details": "GET /api/trades → 200",
+      "time": "2026-06-19T03:40:41.098Z"
+    },
+    {
+      "category": "Stability",
+      "name": "Console Errors",
+      "status": "PASS",
+      "details": "No console errors",
+      "time": "2026-06-19T03:40:41.098Z"
+    },
+    {
+      "category": "Stability",
+      "name": "Network Failures",
+      "status": "WARN",
+      "details": "18 failed requests",
+      "time": "2026-06-19T03:40:41.098Z"
+    }
+  ],
+  "consoleErrors": [],
+  "networkFailures": [
+    {
+      "url": "http://localhost:3000/api/account",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "time": "2026-06-19T03:40:03.459Z"
+    },
+    {
+      "url": "https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuFuYMZg.ttf",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "time": "2026-06-19T03:40:18.560Z"
+    },
+    {
+      "url": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbY2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8-qxjPQ.ttf",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "time": "2026-06-19T03:40:18.560Z"
+    },
+    {
+      "url": "https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuI6fMZg.ttf",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "time": "2026-06-19T03:40:18.561Z"
+    },
+    {
+      "url": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbY2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKxjPQ.ttf",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "time": "2026-06-19T03:40:18.562Z"
+    },
+    {
+      "url": "https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuGKYMZg.ttf",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "time": "2026-06-19T03:40:18.564Z"
+    },
+    {
+      "url": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbY2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8FqtjPQ.ttf",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "time": "2026-06-19T03:40:18.564Z"
+    },
+    {
+      "url": "http://localhost:3000/api/account",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "time": "2026-06-19T03:40:20.765Z"
+    },
+    {
+      "url": "http://localhost:3000/api/account",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "time": "2026-06-19T03:40:24.607Z"
+    },
+    {
+      "url": "http://localhost:3000/api/account",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "time": "2026-06-19T03:40:38.097Z"
+    },
+    {
+      "url": "http://localhost:3000/api/account",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "time": "2026-06-19T03:40:38.168Z"
+    },
+    {
+      "url": "http://localhost:3000/api/account",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "time": "2026-06-19T03:40:38.290Z"
+    },
+    {
+      "url": "http://localhost:3000/api/account",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "time": "2026-06-19T03:40:38.290Z"
+    },
+    {
+      "url": "http://localhost:3000/api/account",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "time": "2026-06-19T03:40:38.407Z"
+    },
+    {
+      "url": "http://localhost:3000/api/account",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "time": "2026-06-19T03:40:38.421Z"
+    },
+    {
+      "url": "http://localhost:3000/api/account",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "time": "2026-06-19T03:40:38.623Z"
+    },
+    {
+      "url": "http://localhost:3000/api/account",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "time": "2026-06-19T03:40:38.623Z"
+    },
+    {
+      "url": "http://localhost:3000/api/account",
+      "method": "GET",
+      "failure": "net::ERR_ABORTED",
+      "time": "2026-06-19T03:40:38.687Z"
+    }
+  ],
+  "summary": {
+    "total": 46,
+    "passed": 43,
+    "failed": 0,
+    "warnings": 3
+  }
+}

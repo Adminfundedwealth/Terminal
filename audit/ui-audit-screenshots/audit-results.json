@@ -1,0 +1,141 @@
+{
+  "timestamp": "2026-06-19T03:07:43.405Z",
+  "score": 61,
+  "appCrashed": false,
+  "consoleErrors": [
+    "WebSocket connection to 'ws://localhost:3000/ws' failed: Connection closed before receiving a handshake response",
+    "[WS] Error: Event",
+    "WebSocket connection to 'ws://localhost:3000/ws' failed: Connection closed before receiving a handshake response",
+    "[WS] Error: Event",
+    "WebSocket connection to 'ws://localhost:3000/ws' failed: Connection closed before receiving a handshake response",
+    "[WS] Error: Event",
+    "WebSocket connection to 'ws://localhost:3000/ws' failed: Connection closed before receiving a handshake response",
+    "[WS] Error: Event"
+  ],
+  "components": [
+    {
+      "component": "TopBar",
+      "visible": true,
+      "box": {
+        "x": 0,
+        "y": 0,
+        "width": 1920,
+        "height": 48
+      },
+      "score": 8
+    },
+    {
+      "component": "Branding",
+      "visible": true,
+      "box": {
+        "x": 8,
+        "y": 7.5,
+        "width": 165.96875,
+        "height": 32
+      },
+      "score": 8
+    },
+    {
+      "component": "Chart Canvas",
+      "visible": true,
+      "box": {
+        "x": 224,
+        "y": 84,
+        "width": 1396,
+        "height": 762
+      },
+      "score": 8
+    }
+  ],
+  "issues": [
+    {
+      "severity": "P2",
+      "component": "Accessibility",
+      "issue": "Button without accessible label",
+      "details": ""
+    },
+    {
+      "severity": "P2",
+      "component": "Accessibility",
+      "issue": "Button without accessible label",
+      "details": ""
+    },
+    {
+      "severity": "P2",
+      "component": "Accessibility",
+      "issue": "Button without accessible label",
+      "details": ""
+    },
+    {
+      "severity": "P2",
+      "component": "Accessibility",
+      "issue": "Button without accessible label",
+      "details": ""
+    },
+    {
+      "severity": "P2",
+      "component": "Accessibility",
+      "issue": "Button without accessible label",
+      "details": ""
+    },
+    {
+      "severity": "P2",
+      "component": "Accessibility",
+      "issue": "Button without accessible label",
+      "details": ""
+    },
+    {
+      "severity": "P2",
+      "component": "Accessibility",
+      "issue": "Button without accessible label",
+      "details": ""
+    },
+    {
+      "severity": "P2",
+      "component": "Accessibility",
+      "issue": "Button without accessible label",
+      "details": ""
+    },
+    {
+      "severity": "P2",
+      "component": "Accessibility",
+      "issue": "Button without accessible label",
+      "details": ""
+    },
+    {
+      "severity": "P2",
+      "component": "Accessibility",
+      "issue": "Button without accessible label",
+      "details": ""
+    },
+    {
+      "severity": "P2",
+      "component": "Accessibility",
+      "issue": "Button without accessible label",
+      "details": ""
+    },
+    {
+      "severity": "P2",
+      "component": "Accessibility",
+      "issue": "Button without accessible label",
+      "details": ""
+    },
+    {
+      "severity": "P2",
+      "component": "Accessibility",
+      "issue": "Input without label",
+      "details": ""
+    },
+    {
+      "severity": "P2",
+      "component": "Accessibility",
+      "issue": "Input without label",
+      "details": ""
+    }
+  ],
+  "rootState": {
+    "children": 1,
+    "text": "FUNDEDWEALTH\nIDX\nSTK\nFUT\nOPT\nMCX\nCDS\nWL\nOP\nOC\nDOM\nClosed\nBal\n₹10.0L\nP&L\n+₹15.2K\nINDEX\nSTOCKS\nFUTURES\nOPTIONS\nMCX\nCDS\n5 symbols\nNIFTY 50\n—\nNSE\nBANKNIFTY\n—\nNSE\nFINNIFTY\n—\nNSE\nMIDCPNIFTY\n—\nNSE\nSENSEX\n—\nB",
+    "html": "<div class=\"h-screen w-screen flex flex-col bg-fw-bg overflow-hidden text-[13px]\"><header class=\"h-[48px] min-h-[48px] bg-fw-surface border-b border-fw-border flex items-center px-2 select-none overflow-hidden\"><div data-brand=\"true\" class=\"flex items-center gap-2 mr-3 pr-3 border-r border-fw-border"
+  }
+}

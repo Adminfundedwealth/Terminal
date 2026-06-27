@@ -1,0 +1,35 @@
+[WebSocket] Server initialized
+════════════════════════════════════════════════
+  FUNDEDWEALTH TERMINAL — Server Starting
+════════════════════════════════════════════════
+  Port: 4000
+  Env:  development
+
+[Startup] Testing Supabase connection...
+[Startup] ✓ Supabase connected
+[Startup] Initializing market data engine...
+[Startup] ✓ Market data engine ready (awaiting broker adapter)
+[Startup] Initializing Redis Pub/Sub...
+[Redis] REDIS_URL not set — operating in single-instance mode
+[Startup] ○ Redis not configured — single-instance mode
+[Startup] ✓ TradingView Datafeed layer ready
+[Cron] Daily checks scheduler started (09:00 daily unlock, 15:45 EOD metrics)
+[Startup] ✓ Daily checks scheduler active
+[Startup] ✓ Socket.IO server initialized
+[HealthMonitor] Started (interval: 30s)
+[Startup] ✓ Broker health monitor active
+
+[Startup] ✓ Server listening on http://localhost:4000
+[Startup] ✓ WebSocket (legacy) on ws://localhost:4000/ws
+[Startup] ✓ Socket.IO on http://localhost:4000/socket.io
+
+  Broker Status:
+    Angel One: configured=true, connected=false
+    Dhan:      configured=true, status=not_implemented
+
+════════════════════════════════════════════════
+[AngelFeed] ✓ Logged in as A1209499
+[AngelFeed] Connecting to SmartStream...
+[AngelFeed] ✓ WebSocket connected
+[AngelFeed] Subscribed 9 tokens (mode 1)
+[AngelFeed] ✓ 9 symbols subscribed

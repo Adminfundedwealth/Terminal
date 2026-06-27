@@ -1,0 +1,29 @@
+{
+  "name": "fw-terminal-server",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch index.js",
+    "start": "node index.js",
+    "setup": "node db/setup.js",
+    "daily-checks": "node -e \"import('./cron/dailyChecks.js').then(m => m.runDailyChecks().then(console.log))\"",
+    "eod-metrics": "node -e \"import('./cron/dailyChecks.js').then(m => m.runEndOfDayMetrics().then(console.log))\""
+  },
+  "dependencies": {
+    "@otplib/preset-default": "^12.0.1",
+    "@supabase/supabase-js": "^2.108.2",
+    "axios": "^1.18.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^8.5.2",
+    "helmet": "^8.2.0",
+    "ioredis": "^5.4.1",
+    "jsonwebtoken": "^9.0.3",
+    "pg": "^8.21.0",
+    "rate-limit-redis": "^4.2.0",
+    "socket.io": "^4.8.3",
+    "ws": "^8.17.1",
+    "zod": "^3.23.8"
+  }
+}

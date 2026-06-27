@@ -1,0 +1,57 @@
+{
+  "timestamp": "2026-06-21T17:30:51.144Z",
+  "startup": {},
+  "frontend": {},
+  "api": {},
+  "database": {},
+  "websocket": {
+    "messagesReceived": 1,
+    "sample": [
+      "{\"type\":\"connected\"}"
+    ]
+  },
+  "network": {
+    "failed": [
+      {
+        "url": "http://localhost:3000/src/components/ChartPanel.tsx?t=1782063049904",
+        "error": "net::ERR_ABORTED"
+      }
+    ],
+    "errors": [],
+    "status4xx": [],
+    "status5xx": [
+      {
+        "url": "http://localhost:3000/src/components/ChartPanel.tsx?t=1782063049904",
+        "status": 500
+      }
+    ]
+  },
+  "fakeDataAudit": {
+    "account": {
+      "source": "FAKE (dev-bypass mock)",
+      "id": "dev-account",
+      "code": "FW-DEV",
+      "balance": 10000000
+    },
+    "marketData": {
+      "source": "REAL (AngelOne SmartStream)",
+      "tickCount": 9,
+      "feedConnected": true,
+      "symbolsWithLTP": 9,
+      "samplePrices": [
+        "1333=779.8",
+        "1594=1051.4",
+        "2885=1309.5"
+      ]
+    },
+    "positions": {
+      "source": "MIXED (dev account, empty positions expected)",
+      "count": 0
+    },
+    "orders": {
+      "source": "MIXED (dev account, no DB orders)",
+      "count": 0
+    }
+  },
+  "verdict": {}
+}

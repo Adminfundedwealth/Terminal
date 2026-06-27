@@ -1,0 +1,72 @@
+{
+  "screenshots": [
+    {
+      "name": "Full Terminal 1920x1080",
+      "file": "01-full-terminal-1920x1080.png",
+      "status": "captured"
+    },
+    {
+      "name": "Sidebar",
+      "file": "02-sidebar.png",
+      "status": "captured"
+    },
+    {
+      "name": "TopBar + Branding",
+      "file": "03-topbar-brand.png",
+      "status": "captured"
+    },
+    {
+      "name": "Watchlist",
+      "file": "04-watchlist.png",
+      "status": "captured"
+    },
+    {
+      "name": "Chart Area",
+      "file": "05-chart-area.png",
+      "status": "captured"
+    },
+    {
+      "name": "Order Panel",
+      "file": "06-order-panel.png",
+      "status": "captured"
+    },
+    {
+      "name": "Bottom Panel",
+      "file": "07-bottom-panel.png",
+      "status": "captured"
+    },
+    {
+      "name": "Full Terminal 1366x768",
+      "file": "08-full-terminal-1366x768.png",
+      "status": "captured"
+    },
+    {
+      "name": "Mobile 390x844",
+      "file": "09-mobile-390x844.png",
+      "status": "captured"
+    }
+  ],
+  "checks": {
+    "noWhiteBackground": true,
+    "brandFundedwealth": true,
+    "brandTerminal": true,
+    "sidebarPresent": true,
+    "beButton": true,
+    "tpButton": true,
+    "slButton": true,
+    "tslButton": true,
+    "revButton": true,
+    "exitButton": true,
+    "halfButton": true,
+    "allButton": true,
+    "indicatorsActive": true,
+    "drawingToolsActive": true,
+    "layoutSingle": true,
+    "layoutSplit": true,
+    "layoutGrid": true,
+    "noVerticalOverflow": true,
+    "versionInStatusBar": true
+  },
+  "allPass": true,
+  "timestamp": "2026-06-19T09:11:54.411Z"
+}

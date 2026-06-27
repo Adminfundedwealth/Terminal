@@ -1,0 +1,401 @@
+{
+  "timestamp": "2026-06-19T03:57:38.742Z",
+  "finalScore": 70,
+  "p0": 1,
+  "p1": 1,
+  "p2": 11,
+  "componentAudits": [
+    {
+      "name": "TopBar",
+      "score": 9,
+      "visible": true,
+      "details": {
+        "height": 48,
+        "width": 1920,
+        "hasBrand": true,
+        "brandText": "FUNDEDWEALTH",
+        "buttonCount": 18,
+        "bg": "rgb(24, 27, 37)",
+        "borderBottom": "1px solid rgb(38, 42, 54)",
+        "hasAccountMetrics": true,
+        "hasWorkspaceTabs": true
+      }
+    },
+    {
+      "name": "Watchlist",
+      "score": 10,
+      "visible": true,
+      "details": {
+        "width": 220,
+        "height": 976,
+        "tabCount": 18,
+        "itemCount": 5,
+        "hasSearch": true,
+        "bg": "rgba(0, 0, 0, 0)",
+        "text": "INDEX\nSTOCKS\nFUTURES\nOPTIONS\nMCX\nCDS\n5 symbols\nNIFTY 50\n23,959.95\nNSE\n+0.00%\nBANKNIFTY\n57,668.00\nNSE\n+0.00%\nFINNIFTY\n26,426.15\nNSE\n+0.00%\nMIDCPNIFTY\n14,546.45\nNSE\n+0.00%\nSENSEX\n—\nBSE\nAdd Symbol",
+        "hasAddButton": true
+      }
+    },
+    {
+      "name": "ChartPanel",
+      "score": 9,
+      "visible": true,
+      "details": {
+        "hasCanvas": true,
+        "canvasWidth": 1386,
+        "canvasHeight": 728,
+        "displayWidth": 1386,
+        "displayHeight": 728,
+        "controlCount": 0,
+        "parentText": ""
+      }
+    },
+    {
+      "name": "OrderPanel",
+      "score": 10,
+      "visible": true,
+      "details": {
+        "width": 240,
+        "height": 976,
+        "buttonCount": 27,
+        "inputCount": 1,
+        "hasBuyBtn": true,
+        "hasSellBtn": true,
+        "hasQty": true,
+        "hasPrice": false,
+        "hasOrderType": true,
+        "hasRiskMonitor": true,
+        "text": "RISK MONITOR\nSAFE\nDaily Loss\n0%\n₹0 / ₹50.0K\nBuffer: ₹50.0K\nMax Drawdown\n0%\n₹0 / ₹1.0L\nBuffer: ₹1.0L\nProfit Target\n0%\n₹0 / ₹1.0L\nBuffer: ₹1.0L\nNIFTY 50\n23,959.95\nO:—\nH:—\nL:—\n%\nBUY\nSELL\nORDER TYPE\nMarket\nLimit\nSL\nSL-M\nPRODUCT\nMIS\nNRML\nCNC\nQUANTITY\n−\n+\n1\n5\n10\n25\n50\n100\nLot size: 50 — Total: 1 × ₹23,959.95 = ₹23,959.95\nEst. Value\n₹23,959.95\nMargin (≈20%)\n₹4,791.99\nType\nBUY · MARKET · MIS\nBUY\nSELL\nBE\nT"
+      }
+    },
+    {
+      "name": "BottomPanel",
+      "score": 10,
+      "visible": true,
+      "details": {
+        "width": 1452,
+        "height": 180,
+        "tabCount": 8,
+        "hasTable": false,
+        "hasPositionsTab": true,
+        "hasOrdersTab": true,
+        "hasTradesTab": true,
+        "hasEmptyState": true,
+        "text": "Positions\nOrders\nTrade Book\nJournal\nAlerts\nAnalytics\nRisk\nNo open positions\nData will appear when you start trading"
+      }
+    },
+    {
+      "name": "StatusBar",
+      "score": 8,
+      "visible": true,
+      "details": {
+        "height": 24,
+        "width": 1920,
+        "hasBrokerStatus": false,
+        "hasWsStatus": false,
+        "hasMarketStatus": false,
+        "hasWorkspace": false,
+        "text": "Feed: Connected\nPing:\n—\nPRE OPEN\nINDEXNIFTY 50\nWL\nOP\nBP\nDOM"
+      }
+    },
+    {
+      "name": "RiskWidget",
+      "score": 5,
+      "visible": false
+    },
+    {
+      "name": "OptionChain",
+      "score": 10,
+      "visible": true,
+      "details": {
+        "hasOC": true,
+        "hasTable": true,
+        "hasSymbolSelector": true,
+        "hasExpirySelector": true,
+        "hasEmptyState": false,
+        "text": "FUNDEDWEALTH\nIDX\nSTK\nFUT\nOPT\nMCX\nCDS\nWL\nOP\nOC\nDOM\nClosed\nBal\n₹10.0L\nP&L\n+₹15.2K\nBALANCE\n₹10.0L\nEQUITY\n₹10.0L\nDAY P&L\n+₹15.2K\nTOTAL P&L\n+₹15.2K\nDD USED\n0.0%\nTARGET\n0.0%\nPHASE 1\nINDEX\nSTOCKS\nFUTURES\nOPT"
+      }
+    },
+    {
+      "name": "MarketDepth",
+      "score": 8,
+      "visible": true,
+      "details": {
+        "hasDOM": true,
+        "hasBidAsk": true,
+        "hasEmptyState": true
+      }
+    },
+    {
+      "name": "SearchModal",
+      "score": 8,
+      "visible": true,
+      "details": {
+        "visible": true,
+        "hasInput": true,
+        "hasBackdrop": true,
+        "placeholder": "Search stocks, futures, options, commodities..."
+      }
+    }
+  ],
+  "issues": [
+    {
+      "severity": "P1",
+      "component": "OrderPanel",
+      "issue": "Insufficient input fields",
+      "details": "Expected qty + price inputs"
+    },
+    {
+      "severity": "P2",
+      "component": "StatusBar",
+      "issue": "Broker connection status not shown",
+      "details": ""
+    },
+    {
+      "severity": "P2",
+      "component": "Theme",
+      "issue": "Too many background color variants (19)",
+      "details": "Consider consolidating to design tokens"
+    },
+    {
+      "severity": "P2",
+      "component": "Accessibility",
+      "issue": "button-no-label",
+      "details": "<button class=\"p-1 rounded transition-colors bg-fw-accent text-white\"><svg xmlns"
+    },
+    {
+      "severity": "P2",
+      "component": "Accessibility",
+      "issue": "button-no-label",
+      "details": "<button class=\"p-1 rounded transition-colors text-fw-text-secondary hover:text-f"
+    },
+    {
+      "severity": "P2",
+      "component": "Accessibility",
+      "issue": "button-no-label",
+      "details": "<button class=\"p-1 rounded transition-colors text-fw-text-secondary hover:text-f"
+    },
+    {
+      "severity": "P2",
+      "component": "Accessibility",
+      "issue": "button-no-label",
+      "details": "<button class=\"p-1 rounded hover:bg-fw-hover text-fw-text-secondary hover:text-f"
+    },
+    {
+      "severity": "P2",
+      "component": "Accessibility",
+      "issue": "button-no-label",
+      "details": "<button class=\"p-1 rounded hover:bg-fw-hover text-fw-text-secondary hover:text-f"
+    },
+    {
+      "severity": "P2",
+      "component": "Accessibility",
+      "issue": "button-no-label",
+      "details": "<button class=\"p-1.5 rounded-md text-fw-text-secondary hover:text-fw-text hover:"
+    },
+    {
+      "severity": "P2",
+      "component": "Accessibility",
+      "issue": "button-no-label",
+      "details": "<button class=\"p-1.5 rounded-md hover:bg-fw-hover text-fw-text-secondary transit"
+    },
+    {
+      "severity": "P2",
+      "component": "Accessibility",
+      "issue": "input-no-label",
+      "details": "<select class=\"bg-fw-bg text-fw-text-secondary text-[11px] border border-fw-bord"
+    },
+    {
+      "severity": "P2",
+      "component": "Accessibility",
+      "issue": "input-no-label",
+      "details": "<input type=\"number\" class=\"flex-1 bg-fw-bg border border-fw-border rounded text"
+    },
+    {
+      "severity": "P0",
+      "component": "Mobile",
+      "issue": "6 panels overflow on Mobile",
+      "details": "No mobile layout adaptation"
+    }
+  ],
+  "errors": [],
+  "theme": {
+    "whiteCount": 0,
+    "bgColors": [
+      "rgb(15, 17, 24)",
+      "rgb(24, 27, 37)",
+      "rgb(31, 35, 50)",
+      "rgb(41, 98, 255)",
+      "rgb(59, 130, 246)",
+      "rgb(239, 68, 68)",
+      "rgb(30, 34, 48)",
+      "rgb(38, 42, 54)",
+      "rgb(16, 185, 129)",
+      "rgb(37, 42, 58)",
+      "rgba(34, 197, 94, 0.12)",
+      "rgba(6, 78, 59, 0.2)",
+      "rgba(239, 68, 68, 0.1)",
+      "rgba(249, 115, 22, 0.1)",
+      "rgb(249, 115, 22)",
+      "rgba(16, 185, 129, 0.1)",
+      "rgb(250, 204, 21)",
+      "rgb(34, 197, 94)",
+      "rgba(255, 255, 255, 0.2)"
+    ],
+    "textColors": [
+      "rgb(225, 228, 235)",
+      "rgba(0, 0, 0, 0)",
+      "rgb(255, 255, 255)",
+      "rgb(107, 114, 128)",
+      "rgb(34, 197, 94)",
+      "rgb(75, 80, 96)",
+      "rgb(239, 68, 68)",
+      "rgb(59, 130, 246)",
+      "rgb(52, 211, 153)",
+      "rgb(251, 146, 60)",
+      "rgb(248, 113, 113)",
+      "rgb(250, 204, 21)"
+    ],
+    "borderColors": [
+      "rgba(255, 255, 255, 0.1)",
+      "rgb(38, 42, 54)"
+    ],
+    "bgCount": 19,
+    "textCount": 12,
+    "borderCount": 2
+  },
+  "typography": {
+    "sizes": [
+      "10px",
+      "11px",
+      "12px",
+      "13px",
+      "14px",
+      "8px",
+      "9px"
+    ],
+    "weights": [
+      "800",
+      "700",
+      "500",
+      "400",
+      "600"
+    ],
+    "families": [
+      "Inter",
+      "JetBrains Mono"
+    ],
+    "sizeCount": 7,
+    "weightCount": 5,
+    "familyCount": 2
+  },
+  "accessibility": {
+    "issues": [
+      {
+        "type": "button-no-label",
+        "html": "<button class=\"p-1 rounded transition-colors bg-fw-accent text-white\"><svg xmlns"
+      },
+      {
+        "type": "button-no-label",
+        "html": "<button class=\"p-1 rounded transition-colors text-fw-text-secondary hover:text-f"
+      },
+      {
+        "type": "button-no-label",
+        "html": "<button class=\"p-1 rounded transition-colors text-fw-text-secondary hover:text-f"
+      },
+      {
+        "type": "button-no-label",
+        "html": "<button class=\"p-1 rounded hover:bg-fw-hover text-fw-text-secondary hover:text-f"
+      },
+      {
+        "type": "button-no-label",
+        "html": "<button class=\"p-1 rounded hover:bg-fw-hover text-fw-text-secondary hover:text-f"
+      },
+      {
+        "type": "button-no-label",
+        "html": "<button class=\"p-1.5 rounded-md text-fw-text-secondary hover:text-fw-text hover:"
+      },
+      {
+        "type": "button-no-label",
+        "html": "<button class=\"p-1.5 rounded-md hover:bg-fw-hover text-fw-text-secondary transit"
+      },
+      {
+        "type": "input-no-label",
+        "html": "<select class=\"bg-fw-bg text-fw-text-secondary text-[11px] border border-fw-bord"
+      },
+      {
+        "type": "input-no-label",
+        "html": "<input type=\"number\" class=\"flex-1 bg-fw-bg border border-fw-border rounded text"
+      }
+    ],
+    "focusableCount": 94,
+    "lowContrastCount": 1,
+    "totalIssues": 9
+  },
+  "responsive": {
+    "Desktop 1920": {
+      "w": 1920,
+      "h": 1080,
+      "hOver": false,
+      "headerClipped": false,
+      "clippedPanels": 0,
+      "vw": 1920
+    },
+    "Desktop 1440": {
+      "w": 1440,
+      "h": 900,
+      "hOver": false,
+      "headerClipped": false,
+      "clippedPanels": 5,
+      "vw": 1440
+    },
+    "Laptop 1366": {
+      "w": 1366,
+      "h": 768,
+      "hOver": false,
+      "headerClipped": false,
+      "clippedPanels": 5,
+      "vw": 1366
+    },
+    "Laptop 1280": {
+      "w": 1280,
+      "h": 720,
+      "hOver": false,
+      "headerClipped": false,
+      "clippedPanels": 5,
+      "vw": 1280
+    },
+    "Tablet Landscape": {
+      "w": 1024,
+      "h": 768,
+      "hOver": false,
+      "headerClipped": false,
+      "clippedPanels": 5,
+      "vw": 1024
+    },
+    "Tablet Portrait": {
+      "w": 768,
+      "h": 1024,
+      "hOver": false,
+      "headerClipped": false,
+      "clippedPanels": 5,
+      "vw": 768
+    },
+    "Mobile": {
+      "w": 375,
+      "h": 812,
+      "hOver": false,
+      "headerClipped": true,
+      "clippedPanels": 6,
+      "vw": 375
+    }
+  },
+  "states": {
+    "hasLoadingIndicator": false,
+    "emptyStates": [],
+    "hasNoPositions": true,
+    "hasNoOrders": false,
+    "hasChartEmpty": false,
+    "hasOptionChainEmpty": false
+  }
+}

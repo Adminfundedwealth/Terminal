@@ -1,0 +1,69 @@
+/**
+ * THEME ENGINE — CSS Custom Property Definitions
+ * 
+ * Spacing tokens controlled by density mode (compact/normal/comfortable).
+ * Color tokens are injected at runtime by themeStore.ts via JavaScript.
+ * 
+ * This file defines the structural/spacing variables that density modes control.
+ */
+
+:root {
+  /* Density spacing tokens (overridden by themeStore on mode change) */
+  --fw-spacing-xs: 4px;
+  --fw-spacing-sm: 6px;
+  --fw-spacing-md: 8px;
+  --fw-spacing-lg: 12px;
+  --fw-spacing-xl: 16px;
+  
+  /* Font size token (overridden by themeStore) */
+  --fw-font-size-base: 13px;
+  --fw-line-height: 1.4;
+}
+
+/* Density mode data attributes for targeted overrides */
+[data-density='compact'] {
+  --fw-spacing-xs: 2px;
+  --fw-spacing-sm: 4px;
+  --fw-spacing-md: 6px;
+  --fw-spacing-lg: 8px;
+  --fw-spacing-xl: 12px;
+  --fw-font-size-base: 11px;
+  --fw-line-height: 1.3;
+}
+
+[data-density='normal'] {
+  --fw-spacing-xs: 4px;
+  --fw-spacing-sm: 6px;
+  --fw-spacing-md: 8px;
+  --fw-spacing-lg: 12px;
+  --fw-spacing-xl: 16px;
+  --fw-font-size-base: 13px;
+  --fw-line-height: 1.4;
+}
+
+[data-density='comfortable'] {
+  --fw-spacing-xs: 6px;
+  --fw-spacing-sm: 8px;
+  --fw-spacing-md: 12px;
+  --fw-spacing-lg: 16px;
+  --fw-spacing-xl: 24px;
+  --fw-font-size-base: 14px;
+  --fw-line-height: 1.5;
+}
+
+/* Utility classes that use theme tokens */
+.fw-text-base {
+  font-size: var(--fw-font-size-base);
+  line-height: var(--fw-line-height);
+}
+
+.fw-p-xs { padding: var(--fw-spacing-xs); }
+.fw-p-sm { padding: var(--fw-spacing-sm); }
+.fw-p-md { padding: var(--fw-spacing-md); }
+.fw-p-lg { padding: var(--fw-spacing-lg); }
+.fw-p-xl { padding: var(--fw-spacing-xl); }
+
+.fw-gap-xs { gap: var(--fw-spacing-xs); }
+.fw-gap-sm { gap: var(--fw-spacing-sm); }
+.fw-gap-md { gap: var(--fw-spacing-md); }
+.fw-gap-lg { gap: var(--fw-spacing-lg); }

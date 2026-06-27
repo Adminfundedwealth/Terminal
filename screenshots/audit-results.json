@@ -1,0 +1,728 @@
+{
+  "config": {
+    "argv": [
+      "C:\\Program Files\\nodejs\\node.exe",
+      "C:\\Users\\jitro\\Terminal\\node_modules\\@playwright\\test\\cli.js",
+      "test",
+      "tests/websocket-lifecycle.spec.js",
+      "--list"
+    ],
+    "configFile": "C:\\Users\\jitro\\Terminal\\playwright.config.js",
+    "rootDir": "C:/Users/jitro/Terminal/tests",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {},
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "C:/Users/jitro/Terminal/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {},
+        "id": "chromium",
+        "name": "chromium",
+        "testDir": "C:/Users/jitro/Terminal/tests",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 120000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "screenshots/audit-results.json"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.61.0",
+    "workers": 2,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "websocket-lifecycle.spec.js",
+      "file": "websocket-lifecycle.spec.js",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "1. WebSocket connects and receives initial data",
+          "file": "websocket-lifecycle.spec.js",
+          "line": 51,
+          "column": 6,
+          "specs": [
+            {
+              "title": "WebSocket endpoint is accessible and accepts connections",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "e50f4a06c6034f167d26-2fdaa0d6ae95983477ed",
+              "file": "websocket-lifecycle.spec.js",
+              "line": 52,
+              "column": 7
+            },
+            {
+              "title": "WebSocket receives messages after connection",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "e50f4a06c6034f167d26-7e6218f967d0998c9294",
+              "file": "websocket-lifecycle.spec.js",
+              "line": 84,
+              "column": 7
+            },
+            {
+              "title": "quote messages arrive within acceptable latency",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "e50f4a06c6034f167d26-7bcc7c9f8b292c726a24",
+              "file": "websocket-lifecycle.spec.js",
+              "line": 132,
+              "column": 7
+            }
+          ]
+        },
+        {
+          "title": "2. Subscribe to symbols and receive quote updates",
+          "file": "websocket-lifecycle.spec.js",
+          "line": 186,
+          "column": 6,
+          "specs": [
+            {
+              "title": "subscribing to multiple tokens receives updates for each",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "e50f4a06c6034f167d26-12e8b9f5a9c6fe7dc561",
+              "file": "websocket-lifecycle.spec.js",
+              "line": 187,
+              "column": 7
+            },
+            {
+              "title": "unsubscribing stops updates for that token",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "e50f4a06c6034f167d26-3e27b08caf76d221be4f",
+              "file": "websocket-lifecycle.spec.js",
+              "line": 234,
+              "column": 7
+            },
+            {
+              "title": "subscribe message format is correct JSON",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "e50f4a06c6034f167d26-a338466486523196f00d",
+              "file": "websocket-lifecycle.spec.js",
+              "line": 293,
+              "column": 7
+            }
+          ]
+        },
+        {
+          "title": "3. Disconnect detection triggers stale state",
+          "file": "websocket-lifecycle.spec.js",
+          "line": 336,
+          "column": 6,
+          "specs": [
+            {
+              "title": "application detects connection loss and shows reconnecting UI",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "e50f4a06c6034f167d26-70368dac1771a4eb2a90",
+              "file": "websocket-lifecycle.spec.js",
+              "line": 337,
+              "column": 7
+            },
+            {
+              "title": "stale indicator concept is implemented in the frontend store",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "e50f4a06c6034f167d26-631e3751734fb2ed5cc4",
+              "file": "websocket-lifecycle.spec.js",
+              "line": 370,
+              "column": 7
+            },
+            {
+              "title": "WebSocket close event is properly handled without crash",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "e50f4a06c6034f167d26-512265164dfb258abf0a",
+              "file": "websocket-lifecycle.spec.js",
+              "line": 394,
+              "column": 7
+            }
+          ]
+        },
+        {
+          "title": "4. Reconnection uses exponential backoff",
+          "file": "websocket-lifecycle.spec.js",
+          "line": 433,
+          "column": 6,
+          "specs": [
+            {
+              "title": "exponential backoff formula: delay = min(1000 * 2^(N-1), 30000)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "e50f4a06c6034f167d26-973f52da03c5341a1253",
+              "file": "websocket-lifecycle.spec.js",
+              "line": 434,
+              "column": 7
+            },
+            {
+              "title": "backoff caps at 30 seconds regardless of attempt number",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "e50f4a06c6034f167d26-d72ed91d5c275b744d12",
+              "file": "websocket-lifecycle.spec.js",
+              "line": 455,
+              "column": 7
+            },
+            {
+              "title": "reconnection attempt is triggered after connection close",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "e50f4a06c6034f167d26-31f2b6764945d7e1610f",
+              "file": "websocket-lifecycle.spec.js",
+              "line": 464,
+              "column": 7
+            },
+            {
+              "title": "max 20 reconnection attempts before permanent failure",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "e50f4a06c6034f167d26-9181e81aab5a7b24049a",
+              "file": "websocket-lifecycle.spec.js",
+              "line": 503,
+              "column": 7
+            },
+            {
+              "title": "first reconnect attempt uses 1 second delay",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "e50f4a06c6034f167d26-7b26cde50f639b931a1c",
+              "file": "websocket-lifecycle.spec.js",
+              "line": 527,
+              "column": 7
+            },
+            {
+              "title": "backoff doubles each attempt until cap",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "e50f4a06c6034f167d26-b7672a709ba987d1cb42",
+              "file": "websocket-lifecycle.spec.js",
+              "line": 532,
+              "column": 7
+            }
+          ]
+        },
+        {
+          "title": "5. After reconnect: re-subscribes tokens and refreshes depth",
+          "file": "websocket-lifecycle.spec.js",
+          "line": 549,
+          "column": 6,
+          "specs": [
+            {
+              "title": "new connection can subscribe to previously held tokens",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "e50f4a06c6034f167d26-4ec5a93308fd6d2a86e5",
+              "file": "websocket-lifecycle.spec.js",
+              "line": 550,
+              "column": 7
+            },
+            {
+              "title": "depth data can be requested after reconnection",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "e50f4a06c6034f167d26-48dfdd40ce89e0a30c6e",
+              "file": "websocket-lifecycle.spec.js",
+              "line": 624,
+              "column": 7
+            },
+            {
+              "title": "subscription state is maintained across service lifecycle",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "e50f4a06c6034f167d26-dc990c5f7b6b2013662e",
+              "file": "websocket-lifecycle.spec.js",
+              "line": 666,
+              "column": 7
+            }
+          ]
+        },
+        {
+          "title": "6. Validates 3 consecutive quotes within 5s before re-enabling",
+          "file": "websocket-lifecycle.spec.js",
+          "line": 696,
+          "column": 6,
+          "specs": [
+            {
+              "title": "quote stream delivers messages within 5 second intervals",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "e50f4a06c6034f167d26-3f3ebdbd92abd51b9a64",
+              "file": "websocket-lifecycle.spec.js",
+              "line": 697,
+              "column": 7
+            },
+            {
+              "title": "recovery logic: 3 consecutive quotes triggers ready state",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "e50f4a06c6034f167d26-a8dd72d9d9a093377dac",
+              "file": "websocket-lifecycle.spec.js",
+              "line": 767,
+              "column": 7
+            },
+            {
+              "title": "recovery logic: gap > 5s resets consecutive count",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "e50f4a06c6034f167d26-8aadd1921f92a22beb1a",
+              "file": "websocket-lifecycle.spec.js",
+              "line": 787,
+              "column": 7
+            },
+            {
+              "title": "recovery logic: exactly 5s interval is acceptable",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "e50f4a06c6034f167d26-67054b818ea0b454bb02",
+              "file": "websocket-lifecycle.spec.js",
+              "line": 803,
+              "column": 7
+            }
+          ]
+        },
+        {
+          "title": "7. Max 20 reconnection attempts before permanent failure",
+          "file": "websocket-lifecycle.spec.js",
+          "line": 823,
+          "column": 6,
+          "specs": [
+            {
+              "title": "service configuration enforces maximum attempt limit",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "e50f4a06c6034f167d26-4a9a3ce914a26c23dd62",
+              "file": "websocket-lifecycle.spec.js",
+              "line": 824,
+              "column": 7
+            },
+            {
+              "title": "after max attempts, no further reconnection should occur",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "e50f4a06c6034f167d26-511b7161ba4237081475",
+              "file": "websocket-lifecycle.spec.js",
+              "line": 854,
+              "column": 7
+            },
+            {
+              "title": "permanent failure state requires manual retry action",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "e50f4a06c6034f167d26-f1a0f0122fedc643d6d6",
+              "file": "websocket-lifecycle.spec.js",
+              "line": 875,
+              "column": 7
+            }
+          ]
+        },
+        {
+          "title": "8. In-flight order warning on disconnection",
+          "file": "websocket-lifecycle.spec.js",
+          "line": 913,
+          "column": 6,
+          "specs": [
+            {
+              "title": "order placed during active connection returns confirmation",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "e50f4a06c6034f167d26-8377c5269c7669e90272",
+              "file": "websocket-lifecycle.spec.js",
+              "line": 914,
+              "column": 7
+            },
+            {
+              "title": "application tracks in-flight orders for disconnect awareness",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "e50f4a06c6034f167d26-f10a160c05af61907da7",
+              "file": "websocket-lifecycle.spec.js",
+              "line": 936,
+              "column": 7
+            },
+            {
+              "title": "disconnect during order should trigger uncertain status warning",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "e50f4a06c6034f167d26-e7486e75de0e259260c3",
+              "file": "websocket-lifecycle.spec.js",
+              "line": 967,
+              "column": 7
+            },
+            {
+              "title": "order verification is possible after reconnection",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "e50f4a06c6034f167d26-1092489f1b0e203a4661",
+              "file": "websocket-lifecycle.spec.js",
+              "line": 1025,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-06-23T22:19:17.711Z",
+    "duration": 620.4809999999998,
+    "expected": 0,
+    "skipped": 29,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

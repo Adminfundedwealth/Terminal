@@ -1,0 +1,255 @@
+{
+  "timestamp": "2026-06-19T03:30:46.476Z",
+  "tables": {
+    "users": {
+      "exists": true,
+      "columns": [
+        "id",
+        "clerk_id",
+        "email",
+        "full_name",
+        "phone",
+        "kyc_status",
+        "created_at",
+        "first_name",
+        "last_name",
+        "role",
+        "city",
+        "state",
+        "avatar_url",
+        "affiliate_code",
+        "referred_by",
+        "notification_settings",
+        "is_active",
+        "experience_points",
+        "current_level",
+        "achievement_count",
+        "streak_points",
+        "public_profile",
+        "total_payout",
+        "updated_at",
+        "upi_id",
+        "bank_account_name",
+        "bank_account_number",
+        "bank_ifsc_code",
+        "bank_name",
+        "preferred_payout_method"
+      ],
+      "rowCount": 20,
+      "sampleRow": {
+        "id": "d4c88c1a-8684-4c59-a736-171d19035919",
+        "clerk_id": "temp_1779288187048",
+        "email": "runtime-test-1779288186776@example.com",
+        "full_name": null,
+        "phone": null,
+        "kyc_status": "pending",
+        "created_at": "2026-05-20T14:43:07.055411+00:00",
+        "first_name": "Runtime",
+        "last_name": "Tester",
+        "role": "user",
+        "city": "",
+        "state": "",
+        "avatar_url": "",
+        "affiliate_code": "",
+        "referred_by": "",
+        "notification_settings": {},
+        "is_active": true,
+        "experience_points": 0,
+        "current_level": 0,
+        "achievement_count": 0,
+        "streak_points": 0,
+        "public_profile": false,
+        "total_payout": 0,
+        "updated_at": "2026-05-20T14:43:07.055411",
+        "upi_id": null,
+        "bank_account_name": null,
+        "bank_account_number": null,
+        "bank_ifsc_code": null,
+        "bank_name": null,
+        "preferred_payout_method": "UPI"
+      }
+    },
+    "accounts": {
+      "exists": false,
+      "error": "Could not find the table 'public.accounts' in the schema cache"
+    },
+    "challenges": {
+      "exists": false,
+      "error": "Could not find the table 'public.challenges' in the schema cache"
+    },
+    "orders": {
+      "exists": true,
+      "columns": [
+        "id",
+        "user_id",
+        "plan_type",
+        "amount",
+        "status",
+        "payment_method",
+        "created_at",
+        "utr_reference",
+        "updated_at"
+      ],
+      "rowCount": 17,
+      "sampleRow": {
+        "id": "ba7f03a4-3044-487f-a132-a5c8fb60408f",
+        "user_id": "686628ff-1adf-44d9-b667-52ed2f8a3675",
+        "plan_type": "1step",
+        "amount": 4199,
+        "status": "paid",
+        "payment_method": "upi_manual",
+        "created_at": "2026-06-04T19:02:53.974412+00:00",
+        "utr_reference": "1234567891",
+        "updated_at": "2026-06-04T19:02:53.974412+00:00"
+      }
+    },
+    "positions": {
+      "exists": true,
+      "columns": [],
+      "rowCount": 0,
+      "sampleRow": null
+    },
+    "trades": {
+      "exists": false,
+      "error": "Could not find the table 'public.trades' in the schema cache"
+    },
+    "sessions": {
+      "exists": true,
+      "columns": [
+        "id",
+        "user_id",
+        "session_token",
+        "device_fingerprint",
+        "ip_address",
+        "user_agent",
+        "country",
+        "browser",
+        "os",
+        "device_name",
+        "is_active",
+        "is_trusted",
+        "requires_mfa",
+        "mfa_verified",
+        "metadata",
+        "created_at",
+        "last_activity_at",
+        "expires_at",
+        "revoked_at"
+      ],
+      "rowCount": 3,
+      "sampleRow": {
+        "id": 1,
+        "user_id": "d4c88c1a-8684-4c59-a736-171d19035919",
+        "session_token": "34669a7a80d1ebbafd2ee6dcf20f9b720fb22e79ea2b8793ade590450e5807d0",
+        "device_fingerprint": null,
+        "ip_address": "::1",
+        "user_agent": "node",
+        "country": null,
+        "browser": null,
+        "os": null,
+        "device_name": null,
+        "is_active": true,
+        "is_trusted": false,
+        "requires_mfa": true,
+        "mfa_verified": false,
+        "metadata": null,
+        "created_at": "2026-05-20T14:43:07.659308+00:00",
+        "last_activity_at": "2026-05-20T14:43:07.771+00:00",
+        "expires_at": "2026-05-27T14:43:07.665+00:00",
+        "revoked_at": null
+      }
+    },
+    "watchlists": {
+      "exists": false,
+      "error": "Could not find the table 'public.watchlists' in the schema cache"
+    },
+    "risk_rules": {
+      "exists": false,
+      "error": "Could not find the table 'public.risk_rules' in the schema cache"
+    },
+    "account_metrics": {
+      "exists": false,
+      "error": "Could not find the table 'public.account_metrics' in the schema cache"
+    },
+    "audit_log": {
+      "exists": false,
+      "error": "Could not find the table 'public.audit_log' in the schema cache"
+    },
+    "broker_sessions": {
+      "exists": false,
+      "error": "Could not find the table 'public.broker_sessions' in the schema cache"
+    },
+    "t_users": {
+      "exists": false,
+      "error": "Could not find the table 'public.t_users' in the schema cache"
+    },
+    "t_accounts": {
+      "exists": false,
+      "error": "Could not find the table 'public.t_accounts' in the schema cache"
+    },
+    "t_challenges": {
+      "exists": false,
+      "error": "Could not find the table 'public.t_challenges' in the schema cache"
+    },
+    "t_orders": {
+      "exists": false,
+      "error": "Could not find the table 'public.t_orders' in the schema cache"
+    },
+    "t_positions": {
+      "exists": false,
+      "error": "Could not find the table 'public.t_positions' in the schema cache"
+    },
+    "t_trades": {
+      "exists": false,
+      "error": "Could not find the table 'public.t_trades' in the schema cache"
+    },
+    "t_sessions": {
+      "exists": false,
+      "error": "Could not find the table 'public.t_sessions' in the schema cache"
+    },
+    "t_watchlists": {
+      "exists": false,
+      "error": "Could not find the table 'public.t_watchlists' in the schema cache"
+    },
+    "t_risk_rules": {
+      "exists": false,
+      "error": "Could not find the table 'public.t_risk_rules' in the schema cache"
+    },
+    "t_account_metrics": {
+      "exists": false,
+      "error": "Could not find the table 'public.t_account_metrics' in the schema cache"
+    },
+    "t_broker_sessions": {
+      "exists": false,
+      "error": "Could not find the table 'public.t_broker_sessions' in the schema cache"
+    },
+    "t_risk_events": {
+      "exists": false,
+      "error": "Could not find the table 'public.t_risk_events' in the schema cache"
+    },
+    "t_challenge_metrics": {
+      "exists": false,
+      "error": "Could not find the table 'public.t_challenge_metrics' in the schema cache"
+    },
+    "t_order_audit": {
+      "exists": false,
+      "error": "Could not find the table 'public.t_order_audit' in the schema cache"
+    },
+    "profiles": {
+      "exists": false,
+      "error": "Could not find the table 'public.profiles' in the schema cache"
+    },
+    "subscriptions": {
+      "exists": false,
+      "error": "Could not find the table 'public.subscriptions' in the schema cache"
+    },
+    "payments": {
+      "exists": false,
+      "error": "Could not find the table 'public.payments' in the schema cache"
+    },
+    "plans": {
+      "exists": false,
+      "error": "Could not find the table 'public.plans' in the schema cache"
+    }
+  }
+}

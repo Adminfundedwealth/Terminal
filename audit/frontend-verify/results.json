@@ -1,0 +1,21 @@
+{
+  "timestamp": "2026-06-18T10:48:28.434Z",
+  "components": {
+    "watchlistVisible": true,
+    "chartVisible": true,
+    "canvasCount": 7,
+    "orderPanelVisible": true,
+    "positionsVisible": true,
+    "ordersVisible": true,
+    "tradesVisible": true
+  },
+  "liveData": {
+    "historyCandles": 225,
+    "niftyLTP": 24168,
+    "bankniftyLTP": 57963.8,
+    "relianceLTP": 1328.1
+  },
+  "tickGrowth": 0,
+  "consoleErrors": [],
+  "networkErrors": 0
+}

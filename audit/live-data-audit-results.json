@@ -1,0 +1,177 @@
+{
+  "timestamp": "2026-06-19T06:13:18.537Z",
+  "network": {
+    "failed": [
+      {
+        "url": "http://localhost:3000/api/account",
+        "method": "GET",
+        "error": "net::ERR_ABORTED"
+      }
+    ],
+    "responses": [
+      {
+        "url": "http://localhost:3000/auth/sso?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c3JfdGVzdF8wMDEiLCJhY2NvdW50SWQiOiIzMzMzMzMzMy0zMzMzLTMzMzMtMzMzMy0zMzMzMzMzMzMzMzMiLCJjaGFsbGVuZ2VJZCI6IjIyMjIyMjIyLTIyMjItMjIyMi0yMjIyLTIyMjIyMjIyMjIyMiIsIm5vbmNlIjoiZGEzOTFjMzgtMWNmMi00NjRkLThlOTYtMDJiNWZhMTc3ZWFhIiwiaWF0IjoxNzgxODQ5NjA2LCJleHAiOjE3ODE4NDk2NjZ9.syYH-El7kvPnis_nevCyfqxDDz2XmBqBceAefTTkaUo",
+        "method": "GET",
+        "time": 1781849606840,
+        "status": 302,
+        "contentType": "text/html; charset=utf-8"
+      },
+      {
+        "url": "http://localhost:3000/api/account",
+        "method": "GET",
+        "time": 1781849620512,
+        "status": 200,
+        "contentType": "application/json; charset=utf-8"
+      },
+      {
+        "url": "http://localhost:3000/api/account",
+        "method": "GET",
+        "time": 1781849620513
+      },
+      {
+        "url": "http://localhost:3000/api/market/history?token=99926000&tf=5",
+        "method": "GET",
+        "time": 1781849623776,
+        "status": 200,
+        "contentType": "application/json; charset=utf-8"
+      },
+      {
+        "url": "http://localhost:3000/api/positions",
+        "method": "GET",
+        "time": 1781849623778,
+        "status": 200,
+        "contentType": "application/json; charset=utf-8"
+      },
+      {
+        "url": "http://localhost:3000/api/orders",
+        "method": "GET",
+        "time": 1781849623778,
+        "status": 200,
+        "contentType": "application/json; charset=utf-8"
+      },
+      {
+        "url": "http://localhost:3000/api/trades?period=today",
+        "method": "GET",
+        "time": 1781849623778,
+        "status": 200,
+        "contentType": "application/json; charset=utf-8"
+      },
+      {
+        "url": "http://localhost:3000/api/market/history?token=99926000&tf=5",
+        "method": "GET",
+        "time": 1781849623778
+      },
+      {
+        "url": "http://localhost:3000/api/positions",
+        "method": "GET",
+        "time": 1781849623778
+      },
+      {
+        "url": "http://localhost:3000/api/orders",
+        "method": "GET",
+        "time": 1781849623778
+      },
+      {
+        "url": "http://localhost:3000/api/trades?period=today",
+        "method": "GET",
+        "time": 1781849623778
+      },
+      {
+        "url": "http://localhost:3000/api/positions",
+        "method": "GET",
+        "time": 1781849629956
+      },
+      {
+        "url": "http://localhost:3000/api/orders",
+        "method": "GET",
+        "time": 1781849629956
+      },
+      {
+        "url": "http://localhost:3000/api/trades?period=today",
+        "method": "GET",
+        "time": 1781849629956
+      }
+    ],
+    "api": {
+      "chart": {
+        "endpoint": "/api/market/history?token=99926000&tf=5",
+        "status": 200,
+        "candleCount": 0,
+        "lastCandle": null,
+        "firstCandle": null
+      },
+      "optionChain": {
+        "endpoint": "/api/market/option-chain?symbol=NIFTY&expiry=2026-06-25",
+        "status": 200,
+        "expiry": "2026-06-25",
+        "allExpiries": [
+          "2026-06-25",
+          "2026-07-02",
+          "2026-07-09",
+          "2026-07-16",
+          "2026-07-23",
+          "2026-07-30",
+          "2026-08-06",
+          "2026-08-13"
+        ],
+        "strikeCount": 0,
+        "ceCount": 0,
+        "peCount": 0,
+        "sample": null
+      },
+      "depth": {
+        "index": {
+          "endpoint": "/api/market/depth?token=99926000",
+          "bids": 0,
+          "asks": 0,
+          "totalBuyQty": 0
+        },
+        "stock": {
+          "endpoint": "/api/market/depth?token=2885",
+          "bids": 5,
+          "asks": 5,
+          "totalBuyQty": 742893,
+          "sample": {
+            "price": 1325.1,
+            "qty": 369,
+            "orders": 4
+          }
+        }
+      },
+      "feed": {
+        "connected": true,
+        "subscribedTokens": 9,
+        "tickCount": 146737,
+        "symbolCount": 9,
+        "sampleQuote": [
+          "1333",
+          {
+            "ltp": 778.75,
+            "exchange": "NSE",
+            "timestamp": 1781849598535
+          }
+        ]
+      }
+    }
+  },
+  "console": [
+    {
+      "type": "debug",
+      "text": "[vite] connecting..."
+    },
+    {
+      "type": "info",
+      "text": "%cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold"
+    },
+    {
+      "type": "debug",
+      "text": "[vite] connected."
+    },
+    {
+      "type": "log",
+      "text": "[WS] Connected"
+    }
+  ],
+  "ws": [],
+  "screenshot": null
+}
