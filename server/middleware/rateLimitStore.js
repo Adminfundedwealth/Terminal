@@ -38,11 +38,11 @@ export function createRedisRateLimitStore(prefix = 'rl:') {
 
   try {
     const client = new Redis(redisUrl, {
-      maxRetriesPerRequest: 1,
-      retryStrategy: (times) => Math.min(times * 200, 3000),
+      maxRetriesPerRequest: 3,
+      retryStrategy: (times) => Math.min(times * 500, 5000),
       lazyConnect: true,
-      connectTimeout: 5000,
-      enableOfflineQueue: false,
+      connectTimeout: 10000,
+      enableOfflineQueue: true,
     });
 
     client.connect().catch(err => {

@@ -124,8 +124,7 @@ const redisStoreOrder = createRedisRateLimitStore('rl:order:');
 const redisStoreProvision = createRedisRateLimitStore('rl:prov:');
 
 if (isProduction && !redisStore) {
-  console.error('[SECURITY] FATAL: Redis not available for rate limiting in production. Set REDIS_URL.');
-  process.exit(1);
+  console.warn('[SECURITY] WARNING: Redis not available for rate limiting in production. Using in-memory fallback. Set REDIS_URL for multi-instance safety.');
 }
 
 const apiLimiter = rateLimit({
