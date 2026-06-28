@@ -116,8 +116,8 @@ export async function validateSSOToken(ssoToken, { ipAddress, userAgent } = {}) 
         return { success: false, error: 'Terminal trader lookup failed.' };
       }
     } else {
-      if (data.status === 'suspended' || data.status === 'banned') {
-        return { success: false, error: `Account is ${data.status}.` };
+      if (data.status === 'suspended' || data.status === 'banned' || data.status === 'breached') {
+        return { success: false, error: `Account is ${data.status}. Access denied.` };
       }
       trader = data;
       // Update last_login_at
@@ -142,11 +142,12 @@ export async function validateSSOToken(ssoToken, { ipAddress, userAgent } = {}) 
       if (error && error.message && error.message.includes('schema cache')) {
         account = { id: accountId, account_code: 'FW-DEV', broker_provider: 'paper', status: 'active' };
       } else {
-        return { success: false, error: 'Trading account not found.' };
+        return { success: false, error: 'Trading account not found or not assigned to this user.' };
       }
     } else {
+      // Reject any non-active account status (suspended, breached, closed, expired, etc.)
       if (data.status !== 'active') {
-        return { success: false, error: `Trading account is ${data.status}. Cannot trade.` };
+        return { success: false, error: `Trading account is ${data.status}. Cannot access terminal.` };
       }
       account = data;
     }

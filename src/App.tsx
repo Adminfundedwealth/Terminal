@@ -11,6 +11,7 @@ import { MarketDepthPanel } from '@/components/MarketDepthPanel';
 import { RiskWidget } from '@/components/RiskWidget';
 import { StatusBar } from '@/components/StatusBar';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { AccessDenied } from '@/components/AccessDenied';
 import { HolidayBanner } from '@/components/HolidayBanner';
 import { RiskOverlay } from '@/components/RiskOverlay';
 import { RiskMonitor } from '@/components/RiskMonitor';
@@ -106,7 +107,7 @@ function HDivider({ onDrag }: { onDrag: (dy: number) => void }) {
 
 export default function App() {
   const { theme, showOptionChain, panels, activeWorkspace } = useAppStore();
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, error } = useAuth();
 
   // Resizable panel widths/heights
   const [watchlistWidth, setWatchlistWidth] = useState(250);
@@ -193,6 +194,12 @@ export default function App() {
         </div>
       </div>
     );
+  }
+
+  // PRODUCTION GATE: If not authenticated, show access denied page.
+  // Terminal NEVER renders without a valid SSO session.
+  if (!isAuthenticated) {
+    return <AccessDenied error={error} />;
   }
 
   const showOC = showOptionChain || activeWorkspace === 'options';

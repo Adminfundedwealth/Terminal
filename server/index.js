@@ -39,6 +39,7 @@ import { createAlertsRouter } from './routes/alerts.routes.js';
 import { createPayoutRouter } from './routes/payout.routes.js';
 import { setupWebSocket } from './routes/websocket.js';
 import { requireAuth as authMiddleware } from './middleware/auth.js';
+import { verifySessionJWT as verifyJWT } from './services/auth.service.js';
 import { AccountService } from './services/accountService.js';
 import { InstrumentService } from './services/instrumentService.js';
 import { MarketDataEngine } from './services/marketDataEngine.js';
@@ -233,14 +234,87 @@ if (process.env.NODE_ENV === 'production') {
   const distExists = fs.existsSync(distPath);
   if (distExists) {
     app.use(express.static(distPath));
-    app.get('*', (req, res, next) => {
+    app.get('*', async (req, res, next) => {
       // Don't serve index.html for API/auth/health routes
       if (req.path.startsWith('/api') || req.path.startsWith('/auth') || req.path.startsWith('/health') || req.path.startsWith('/ws')) {
         return next();
       }
+
+      // SSO GATE: Check for valid session before serving terminal frontend.
+      // The /auth/sso route sets the cookie — users must arrive via SSO first.
+      const cookieHeader = req.headers.cookie || '';
+      const sessionMatch = cookieHeader.match(/(?:^|;\s*)fw_session=([^;]*)/);
+      const token = sessionMatch ? sessionMatch[1] : null;
+
+      if (!token) {
+        // No session cookie — user visited directly without SSO
+        AuditLogger.authFailure({ reason: 'direct_access_no_session', ip: req.ip, path: req.path, userAgent: req.headers['user-agent'] });
+        return res.status(401).send(getAccessDeniedHTML());
+      }
+
+      // Validate JWT signature (lightweight check — full session DB check happens on API calls)
+      const result = verifyJWT(token);
+
+      if (!result.valid) {
+        // Invalid or expired session — destroy the cookie and deny access
+        AuditLogger.authFailure({ reason: result.error === 'expired' ? 'session_expired_direct_access' : 'invalid_token_direct_access', ip: req.ip, path: req.path });
+        res.clearCookie('fw_session', { path: '/' });
+        return res.status(401).send(getAccessDeniedHTML());
+      }
+
+      // Valid session — serve terminal
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
+}
+
+/**
+ * Server-side Access Denied HTML page.
+ * Shown when a user visits the terminal URL directly without a valid SSO session.
+ */
+function getAccessDeniedHTML() {
+  const dashboardUrl = process.env.FW_DASHBOARD_URL || 'https://fundedwealth.com';
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FundedWealth Terminal — Access Denied</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0a0f; color: #e0e0e0; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+    .container { text-align: center; max-width: 420px; padding: 2rem; }
+    .logo { width: 64px; height: 64px; margin: 0 auto 1.5rem; border-radius: 12px; background: linear-gradient(135deg, #0a0a0a, #1a1a2e); border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; }
+    .logo img { width: 44px; height: 44px; object-fit: contain; }
+    .brand { font-size: 16px; font-weight: 800; letter-spacing: 0.05em; background: linear-gradient(90deg, #00D4FF, #4F46E5, #7C3AED); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .sub { font-size: 10px; font-weight: 700; letter-spacing: 0.25em; color: rgba(99,102,241,0.7); margin-top: 2px; }
+    .alert { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 1.5rem 0 0.75rem; }
+    .alert svg { width: 20px; height: 20px; color: #f87171; }
+    .alert span { font-size: 14px; font-weight: 600; color: #f87171; }
+    .message { font-size: 13px; color: #9ca3af; line-height: 1.6; margin-bottom: 1.5rem; }
+    .btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 24px; border-radius: 8px; background: linear-gradient(90deg, #4F46E5, #7C3AED); color: #fff; text-decoration: none; font-size: 13px; font-weight: 600; transition: opacity 0.2s; }
+    .btn:hover { opacity: 0.9; }
+    .hint { font-size: 11px; color: rgba(156,163,175,0.6); margin-top: 1rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo"><img src="/logo.png" alt="FW" onerror="this.style.display='none'" /></div>
+    <div class="brand">FUNDEDWEALTH</div>
+    <div class="sub">TERMINAL</div>
+    <div class="alert">
+      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v.01M12 9v3m0-9a9 9 0 110 18 9 9 0 010-18z"/></svg>
+      <span>Access Denied</span>
+    </div>
+    <p class="message">Please login from your FundedWealth Dashboard to access the Trading Terminal.</p>
+    <a href="${dashboardUrl}/login" class="btn">
+      <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+      Go to FundedWealth Dashboard
+    </a>
+    <p class="hint">Click "Launch Terminal" from your Dashboard after logging in.</p>
+  </div>
+</body>
+</html>`;
 }
 
 // Global error handler — prevents stack trace leaks

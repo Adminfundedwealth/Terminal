@@ -18,6 +18,7 @@ export interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+  redirecting?: boolean;
 }
 
 export function useAuth(): AuthState {
@@ -53,12 +54,11 @@ export function useAuth(): AuthState {
         err?.message?.includes('invalid_token') ||
         err?.message?.includes('Authentication required')
       ) {
-        // Redirect to dashboard
-        setState({ isAuthenticated: false, isLoading: false, error: 'Session expired or invalid' });
-        redirectToDashboard();
+        // Session invalid — show access denied (do NOT auto-redirect, let user click)
+        setState({ isAuthenticated: false, isLoading: false, error: 'Please login from your FundedWealth Dashboard to access the Trading Terminal.' });
       } else {
-        // Network error or server down — allow terminal to load (graceful degradation)
-        setState({ isAuthenticated: true, isLoading: false, error: null });
+        // Network error or server down — FAIL CLOSED. No access without verified session.
+        setState({ isAuthenticated: false, isLoading: false, error: 'Unable to verify session. Please login from your FundedWealth Dashboard.' });
       }
     }
   }

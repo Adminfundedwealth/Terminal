@@ -78,7 +78,7 @@ export function createAuthRouter() {
    * Verify — check if current session is still valid.
    * Frontend calls this on mount to decide: show terminal or redirect.
    */
-  router.get('/verify', (req, res) => {
+  router.get('/verify', async (req, res) => {
     const cookieHeader = req.headers.cookie || '';
     let token = extractCookie(cookieHeader, 'fw_session');
 
@@ -99,6 +99,14 @@ export function createAuthRouter() {
     if (!result.valid) {
       res.clearCookie('fw_session', { path: '/' });
       return res.status(401).json({ valid: false, reason: result.error });
+    }
+
+    // Full session DB check — reject revoked/expired sessions
+    const { isSessionValid } = await import('../services/session.service.js');
+    const sessionActive = await isSessionValid(token);
+    if (!sessionActive) {
+      res.clearCookie('fw_session', { path: '/' });
+      return res.status(401).json({ valid: false, reason: 'session_revoked' });
     }
 
     res.json({
