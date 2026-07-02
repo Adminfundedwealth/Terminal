@@ -10,6 +10,7 @@ export class MarketDataEngine {
     this.isLive = false;
     this.adapterName = null;
     this._tickCount = 0;
+    this._feedStale = false;
   }
 
   async initialize() {}
@@ -89,6 +90,21 @@ export class MarketDataEngine {
     if (s) s.forEach(cb => cb({ type: 'depth', token, data }));
   }
 
+  setFeedStale(stale) {
+    this._feedStale = !!stale;
+    if (stale) {
+      this.isLive = false;
+      eventBus.publish('market.feedStatus', { status: 'stale', timestamp: Date.now() });
+    } else {
+      this.isLive = true;
+      eventBus.publish('market.feedStatus', { status: 'live', timestamp: Date.now() });
+    }
+  }
+
+  isFeedStale() {
+    return !!this._feedStale;
+  }
+
   getStatus() {
     return {
       isLive: this.isLive,
@@ -97,6 +113,7 @@ export class MarketDataEngine {
       subscribedTokens: this.subscribers.size,
       cachedQuotes: this.quotes.size,
       tickCount: this._tickCount,
+      feedStale: !!this._feedStale,
     };
   }
 
