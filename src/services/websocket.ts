@@ -84,12 +84,36 @@ class WebSocketService {
       case 'market_status':
         store.setMarketStatus(data.status);
         break;
+      case 'feed_status':
+        // Feed health broadcast — log but no store update needed
+        if (data.data?.status === 'stale') {
+          console.warn('[WS] Market data feed stale:', data.data);
+        }
+        break;
+      // Real-time trading event updates — forwarded by EventBridge
+      case 'order_update':
+      case 'position_update':
+      case 'risk_alert':
+      case 'account_locked':
+      case 'account_breached':
+      case 'account_unlocked':
+      case 'challenge_update':
+      case 'risk_progress':
+      case 'trade_executed':
+        // No direct store update here — components poll or listeners handle these
+        break;
     }
 
-    // Notify handlers
+    // Notify handlers (allows components to subscribe to specific event types)
     const handlers = this.handlers.get(data.type);
     if (handlers) {
       handlers.forEach((handler) => handler(data));
+    }
+
+    // Also fire wildcard handlers
+    const wildcardHandlers = this.handlers.get('*');
+    if (wildcardHandlers) {
+      wildcardHandlers.forEach((handler) => handler(data));
     }
   }
 

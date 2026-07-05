@@ -20,6 +20,7 @@ import { ToastProvider } from '@/components/ToastProvider';
 import { MobileLayout } from '@/components/MobileLayout';
 import { useHotkeys } from '@/hooks/useHotkeys';
 import { useAuth } from '@/hooks/useAuth';
+import { useWatchlistSync } from '@/hooks/useWatchlistSync';
 import { useAppStore } from '@/store/appStore';
 import { useThemeStore } from '@/store/themeStore';
 import { initLayoutObserver } from '@/store/layoutStore';
@@ -108,6 +109,9 @@ function HDivider({ onDrag }: { onDrag: (dy: number) => void }) {
 export default function App() {
   const { theme, showOptionChain, panels, activeWorkspace } = useAppStore();
   const { isAuthenticated, isLoading, error } = useAuth();
+
+  // Sync watchlists with backend
+  useWatchlistSync();
 
   // Resizable panel widths/heights
   const [watchlistWidth, setWatchlistWidth] = useState(250);

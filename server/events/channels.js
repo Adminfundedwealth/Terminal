@@ -97,6 +97,22 @@ export const CHANNELS = {
     wsEvent: 'risk_progress',
     throttleMs: 2000,
   },
+
+  'market.feedStatus': {
+    description: 'Market data feed health status (live, stale, disconnected)',
+    requiredFields: ['status', 'timestamp'],
+    scope: 'global',
+    wsEvent: 'feed_status',
+    throttleMs: 5000,
+  },
+
+  'account.provisioned': {
+    description: 'New trading account provisioned',
+    requiredFields: ['tradingAccountId', 'plan', 'orderId'],
+    scope: 'account',
+    wsEvent: 'account_provisioned',
+    throttleMs: 0,
+  },
 };
 
 

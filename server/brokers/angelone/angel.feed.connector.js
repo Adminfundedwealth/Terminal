@@ -362,9 +362,13 @@ export class AngelFeedConnector {
           this._emitFeedAlert('feed_recovered', 'Market data feed recovered');
         }
 
-        // Resubscribe if reconnecting
+        // Resubscribe if reconnecting — delay to ensure WS is fully open
         if (this.subscribedTokens.size > 0) {
-          this._resubscribeAll();
+          setTimeout(() => {
+            if (this.isConnected && this.ws && this.ws.readyState === this.ws.OPEN) {
+              this._resubscribeAll();
+            }
+          }, 200);
         }
 
         resolve();
@@ -420,9 +424,11 @@ export class AngelFeedConnector {
       params: { mode, tokenList },
     });
 
-    if (this.ws && this.isConnected) {
+    if (this.ws && this.isConnected && this.ws.readyState === this.ws.OPEN) {
       this.ws.send(payload);
       console.log(`[AngelFeed] Subscribed ${tokens.length} tokens (mode ${mode})`);
+    } else {
+      console.warn(`[AngelFeed] Subscribe queued (WS not open) — will re-subscribe on next connect`);
     }
   }
 
@@ -450,7 +456,7 @@ export class AngelFeedConnector {
       params: { mode: 1, tokenList },
     });
 
-    if (this.ws && this.isConnected) {
+    if (this.ws && this.isConnected && this.ws.readyState === this.ws.OPEN) {
       this.ws.send(payload);
     }
   }
@@ -466,9 +472,6 @@ export class AngelFeedConnector {
     const token = buffer.slice(2, 27).toString('utf8').replace(/\0/g, '').trim();
     const exchange = EXCHANGE_TYPE_REVERSE[exchangeType] || 'NSE';
 
-    // LTP is at offset 43 (int64LE / 100)
-    const ltp = Number(buffer.readBigInt64LE(43)) / 100;
-
     this.tickCount++;
     this._lastTickTime = Date.now();
 
@@ -482,6 +485,9 @@ export class AngelFeedConnector {
 
     if (mode === 1) {
       // LTP mode (51 bytes)
+      // LTP is at offset 43 (int32LE / 100)
+      const ltp = buffer.readInt32LE(43) / 100;
+      
       this.marketDataEngine.pushQuote(token, {
         token,
         ltp,
@@ -490,16 +496,17 @@ export class AngelFeedConnector {
       });
     } else if (mode === 2 && buffer.length >= 123) {
       // Quote mode (123 bytes) — includes OHLC, volume
-      // All price fields are int64LE (8 bytes each), divided by 100
-      const lastTradedQty = Number(buffer.readBigInt64LE(51));
-      const avgPrice = Number(buffer.readBigInt64LE(59)) / 100;
-      const volume = Number(buffer.readBigInt64LE(67));
-      const totalBuyQty = buffer.readDoubleLE(75);
-      const totalSellQty = buffer.readDoubleLE(83);
-      const open = Number(buffer.readBigInt64LE(91)) / 100;
-      const high = Number(buffer.readBigInt64LE(99)) / 100;
-      const low = Number(buffer.readBigInt64LE(107)) / 100;
-      const lastClose = Number(buffer.readBigInt64LE(115)) / 100;
+      // LTP at offset 43 (int32LE / 100)
+      const ltp = buffer.readInt32LE(43) / 100;
+      const lastTradedQty = buffer.readInt32LE(47);
+      const avgPrice = buffer.readInt32LE(51) / 100;
+      const volume = buffer.readInt32LE(55);
+      const totalBuyQty = buffer.readInt32LE(59);
+      const totalSellQty = buffer.readInt32LE(63);
+      const open = buffer.readInt32LE(67) / 100;
+      const high = buffer.readInt32LE(71) / 100;
+      const low = buffer.readInt32LE(75) / 100;
+      const lastClose = buffer.readInt32LE(79) / 100;
 
       this.marketDataEngine.pushQuote(token, {
         token,
@@ -516,6 +523,8 @@ export class AngelFeedConnector {
       });
     } else if (mode === 3 && buffer.length >= 379) {
       // SnapQuote mode (379 bytes) — includes full depth
+      // LTP at offset 43 (int32LE / 100)
+      const ltp = buffer.readInt32LE(43) / 100;
       const lastClose = buffer.readInt32LE(47) / 100;
       const open = buffer.readInt32LE(51) / 100;
       const high = buffer.readInt32LE(55) / 100;

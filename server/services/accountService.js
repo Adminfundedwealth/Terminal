@@ -324,6 +324,9 @@ export class AccountService {
     if (!supabase) {
       throw new Error('Database not configured. Cannot place orders.');
     }
+    // Normalise exchange — defaults to segment when not provided
+    const exchange = params.exchange || params.segment;
+
     // Insert order into trading_orders — FK is trading_account_id
     const { data, error } = await supabase.from('trading_orders').insert({
       trading_account_id: accountId,
@@ -359,7 +362,7 @@ export class AccountService {
         }, { accountId });
 
         // Trigger execution even for in-memory path
-        this._executeOrderAsync(accountId, orderId, params);
+        this._executeOrderAsync(accountId, orderId, { ...params, exchange });
 
         return { orderId, status: 'PENDING' };
       }
@@ -381,7 +384,7 @@ export class AccountService {
     }, { accountId });
 
     // Trigger async execution (risk → broker → position → trade)
-    this._executeOrderAsync(accountId, data.id, params);
+    this._executeOrderAsync(accountId, data.id, { ...params, exchange });
 
     return { orderId: data.id, status: 'PENDING' };
   }
@@ -447,6 +450,10 @@ export class AccountService {
       if (error.message && error.message.includes('schema cache')) {
         const order = memOrders.get(orderId);
         if (order) { order.status = 'CANCELLED'; return { orderId, status: 'CANCELLED' }; }
+      }
+      // PGRST116 = no rows matched — order already filled/cancelled
+      if (error.code === 'PGRST116') {
+        throw new Error('Order cannot be cancelled — it may already be filled or cancelled.');
       }
       throw new Error(`Order cancel failed: ${error.message}`);
     }

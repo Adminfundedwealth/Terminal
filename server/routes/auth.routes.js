@@ -82,12 +82,17 @@ export function createAuthRouter() {
     const cookieHeader = req.headers.cookie || '';
     let token = extractCookie(cookieHeader, 'fw_session');
 
-    // Also check Authorization header
+    // Also check Authorization header (for API clients / test tooling)
     if (!token) {
       const authHeader = req.headers.authorization;
       if (authHeader && authHeader.startsWith('Bearer ')) {
         token = authHeader.slice(7);
       }
+    }
+
+    // Also check req.cookies if cookie-parser is present
+    if (!token && req.cookies && req.cookies.fw_session) {
+      token = req.cookies.fw_session;
     }
 
     if (!token) {

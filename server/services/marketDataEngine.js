@@ -64,21 +64,24 @@ export class MarketDataEngine {
     this._lastTickTime = Date.now();
 
     // Publish to event bus — primary producer for market.tick channel
-    eventBus.publish('market.tick', {
-      token,
-      ltp: merged.ltp,
-      open: merged.open,
-      high: merged.high,
-      low: merged.low,
-      close: merged.close,
-      volume: merged.volume,
-      change: merged.change,
-      changePercent: merged.changePercent,
-      bid: merged.bid,
-      ask: merged.ask,
-      oi: merged.oi,
-      timestamp: merged.timestamp || Date.now(),
-    });
+    // Only publish if LTP is present (skip metadata-only updates)
+    if (merged.ltp !== undefined && merged.ltp !== null) {
+      eventBus.publish('market.tick', {
+        token,
+        ltp: merged.ltp,
+        open: merged.open,
+        high: merged.high,
+        low: merged.low,
+        close: merged.close,
+        volume: merged.volume,
+        change: merged.change,
+        changePercent: merged.changePercent,
+        bid: merged.bid,
+        ask: merged.ask,
+        oi: merged.oi,
+        timestamp: merged.timestamp || Date.now(),
+      });
+    }
 
     const s = this.subscribers.get(token);
     if (s) s.forEach(cb => cb({ type: 'quote', token, data: merged }));

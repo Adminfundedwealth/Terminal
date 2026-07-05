@@ -116,7 +116,7 @@ export class RealtimeServer {
         }
 
         tokens.forEach((token) => {
-          if (!/^\d{1,10}$/.test(token)) return; // Validate token format
+          if (!/^[A-Za-z0-9_]{1,30}$/.test(token)) return; // Validate token format
           socket.join(`quote:${token}`);
           subs.add(token);
 
@@ -147,7 +147,7 @@ export class RealtimeServer {
 
         const tokens = data?.tokens || [];
         tokens.forEach((token) => {
-          if (!/^\d{1,10}$/.test(token)) return;
+          if (!/^[A-Za-z0-9_]{1,30}$/.test(token)) return;
           socket.join(`depth:${token}`);
         });
       });

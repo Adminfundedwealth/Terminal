@@ -9,7 +9,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "server:dev": "npx ts-node --esm server/index.ts",
+    "server:dev": "node --watch server/index.js",
     "test": "vitest --run",
     "test:watch": "vitest"
   },

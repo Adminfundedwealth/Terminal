@@ -225,6 +225,19 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
       const feedConnected = marketDataEngine.isLive;
       const cachedQuotes = marketDataEngine.quotes.size;
 
+      // Check account status for trading block
+      let tradingBlocked = false;
+      let blockReason = null;
+      try {
+        const account = await accountService.getAccount(req.user.accountId);
+        if (account && (account.status === 'locked' || account.status === 'breached' || account.status === 'suspended')) {
+          tradingBlocked = true;
+          blockReason = account.locked_reason || `Account is ${account.status}`;
+        }
+      } catch (_e) {
+        // Non-critical — don't block status endpoint
+      }
+
       res.json({
         executionMode: ExecutionMode.getState(),
         broker: {
@@ -236,8 +249,9 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
           isLive: feedConnected,
           cachedQuotes,
         },
-        tradingAllowed: true, // paper mode allows simulated trading
-        tradingBlocked: false,
+        tradingAllowed: !tradingBlocked,
+        tradingBlocked,
+        blockReason,
         timestamp: new Date().toISOString(),
       });
     } catch (err) {
@@ -380,8 +394,15 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
   router.delete('/orders/:id/cancel', requireAuth, requirePermission('trade'), async (req, res) => {
     try {
       const realId = await accountService.resolveAccountId(req.user.accountId);
-      res.json(await accountService.cancelOrder(realId, req.params.id));
-    } catch (err) { res.status(500).json({ message: err.message }); }
+      const result = await accountService.cancelOrder(realId, req.params.id);
+      res.json(result);
+    } catch (err) {
+      // Order may already be filled — return 409 conflict, not 500
+      if (err.message && (err.message.includes('cancel') || err.message.includes('No rows') || err.message.includes('0 rows'))) {
+        return res.status(409).json({ status: 'error', message: 'Order cannot be cancelled — it may already be filled or cancelled.' });
+      }
+      res.status(500).json({ message: err.message });
+    }
   });
 
   router.get('/trades', requireAuth, async (req, res) => {
@@ -419,7 +440,7 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
       const repo = new WatchlistRepository();
       // IDOR: verify watchlist belongs to user before updating
       const existing = await repo.findById(req.params.id);
-      if (!existing || existing.user_id !== req.user.userId) {
+      if (!existing || (existing.trader_id !== req.user.userId && existing.user_id !== req.user.userId)) {
         return res.status(403).json({ error: 'forbidden', message: 'Not your watchlist.' });
       }
       const { items, name, color } = req.body;
@@ -436,7 +457,7 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
       const repo = new WatchlistRepository();
       // IDOR: verify watchlist belongs to user before deleting
       const existing = await repo.findById(req.params.id);
-      if (!existing || existing.user_id !== req.user.userId) {
+      if (!existing || (existing.trader_id !== req.user.userId && existing.user_id !== req.user.userId)) {
         return res.status(403).json({ error: 'forbidden', message: 'Not your watchlist.' });
       }
       await repo.deleteWatchlist(req.params.id);

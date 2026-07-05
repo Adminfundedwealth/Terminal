@@ -100,6 +100,16 @@ export class EventBridge {
       if (this.wss) {
         this._sendToLegacyWS(wsMessage);
       }
+    } else if (channel === 'market.feedStatus') {
+      // Broadcast feed health to all clients
+      const wsMessage = { type: 'feed_status', data: payload };
+
+      if (this.realtimeServer?.io) {
+        this.realtimeServer.io.emit(def.wsEvent, { data: payload });
+      }
+      if (this.wss) {
+        this._sendToLegacyWS(wsMessage);
+      }
     }
   }
 

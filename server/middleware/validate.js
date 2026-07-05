@@ -97,9 +97,9 @@ export const schemas = {
   // Order Placement
   placeOrder: z.object({
     symbol: z.string().min(1).max(50),
-    token: z.string().min(1).max(20),
+    token: z.string().min(1).max(30),
     segment: z.string().min(1).max(10),
-    exchange: z.string().min(1).max(10),
+    exchange: z.string().min(1).max(10).optional(), // Optional — defaults to segment if not provided
     side: z.enum(['BUY', 'SELL']),
     orderType: z.enum(['MARKET', 'LIMIT', 'SL', 'SL-M']),
     productType: z.enum(['CNC', 'MIS', 'NRML', 'INTRADAY']),
@@ -110,7 +110,7 @@ export const schemas = {
 
   // Order Modification
   modifyOrder: z.object({
-    orderId: z.string().min(1),
+    orderId: z.string().min(1).optional(), // Also available in req.params.id
     qty: z.number().int().min(1).max(100000).optional(),
     price: z.number().min(0).optional(),
     triggerPrice: z.number().min(0).optional(),

@@ -1,6 +1,21 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Theme, ChartLayout, Timeframe, ChartType, Watchlist, Instrument } from '@/types';
+import { apiService } from '@/services/api';
+
+// Helper to sync watchlist changes to backend (fire-and-forget)
+async function syncWatchlistToBackend(watchlistId: string, watchlist: Watchlist | undefined) {
+  if (!watchlist) return;
+  try {
+    await apiService.put(`/watchlists/${watchlistId}`, {
+      name: watchlist.name,
+      color: watchlist.color,
+      items: watchlist.items,
+    });
+  } catch (err) {
+    console.warn('[WatchlistSync] Failed to sync to backend:', err);
+  }
+}
 
 export type Workspace = 'index' | 'stocks' | 'futures' | 'options' | 'mcx' | 'cds';
 export type TerminalLayout = 'standard' | 'dom' | 'options' | 'commodity' | 'currency' | 'compact';
@@ -70,11 +85,11 @@ const defaultWatchlists: Watchlist[] = [
     { token: '317', symbol: 'AXISBANK', segment: 'NSE' },
   ]},
   { id: 'futures', name: 'FUTURES', color: '#ff9800', items: [
-    { token: 'NF_FUT', symbol: 'NIFTY FUT', segment: 'NFO' },
-    { token: 'BNF_FUT', symbol: 'BANKNIFTY FUT', segment: 'NFO' },
-    { token: 'REL_FUT', symbol: 'RELIANCE FUT', segment: 'NFO' },
-    { token: 'HDFC_FUT', symbol: 'HDFCBANK FUT', segment: 'NFO' },
-    { token: 'SBIN_FUT', symbol: 'SBIN FUT', segment: 'NFO' },
+    { token: '26000', symbol: 'NIFTY FUT', segment: 'NFO' },
+    { token: '26009', symbol: 'BANKNIFTY FUT', segment: 'NFO' },
+    { token: '2885', symbol: 'RELIANCE FUT', segment: 'NFO' },
+    { token: '1333', symbol: 'HDFCBANK FUT', segment: 'NFO' },
+    { token: '3045', symbol: 'SBIN FUT', segment: 'NFO' },
   ]},
   { id: 'options', name: 'OPTIONS', color: '#ab47bc', items: [
     { token: '99926000', symbol: 'NIFTY', segment: 'NSE' },
@@ -82,17 +97,17 @@ const defaultWatchlists: Watchlist[] = [
     { token: '99926037', symbol: 'FINNIFTY', segment: 'NSE' },
   ]},
   { id: 'mcx', name: 'MCX', color: '#f59e0b', items: [
-    { token: 'GOLD_F', symbol: 'GOLD', segment: 'MCX' },
-    { token: 'SILVER_F', symbol: 'SILVER', segment: 'MCX' },
-    { token: 'CRUDE_F', symbol: 'CRUDEOIL', segment: 'MCX' },
-    { token: 'NG_F', symbol: 'NATURALGAS', segment: 'MCX' },
-    { token: 'COPPER_F', symbol: 'COPPER', segment: 'MCX' },
+    { token: '429604', symbol: 'GOLD', segment: 'MCX' },
+    { token: '429638', symbol: 'SILVER', segment: 'MCX' },
+    { token: '425475', symbol: 'CRUDEOIL', segment: 'MCX' },
+    { token: '431765', symbol: 'NATURALGAS', segment: 'MCX' },
+    { token: '430596', symbol: 'COPPER', segment: 'MCX' },
   ]},
   { id: 'cds', name: 'CDS', color: '#06b6d4', items: [
-    { token: 'USDINR_F', symbol: 'USDINR', segment: 'CDS' },
-    { token: 'EURINR_F', symbol: 'EURINR', segment: 'CDS' },
-    { token: 'GBPINR_F', symbol: 'GBPINR', segment: 'CDS' },
-    { token: 'JPYINR_F', symbol: 'JPYINR', segment: 'CDS' },
+    { token: '11091', symbol: 'USDINR', segment: 'CDS' },
+    { token: '11363', symbol: 'EURINR', segment: 'CDS' },
+    { token: '11096', symbol: 'GBPINR', segment: 'CDS' },
+    { token: '11098', symbol: 'JPYINR', segment: 'CDS' },
   ]},
 ];
 
@@ -100,10 +115,10 @@ const defaultWatchlists: Watchlist[] = [
 const workspaceDefaults: Record<Workspace, Instrument> = {
   index: { token: '99926000', symbol: 'NIFTY 50', name: 'Nifty 50', segment: 'NSE', instrumentType: 'EQ', exchange: 'NSE', lotSize: 50, tickSize: 0.05 },
   stocks: { token: '2885', symbol: 'RELIANCE', name: 'Reliance Industries', segment: 'NSE', instrumentType: 'EQ', exchange: 'NSE', lotSize: 1, tickSize: 0.05 },
-  futures: { token: 'NF_FUT', symbol: 'NIFTY FUT', name: 'Nifty Futures', segment: 'NFO', instrumentType: 'FUT', exchange: 'NSE', lotSize: 50, tickSize: 0.05, expiry: '2026-06-25' },
+  futures: { token: '26000', symbol: 'NIFTY FUT', name: 'Nifty Futures', segment: 'NFO', instrumentType: 'FUT', exchange: 'NSE', lotSize: 50, tickSize: 0.05, expiry: '2026-07-31' },
   options: { token: '99926000', symbol: 'NIFTY', name: 'Nifty 50', segment: 'NSE', instrumentType: 'EQ', exchange: 'NSE', lotSize: 50, tickSize: 0.05 },
-  mcx: { token: 'GOLD_F', symbol: 'GOLD', name: 'Gold Futures', segment: 'MCX', instrumentType: 'FUT', exchange: 'MCX', lotSize: 100, tickSize: 1, expiry: '2026-08-05' },
-  cds: { token: 'USDINR_F', symbol: 'USDINR', name: 'USD/INR Futures', segment: 'CDS', instrumentType: 'FUT', exchange: 'NSE', lotSize: 1000, tickSize: 0.0025, expiry: '2026-06-25' },
+  mcx: { token: '429604', symbol: 'GOLD', name: 'Gold Futures', segment: 'MCX', instrumentType: 'FUT', exchange: 'MCX', lotSize: 100, tickSize: 1, expiry: '2026-08-05' },
+  cds: { token: '11091', symbol: 'USDINR', name: 'USD/INR Futures', segment: 'CDS', instrumentType: 'FUT', exchange: 'NSE', lotSize: 1000, tickSize: 0.0025, expiry: '2026-07-30' },
 };
 
 export const useAppStore = create<AppState>()(
@@ -155,21 +170,29 @@ export const useAppStore = create<AppState>()(
       },
       setTerminalLayout: (terminalLayout) => set({ terminalLayout }),
       addToWatchlist: (watchlistId, item) =>
-        set((state) => ({
-          watchlists: state.watchlists.map((wl) =>
+        set((state) => {
+          const updated = state.watchlists.map((wl) =>
             wl.id === watchlistId
               ? { ...wl, items: [...wl.items.filter((i) => i.token !== item.token), item] }
               : wl
-          ),
-        })),
+          );
+          // Sync to backend (fire-and-forget)
+          const watchlist = updated.find(w => w.id === watchlistId);
+          if (watchlist) syncWatchlistToBackend(watchlistId, watchlist);
+          return { watchlists: updated };
+        }),
       removeFromWatchlist: (watchlistId, token) =>
-        set((state) => ({
-          watchlists: state.watchlists.map((wl) =>
+        set((state) => {
+          const updated = state.watchlists.map((wl) =>
             wl.id === watchlistId
               ? { ...wl, items: wl.items.filter((i) => i.token !== token) }
               : wl
-          ),
-        })),
+          );
+          // Sync to backend (fire-and-forget)
+          const watchlist = updated.find(w => w.id === watchlistId);
+          if (watchlist) syncWatchlistToBackend(watchlistId, watchlist);
+          return { watchlists: updated };
+        }),
       setShowOptionChain: (showOptionChain) => set({ showOptionChain }),
       setShowMarketDepth: (showMarketDepth) => set({ showMarketDepth }),
       setBottomTab: (bottomTab) => set({ bottomTab }),

@@ -106,8 +106,8 @@ function handleMessage(ws, data, subscriptions, depthSubscriptions, marketDataEn
       }
       tokens.forEach((token) => {
         if (subscriptions.has(token)) return;
-        // Validate token format (must be numeric string)
-        if (!/^\d{1,10}$/.test(token)) return;
+        // Validate token format — numeric tokens (Angel One) or alphanumeric identifiers (MCX/CDS/NFO)
+        if (!token || typeof token !== 'string' || token.length > 30 || !/^[A-Za-z0-9_]{1,30}$/.test(token)) return;
 
         const callback = (quoteData) => {
           if (ws.readyState === 1) {
@@ -140,7 +140,7 @@ function handleMessage(ws, data, subscriptions, depthSubscriptions, marketDataEn
       }
       tokens.forEach((token) => {
         if (depthSubscriptions.has(token)) return;
-        if (!/^\d{1,10}$/.test(token)) return;
+        if (!token || typeof token !== 'string' || token.length > 30 || !/^[A-Za-z0-9_]{1,30}$/.test(token)) return;
 
         const callback = (depthData) => {
           if (ws.readyState === 1) {
@@ -174,11 +174,13 @@ function handleMessage(ws, data, subscriptions, depthSubscriptions, marketDataEn
 }
 
 function getMarketStatus() {
+  // Always compute in IST (UTC+5:30) regardless of server timezone
   const now = new Date();
-  const hours = now.getHours();
-  const minutes = now.getMinutes();
+  const ist = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
+  const hours = ist.getUTCHours();
+  const minutes = ist.getUTCMinutes();
   const time = hours * 60 + minutes;
-  const day = now.getDay();
+  const day = ist.getUTCDay();
 
   if (day === 0 || day === 6) return 'CLOSED';
   if (time >= 555 && time < 570) return 'PRE_OPEN';
