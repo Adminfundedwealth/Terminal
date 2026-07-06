@@ -1,5 +1,5 @@
-/**
- * FUNDEDWEALTH TERMINAL — SERVER ENTRY POINT
+﻿/**
+ * FUNDEDWEALTH TERMINAL â€” SERVER ENTRY POINT
  * 
  * Wires together all backend components:
  * - Express REST API with auth middleware
@@ -60,7 +60,7 @@ import { eventDispatcher } from './services/eventDispatcher.js';
 const PORT = process.env.PORT || 4000;
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
-// ─── Initialize Services ─────────────────────────────────────────
+// â”€â”€â”€ Initialize Services â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const marketDataEngine = new MarketDataEngine();
 const instrumentService = new InstrumentService();
 const accountService = new AccountService(marketDataEngine);
@@ -74,7 +74,7 @@ const eventBridge = new EventBridge();
 let tradingViewDatafeed = null;
 let realtimeServer = null;
 
-// ─── Express App ─────────────────────────────────────────────────
+// â”€â”€â”€ Express App â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const app = express();
 const server = createServer(app);
 
@@ -95,7 +95,7 @@ app.use(tamperDetection);
 // Trust proxy (Railway/Vercel/Docker proxy)
 app.set('trust proxy', 1);
 
-// Security headers — PRODUCTION: Full CSP enabled
+// Security headers â€” PRODUCTION: Full CSP enabled
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -118,7 +118,7 @@ app.use(helmet({
   crossOriginOpenerPolicy: { policy: 'same-origin' },
 }));
 
-// Rate limiting — Redis-backed in production, memory fallback in development only
+// Rate limiting â€” Redis-backed in production, memory fallback in development only
 const redisStore = createRedisRateLimitStore('rl:api:');
 const redisStoreAuth = createRedisRateLimitStore('rl:auth:');
 const redisStoreOrder = createRedisRateLimitStore('rl:order:');
@@ -168,18 +168,22 @@ app.use('/api', apiLimiter);
 app.use('/auth', authLimiter);
 app.use('/provisioning', provisionLimiter);
 
-// Health check (minimal — no sensitive internal state)
+// Health check (minimal â€” no sensitive internal state)
 app.get('/health', async (req, res) => {
   const dbStatus = await testConnection();
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
-    database: { connected: dbStatus.connected },
+    database: { connected: dbStatus.connected, reason: dbStatus.reason },
     uptime: process.uptime(),
+    sso: {
+      apiKeyConfigured: !!(process.env.SSO_API_KEY || process.env.PROVISIONING_API_KEY),
+      sharedSecretConfigured: !!process.env.SSO_SHARED_SECRET,
+    },
   });
 });
 
-// Full market status (AUTHENTICATED — no public access to internal state)
+// Full market status (AUTHENTICATED â€” no public access to internal state)
 app.get('/api/market/live', authMiddleware, (req, res) => {
   const feedStatus = angelFeed.getStatus();
   const sioStatus = realtimeServer ? realtimeServer.getStatus() : { clients: 0, rooms: 0, subscriptions: 0 };
@@ -194,10 +198,10 @@ app.get('/api/market/live', authMiddleware, (req, res) => {
 // Auth routes (SSO, logout, verify)
 app.use('/auth', createAuthRouter());
 
-// Provisioning routes (API key protected — called by Website/Admin)
+// Provisioning routes (API key protected â€” called by Website/Admin)
 app.use('/provisioning', createProvisioningRouter());
 
-// Order rate limit (MUST be before API routes — more restrictive)
+// Order rate limit (MUST be before API routes â€” more restrictive)
 app.use('/api/orders', orderLimiter);
 
 // API routes (protected + public)
@@ -241,28 +245,28 @@ if (process.env.NODE_ENV === 'production') {
       }
 
       // SSO GATE: Check for valid session before serving terminal frontend.
-      // The /auth/sso route sets the cookie — users must arrive via SSO first.
+      // The /auth/sso route sets the cookie â€” users must arrive via SSO first.
       const cookieHeader = req.headers.cookie || '';
       const sessionMatch = cookieHeader.match(/(?:^|;\s*)fw_session=([^;]*)/);
       const token = sessionMatch ? sessionMatch[1] : null;
 
       if (!token) {
-        // No session cookie — user visited directly without SSO
+        // No session cookie â€” user visited directly without SSO
         AuditLogger.authFailure({ reason: 'direct_access_no_session', ip: req.ip, path: req.path, userAgent: req.headers['user-agent'] });
         return res.status(401).send(getAccessDeniedHTML());
       }
 
-      // Validate JWT signature (lightweight check — full session DB check happens on API calls)
+      // Validate JWT signature (lightweight check â€” full session DB check happens on API calls)
       const result = verifyJWT(token);
 
       if (!result.valid) {
-        // Invalid or expired session — destroy the cookie and deny access
+        // Invalid or expired session â€” destroy the cookie and deny access
         AuditLogger.authFailure({ reason: result.error === 'expired' ? 'session_expired_direct_access' : 'invalid_token_direct_access', ip: req.ip, path: req.path });
         res.clearCookie('fw_session', { path: '/' });
         return res.status(401).send(getAccessDeniedHTML());
       }
 
-      // Valid session — serve terminal
+      // Valid session â€” serve terminal
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
@@ -279,7 +283,7 @@ function getAccessDeniedHTML() {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FundedWealth Terminal — Access Denied</title>
+  <title>FundedWealth Terminal â€” Access Denied</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0a0f; color: #e0e0e0; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
@@ -317,7 +321,7 @@ function getAccessDeniedHTML() {
 </html>`;
 }
 
-// Global error handler — prevents stack trace leaks
+// Global error handler â€” prevents stack trace leaks
 app.use((err, req, res, next) => {
   const status = err.status || err.statusCode || 500;
   const isProduction = process.env.NODE_ENV === 'production';
@@ -331,15 +335,15 @@ app.use((err, req, res, next) => {
   });
 });
 
-// ─── WebSocket Server ────────────────────────────────────────────
+// â”€â”€â”€ WebSocket Server â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const wss = new WebSocketServer({ server, path: '/ws' });
 setupWebSocket(wss, marketDataEngine);
 
-// ─── Startup ─────────────────────────────────────────────────────
+// â”€â”€â”€ Startup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function startup() {
-  console.log('════════════════════════════════════════════════');
-  console.log('  FUNDEDWEALTH TERMINAL — Server Starting');
-  console.log('════════════════════════════════════════════════');
+  console.log('â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');
+  console.log('  FUNDEDWEALTH TERMINAL â€” Server Starting');
+  console.log('â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');
   console.log(`  Port: ${PORT}`);
   console.log(`  Env:  ${process.env.NODE_ENV || 'development'}`);
   console.log('');
@@ -348,43 +352,43 @@ async function startup() {
   console.log('[Startup] Testing Supabase connection...');
   const dbResult = await testConnection();
   if (dbResult.connected) {
-    console.log('[Startup] ✓ Supabase connected');
+    console.log('[Startup] âœ“ Supabase connected');
   } else {
-    console.warn(`[Startup] ✗ Supabase NOT connected: ${dbResult.reason}`);
+    console.warn(`[Startup] âœ— Supabase NOT connected: ${dbResult.reason}`);
     console.warn('[Startup]   WARNING: Session validation will fail-closed (all sessions rejected).');
   }
 
   // 2. Initialize Market Data Engine
   console.log('[Startup] Initializing market data engine...');
   await marketDataEngine.initialize();
-  console.log('[Startup] ✓ Market data engine ready (awaiting broker adapter)');
+  console.log('[Startup] âœ“ Market data engine ready (awaiting broker adapter)');
 
   // 2b. Initialize Event Dispatcher (persistence subscriber)
   console.log('[Startup] Initializing event dispatcher (persistence layer)...');
   eventDispatcher.initialize();
-  console.log('[Startup] ✓ Event dispatcher active — all events will be persisted');
+  console.log('[Startup] âœ“ Event dispatcher active â€” all events will be persisted');
 
   // 3. Initialize Redis Pub/Sub (optional)
   console.log('[Startup] Initializing Redis Pub/Sub...');
   const redisConnected = await redisPubSub.initialize();
   if (redisConnected) {
-    console.log('[Startup] ✓ Redis Pub/Sub connected');
+    console.log('[Startup] âœ“ Redis Pub/Sub connected');
   } else {
-    console.log('[Startup] ○ Redis not configured — single-instance mode');
+    console.log('[Startup] â—‹ Redis not configured â€” single-instance mode');
   }
 
   // 4. Initialize TradingView Datafeed
   tradingViewDatafeed = new TradingViewDatafeed(instrumentService, marketDataEngine);
-  console.log('[Startup] ✓ TradingView Datafeed layer ready');
+  console.log('[Startup] âœ“ TradingView Datafeed layer ready');
 
   // 5. Schedule daily checks (only if Supabase is connected)
   if (dbResult.connected) {
     scheduleDailyChecks();
-    console.log('[Startup] ✓ Daily checks scheduler active');
+    console.log('[Startup] âœ“ Daily checks scheduler active');
 
     // 5b. Start provisioning poller (polls pending provisioning_logs)
     startProvisioningPoller();
-    console.log('[Startup] ✓ Provisioning poller active (30s interval)');
+    console.log('[Startup] âœ“ Provisioning poller active (30s interval)');
   }
 
   // 6. Start HTTP server
@@ -393,31 +397,31 @@ async function startup() {
     realtimeServer = new RealtimeServer(server, marketDataEngine, {
       corsOrigin: corsOrigins,
     });
-    console.log('[Startup] ✓ Socket.IO server initialized');
+    console.log('[Startup] âœ“ Socket.IO server initialized');
 
-    // 7b. Start Event Bridge (connects eventBus → Socket.IO/WS clients)
+    // 7b. Start Event Bridge (connects eventBus â†’ Socket.IO/WS clients)
     eventBridge.setRealtimeServer(realtimeServer);
     eventBridge.setWss(wss);
     eventBridge.start();
-    console.log('[Startup] ✓ Event Bridge active (7 channels → client)');
+    console.log('[Startup] âœ“ Event Bridge active (7 channels â†’ client)');
 
     // 8. Start Broker Health Monitor
     healthMonitor.start();
-    console.log('[Startup] ✓ Broker health monitor active');
+    console.log('[Startup] âœ“ Broker health monitor active');
 
     console.log('');
-    console.log(`[Startup] ✓ Server listening on http://localhost:${PORT}`);
-    console.log(`[Startup] ✓ WebSocket (legacy) on ws://localhost:${PORT}/ws`);
-    console.log(`[Startup] ✓ Socket.IO on http://localhost:${PORT}/socket.io`);
+    console.log(`[Startup] âœ“ Server listening on http://localhost:${PORT}`);
+    console.log(`[Startup] âœ“ WebSocket (legacy) on ws://localhost:${PORT}/ws`);
+    console.log(`[Startup] âœ“ Socket.IO on http://localhost:${PORT}/socket.io`);
     console.log('');
     console.log('  Broker Status:');
     const bh = BrokerFactory.getHealthReport();
     console.log(`    Angel One: configured=${bh._available.angelone.configured}, connected=${bh._available.angelone.status}`);
     console.log(`    Dhan:      configured=${bh._available.dhan.configured}, status=${bh._available.dhan.status}`);
     console.log('');
-    console.log('════════════════════════════════════════════════');
+    console.log('â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');
 
-    // 9. Connect Angel Feed (live market data) — fire and forget
+    // 9. Connect Angel Feed (live market data) â€” fire and forget
     connectAngelFeed();
   });
 }
@@ -478,12 +482,12 @@ async function connectAngelFeed() {
     BrokerFactory.registerInstance('angelone', sharedAdapter, angelFeed.session.clientId);
 
     const defaultTokens = [
-      // Indices (mode 1 — LTP only)
+      // Indices (mode 1 â€” LTP only)
       { token: '99926000', exchange: 'NSE', symbol: 'NIFTY 50' },
       { token: '99926009', exchange: 'NSE', symbol: 'BANKNIFTY' },
       { token: '99926037', exchange: 'NSE', symbol: 'FINNIFTY' },
       { token: '99926074', exchange: 'NSE', symbol: 'MIDCPNIFTY' },
-      // NIFTY 50 constituents (mode 2 — Quote with OHLC + volume)
+      // NIFTY 50 constituents (mode 2 â€” Quote with OHLC + volume)
       { token: '2885', exchange: 'NSE', symbol: 'RELIANCE' },
       { token: '3045', exchange: 'NSE', symbol: 'SBIN' },
       { token: '1333', exchange: 'NSE', symbol: 'HDFCBANK' },
@@ -543,7 +547,7 @@ async function connectAngelFeed() {
     if (stockTokens.length > 0) {
       angelFeed.subscribe(stockTokens, 2); // Quote mode for stocks (OHLC + volume + change)
     }
-    console.log(`[AngelFeed] ✓ ${indexTokens.length} indices (mode 1) + ${stockTokens.length} stocks (mode 2) subscribed`);
+    console.log(`[AngelFeed] âœ“ ${indexTokens.length} indices (mode 1) + ${stockTokens.length} stocks (mode 2) subscribed`);
 
     // Hook live ticks into candle aggregation
     for (const t of defaultTokens) {
@@ -555,9 +559,9 @@ async function connectAngelFeed() {
     }
 
     // Position P&L tracking starts when authenticated sessions are active
-    // (no dev bypass — sessions drive tracking)
+    // (no dev bypass â€” sessions drive tracking)
   } catch (err) {
-    console.warn(`[AngelFeed] ✗ Connection failed: ${err.message}`);
+    console.warn(`[AngelFeed] âœ— Connection failed: ${err.message}`);
     console.warn('[AngelFeed]   Market data will be empty until feed connects');
   }
 }
@@ -603,3 +607,4 @@ process.on('SIGINT', async () => {
   wss.close();
   server.close(() => process.exit(0));
 });
+
