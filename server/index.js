@@ -14,6 +14,7 @@
  */
 
 import express from 'express';
+import { createHash } from 'crypto';
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
 import cors from 'cors';
@@ -167,7 +168,14 @@ const provisionLimiter = rateLimit({
 app.use('/api', apiLimiter);
 app.use('/auth', authLimiter);
 app.use('/provisioning', provisionLimiter);
-
+app.get('/debug/secret-hash', (_req, res) => {
+  const secret = process.env.SSO_API_KEY || '';
+  res.json({
+    hash: createHash('sha256').update(secret).digest('hex'),
+    length: secret.length,
+    varName: 'SSO_API_KEY',
+  });
+});
 // Health check (minimal â€” no sensitive internal state)
 app.get('/health', async (req, res) => {
   const dbStatus = await testConnection();
