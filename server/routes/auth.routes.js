@@ -49,7 +49,7 @@ export function createAuthRouter() {
     res.cookie('fw_session', result.jwt, {
       httpOnly: true,
       secure: isProduction,
-      sameSite: 'lax',
+      sameSite: isProduction ? 'none' : 'lax', // 'none' required for cross-origin redirect (dashboard → terminal)
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
       path: '/',
     });
