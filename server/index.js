@@ -244,6 +244,7 @@ if (process.env.NODE_ENV === 'production') {
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const distPath = path.resolve(__dirname, '../dist');
   const distExists = fs.existsSync(distPath);
+  console.log('[Terminal] dist exists:', distExists, 'at:', distPath);
   if (distExists) {
     app.use(express.static(distPath));
     app.get('*', async (req, res, next) => {
@@ -276,6 +277,14 @@ if (process.env.NODE_ENV === 'production') {
 
       // Valid session â€” serve terminal
       res.sendFile(path.join(distPath, 'index.html'));
+    });
+  } else {
+    // dist/ not built — serve access-denied for all non-API GET routes
+    app.get('*', (req, res, next) => {
+      if (req.path.startsWith('/api') || req.path.startsWith('/auth') || req.path.startsWith('/health') || req.path.startsWith('/ws') || req.path.startsWith('/provisioning')) {
+        return next();
+      }
+      return res.status(401).send(getAccessDeniedHTML());
     });
   }
 }
