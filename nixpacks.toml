@@ -2,10 +2,10 @@
 nixPkgs = ["nodejs_20", "npm"]
 
 [phases.install]
-cmds = ["cd server && npm install --legacy-peer-deps"]
+cmds = ["npm install --legacy-peer-deps && cd server && npm install --legacy-peer-deps"]
 
 [phases.build]
-cmds = ["echo 'No build step needed'"]
+cmds = ["npm run build"]
 
 [start]
 cmd = "cd server && node index.js"
