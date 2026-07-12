@@ -11,6 +11,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { config } from 'dotenv';
+import ws from 'ws';
 
 config();
 
@@ -24,6 +25,7 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
 export const supabase = (SUPABASE_URL && SUPABASE_SERVICE_KEY)
   ? createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
       auth: { persistSession: false, autoRefreshToken: false },
+      realtime: { transport: ws },
     })
   : null;
 
