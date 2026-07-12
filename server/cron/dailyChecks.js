@@ -17,6 +17,154 @@ import { ChallengeService } from '../services/challengeService.js';
 import { RiskEngine } from '../services/riskEngine.js';
 
 /**
+ * Square off all positions for accounts that have the no_overnight rule
+ * and the trading_hours end has passed.
+ * Runs at 15:15 IST (one minute before market close).
+ */
+export async function runSquareOff() {
+  if (!supabase) {
+    console.warn('[SquareOff] Supabase not configured — skipping');
+    return { squaredOff: 0 };
+  }
+
+  console.log('[SquareOff] 3:15 PM IST — running auto square-off for all active accounts');
+
+  const { data: accounts, error } = await supabase
+    .from('trading_accounts')
+    .select('id, status')
+    .eq('status', 'active');
+
+  if (error) {
+    console.error('[SquareOff] Failed to fetch accounts:', error.message);
+    return { squaredOff: 0, error: error.message };
+  }
+
+  let squaredOff = 0;
+
+  for (const account of accounts) {
+    try {
+      // Only square off if account has no_overnight rule
+      const { data: rules } = await supabase
+        .from('risk_rules')
+        .select('value')
+        .eq('trading_account_id', account.id)
+        .eq('rule_type', 'no_overnight')
+        .eq('is_active', true)
+        .limit(1)
+        .single();
+
+      if (!rules) continue; // no no_overnight rule — skip
+
+      // Get open positions
+      const { data: positions } = await supabase
+        .from('positions')
+        .select('id, qty, token, symbol, segment')
+        .eq('trading_account_id', account.id)
+        .neq('qty', 0);
+
+      if (!positions || positions.length === 0) continue;
+
+      // Close each open position (paper trading — update DB directly)
+      for (const pos of positions) {
+        await supabase
+          .from('positions')
+          .update({ qty: 0, updated_at: new Date().toISOString() })
+          .eq('id', pos.id);
+
+        // Log the auto-square-off as a system trade
+        await supabase.from('trading_orders').insert({
+          trading_account_id: account.id,
+          symbol: pos.symbol,
+          token: pos.token,
+          segment: pos.segment,
+          side: pos.qty > 0 ? 'SELL' : 'BUY',
+          qty: Math.abs(pos.qty),
+          order_type: 'MARKET',
+          product_type: 'MIS',
+          status: 'FILLED',
+          source: 'system_square_off',
+          placed_at: new Date().toISOString(),
+        });
+      }
+
+      squaredOff++;
+      console.log(`[SquareOff] Account ${account.id}: closed ${positions.length} positions`);
+    } catch (err) {
+      console.error(`[SquareOff] Failed for account ${account.id}:`, err.message);
+    }
+  }
+
+  console.log(`[SquareOff] Completed. Squared off ${squaredOff} accounts.`);
+  return { squaredOff };
+}
+
+/**
+ * Check and close accounts that have breached the inactivity rule (no trades in X days).
+ */
+export async function runInactivityCheck() {
+  if (!supabase) return { closed: 0 };
+
+  console.log('[Inactivity] Checking for inactive accounts...');
+
+  // Get all accounts with inactivity_close rule
+  const { data: rules, error } = await supabase
+    .from('risk_rules')
+    .select('trading_account_id, value')
+    .eq('rule_type', 'inactivity_close')
+    .eq('is_active', true);
+
+  if (error || !rules) return { closed: 0 };
+
+  let closed = 0;
+
+  for (const rule of rules) {
+    try {
+      const inactivityDays = rule.value?.days || 60;
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - inactivityDays);
+
+      // Get account creation date and last trade date
+      const { data: account } = await supabase
+        .from('trading_accounts')
+        .select('id, status, created_at')
+        .eq('id', rule.trading_account_id)
+        .eq('status', 'active')
+        .single();
+
+      if (!account) continue;
+
+      const { data: lastTrade } = await supabase
+        .from('trading_orders')
+        .select('placed_at')
+        .eq('trading_account_id', account.id)
+        .eq('status', 'FILLED')
+        .order('placed_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      const lastActivity = lastTrade
+        ? new Date(lastTrade.placed_at)
+        : new Date(account.created_at);
+
+      if (lastActivity < cutoff) {
+        await supabase
+          .from('trading_accounts')
+          .update({ status: 'expired', updated_at: new Date().toISOString() })
+          .eq('id', account.id);
+
+        console.log(`[Inactivity] Closed account ${account.id} — last activity ${lastActivity.toDateString()}`);
+        closed++;
+      }
+    } catch (err) {
+      console.error(`[Inactivity] Failed for rule ${rule.trading_account_id}:`, err.message);
+    }
+  }
+
+  console.log(`[Inactivity] Closed ${closed} inactive accounts`);
+  return { closed };
+}
+
+/**
  * Run daily checks for all active accounts.
  * Call this at 09:00 IST (before market open).
  */
@@ -138,6 +286,8 @@ export async function runEndOfDayMetrics() {
 export function scheduleDailyChecks() {
   let lastDailyRun = null;
   let lastEodRun = null;
+  let lastSquareOffRun = null;
+  let lastInactivityRun = null;
 
   setInterval(async () => {
     const now = new Date();
@@ -151,13 +301,25 @@ export function scheduleDailyChecks() {
       await runDailyChecks();
     }
 
+    // Auto square-off at 15:15 IST
+    if (hours === 15 && minutes === 15 && lastSquareOffRun !== dateKey) {
+      lastSquareOffRun = dateKey;
+      await runSquareOff();
+    }
+
     // Run EOD metrics at 15:45 IST
     if (hours === 15 && minutes === 45 && lastEodRun !== dateKey) {
       lastEodRun = dateKey;
       await runEndOfDayMetrics();
     }
+
+    // Inactivity check once a day at 08:00 IST (before market opens)
+    if (hours === 8 && minutes === 0 && lastInactivityRun !== dateKey) {
+      lastInactivityRun = dateKey;
+      await runInactivityCheck();
+    }
   }, 60000); // Check every minute
 
-  console.log('[Cron] Daily checks scheduler started (09:00 daily unlock, 15:45 EOD metrics)');
+  console.log('[Cron] Daily checks scheduler started (09:00 unlock, 15:15 square-off, 15:45 EOD metrics, 08:00 inactivity)');
 }
 

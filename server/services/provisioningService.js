@@ -30,7 +30,7 @@ import { WebsiteCallbackClient } from '../clients/website.callback.js';
 import { LifecycleCallbackClient } from '../clients/lifecycle.callback.js';
 import { eventBus } from '../events/index.js';
 import { encryptCredentials } from './credentialEncryption.js';
-import { validateRuleProfile, profileToRuleRows, getDefaultFallbackProfile } from '../config/challengeRuleProfiles.js';
+import { validateRuleProfile, profileToRuleRows, getDefaultFallbackProfile, getInstantFundingRuleProfile } from '../config/challengeRuleProfiles.js';
 
 export class ProvisioningService {
 
@@ -93,6 +93,11 @@ export class ProvisioningService {
           throw new ProvisioningError(`Invalid rule profile from Main Site: ${validation.errors.join(', ')}`, 'INVALID_RULE_PROFILE');
         }
         resolvedProfile = ruleProfile;
+      } else if (challengeType === 'instant') {
+        // Auto-build canonical Instant Funding profile from products catalog
+        const balance = planConfig.balance;
+        resolvedProfile = getInstantFundingRuleProfile(balance);
+        console.log(`[Provisioning] Using canonical Instant Funding rule profile for balance ₹${balance}`);
       } else {
         // Fallback: use default profile (backward compatibility with older Main Site)
         resolvedProfile = getDefaultFallbackProfile(plan, challengeType || '2-step', 'phase_1');

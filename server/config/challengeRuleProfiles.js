@@ -59,6 +59,7 @@ export const RULE_TYPES = [
   'max_risk_per_trade',
   'max_positions',
   'max_lot_size',
+  'max_position_size',
   'leverage_limit',
   'allowed_segments',
   'trading_hours',
@@ -67,6 +68,11 @@ export const RULE_TYPES = [
   'max_daily_trades',
   'profit_split',
   'drawdown_type',
+  'daily_profit_cap',
+  'risk_per_trade_idea',
+  'payout_threshold',
+  'scaling',
+  'inactivity_close',
 ];
 
 /**
@@ -137,6 +143,83 @@ export function profileToRuleRows(tradingAccountId, profile) {
   }
 
   return rows;
+}
+
+/**
+ * INSTANT FUNDING — canonical rule profile.
+ * Called by api-server provisioning-service when planType === 'instant'.
+ * Pass this as the ruleProfile body to the terminal's /provisioning/provision.
+ *
+ * @param {number} balance - account starting balance in INR
+ * @returns {object} rule profile
+ */
+export function getInstantFundingRuleProfile(balance) {
+  return {
+    challengeType: 'instant',
+    plan: 'instant',
+    phase: 'funded',
+    initialBalance: balance,
+    rules: {
+      // ── Core risk limits ─────────────────────────────────────────────────
+      daily_loss_limit:   { percent: 3,  amount: balance * 0.03 },
+      max_drawdown:       { percent: 5,  amount: balance * 0.05, type: 'static' },
+      profit_target:      { percent: 0,  amount: 0 },             // none — instant funded
+
+      // ── Payout conditions ────────────────────────────────────────────────
+      min_trading_days:   { count: 7 },
+      payout_threshold:   { percent: 5,  amount: balance * 0.05 },
+      consistency_rule:   { maxDayProfitPercent: 15 },             // best trade ≤ 15% of total profit
+
+      // ── Daily profit cap (kill-switch) ───────────────────────────────────
+      daily_profit_cap:   { percent: 4,  amount: balance * 0.04 },
+
+      // ── Per-trade-idea risk limit ────────────────────────────────────────
+      risk_per_trade_idea: {
+        percent: 1,
+        amount: balance * 0.01,
+        sameDirectionWindowMinutes: 10,
+      },
+
+      // ── Position / lot limits ────────────────────────────────────────────
+      max_positions:      { count: 20 },
+      max_lot_size: {
+        nfo_nifty:   Math.round(balance / 50000)  * 2,   // ~2 lots per ₹1L
+        nfo_banknifty: Math.round(balance / 100000),      // ~1 lot per ₹1L
+        nfo_finnifty: Math.round(balance / 100000),
+        nfo_stock_fut: Math.max(1, Math.round(balance / 100000)),
+        nfo_index_opt: Math.round(balance / 10000) * 5,  // ~5 lots per ₹1L (options)
+        nfo_stock_opt: Math.round(balance / 50000) * 2,
+        cds:           Math.round(balance / 20000) * 5,
+        mcx:           Math.max(1, Math.round(balance / 100000)),
+        default:       Math.max(1, Math.round(balance / 100000)),
+      },
+
+      // ── Max position size (70% of account) ──────────────────────────────
+      max_position_size:  { percent: 70, amount: balance * 0.70 },
+
+      // ── Session rules ────────────────────────────────────────────────────
+      allowed_segments:   { segments: ['NSE', 'NFO', 'BFO', 'CDS', 'MCX'] },
+      trading_hours:      { start: '09:15', end: '15:15' },
+      no_overnight:       { cutoffTime: '15:15', allowedProducts: ['MIS'], blockWeekends: true },
+      news_blackout:      { windows: [], blockAll: false },        // enabled but no fixed windows
+
+      // ── Scaling ──────────────────────────────────────────────────────────
+      scaling: {
+        triggerPct: 10,
+        rewardPct:  25,
+        capPct:     100,
+        cycleDays:  90,
+      },
+
+      // ── Inactivity ───────────────────────────────────────────────────────
+      inactivity_close:   { days: 60 },
+
+      // ── Payout / split ───────────────────────────────────────────────────
+      profit_split:       { percent: 80 },
+      leverage_limit:     { maxMultiplier: 50 },
+      drawdown_type:      { type: 'static' },
+    },
+  };
 }
 
 /**

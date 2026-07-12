@@ -61,10 +61,13 @@ export class RiskEngine {
       () => this.checkTradingHours(rules),
       () => this.checkNoOvernight(rules, orderParams),
       () => this.checkNewsBlackout(rules),
+      () => this.checkDailyProfitCap(rules, accountId),
       () => this.checkMaxPositions(rules, accountId),
+      () => this.checkMaxPositionSize(rules, account, orderParams),
       () => this.checkMaxLotSize(rules, orderParams),
       () => this.checkMaxDailyTrades(rules, accountId),
       () => this.checkDailyLossLimit(rules, account, accountId, quoteProvider),
+      () => this.checkRiskPerTradeIdea(rules, account, accountId, orderParams),
       () => this.checkMarginAvailability(accountId, orderParams, account, quoteProvider),
       () => this.checkConsistencyRule(rules, accountId, account),
       () => this.checkMaxRiskPerTrade(rules, orderParams, account, quoteProvider),
@@ -510,6 +513,135 @@ export class RiskEngine {
       return {
         allowed: false,
         reason: `Leverage limit exceeded: ${currentLeverage.toFixed(1)}x > max ${maxMultiplier}x`,
+      };
+    }
+
+    return { allowed: true };
+  }
+
+  // === Daily Profit Cap (Kill-Switch) ===
+
+  /**
+   * Daily Profit Cap: If today's profit reaches X% of account balance,
+   * block all new orders for the rest of the day (kill-switch).
+   *
+   * Rule value: { percent: 4, amount: <balance * 0.04> }
+   */
+  static async checkDailyProfitCap(rules, accountId) {
+    if (!rules.daily_profit_cap) return { allowed: true };
+
+    const cap = rules.daily_profit_cap;
+    const account = await accountRepo.findById(accountId);
+    if (!account) return { allowed: true };
+
+    const balance = parseFloat(account.balance) || 0;
+    const capAmount = cap.amount || (cap.percent / 100) * balance;
+
+    const todayRealizedPnl = await this.calculateTodayRealizedPnl(accountId);
+
+    if (todayRealizedPnl >= capAmount) {
+      // Publish kill-switch event so UI can reflect it immediately
+      eventBus.publish('risk.alert', {
+        type: 'kill_switch',
+        ruleType: 'daily_profit_cap',
+        message: `Daily profit cap reached (₹${todayRealizedPnl.toFixed(0)} ≥ ₹${capAmount.toFixed(0)}). No new trades until tomorrow.`,
+        currentValue: todayRealizedPnl,
+        limitValue: capAmount,
+        percentUsed: 100,
+      }, { accountId });
+
+      return {
+        allowed: false,
+        reason: `Daily profit cap hit (${cap.percent}%). Kill-switch active — no new trades until next session. Current profit: ₹${todayRealizedPnl.toFixed(0)}`,
+      };
+    }
+
+    return { allowed: true };
+  }
+
+  // === Max Position Size ===
+
+  /**
+   * Max Position Size: Total open exposure cannot exceed X% of account balance.
+   *
+   * Rule value: { percent: 70, amount: <balance * 0.70> }
+   */
+  static async checkMaxPositionSize(rules, account, orderParams) {
+    if (!rules.max_position_size) return { allowed: true };
+
+    const limit = rules.max_position_size;
+    const balance = parseFloat(account.balance) || 0;
+    if (balance <= 0) return { allowed: true };
+
+    const maxAmount = limit.amount || (limit.percent / 100) * balance;
+
+    // Estimate new order notional
+    const orderPrice = orderParams.price || 0;
+    const newOrderNotional = orderParams.qty * orderPrice;
+    const existingMarginUsed = parseFloat(account.used_margin || 0);
+    const totalExposure = existingMarginUsed + newOrderNotional;
+
+    if (totalExposure > maxAmount) {
+      return {
+        allowed: false,
+        reason: `Max position size exceeded: total exposure ₹${totalExposure.toFixed(0)} > ${limit.percent}% limit ₹${maxAmount.toFixed(0)}`,
+      };
+    }
+
+    return { allowed: true };
+  }
+
+  // === Risk Per Trade Idea ===
+
+  /**
+   * Risk Per Trade Idea: Max 1% of starting balance at risk per trade idea.
+   * A trade idea = all open positions on the same instrument, same direction.
+   * Reopening same instrument, same direction within 10 minutes = same idea.
+   *
+   * Rule value: { percent: 1, amount: <balance * 0.01>, sameDirectionWindowMinutes: 10 }
+   */
+  static async checkRiskPerTradeIdea(rules, account, accountId, orderParams) {
+    if (!rules.risk_per_trade_idea) return { allowed: true };
+
+    const rule = rules.risk_per_trade_idea;
+    const challenge = await this.getChallengeForAccount(accountId);
+    const startingBalance = challenge ? parseFloat(challenge.initial_balance) : parseFloat(account.balance);
+
+    const maxRisk = rule.amount || (rule.percent / 100) * startingBalance;
+    const windowMinutes = rule.sameDirectionWindowMinutes || 10;
+
+    // Get open positions on same token + same direction
+    const openPositions = await positionRepo.getOpenPositions(accountId);
+    const sameIdeaPositions = openPositions.filter(p => {
+      const sameSide = orderParams.side === 'BUY' ? p.qty > 0 : p.qty < 0;
+      return p.token === orderParams.token && sameSide;
+    });
+
+    // Check recently closed positions (within window) — same idea, don't reset
+    const windowStart = new Date(Date.now() - windowMinutes * 60 * 1000).toISOString();
+    const recentTrades = await tradeRepo.getTradesSince(accountId, windowStart);
+    const recentSameIdea = recentTrades.filter(t => {
+      const sameSide = orderParams.side === t.side;
+      return t.token === orderParams.token && sameSide;
+    });
+
+    // Total existing exposure for this idea
+    const existingExposure = sameIdeaPositions.reduce((sum, p) => {
+      return sum + Math.abs(p.qty) * p.avgPrice;
+    }, 0);
+
+    // New order additional exposure
+    const newOrderExposure = orderParams.qty * (orderParams.price || 0);
+    const totalIdeaExposure = existingExposure + newOrderExposure;
+
+    // Risk proxy: 10% of notional (margin-based estimate)
+    const estimatedRisk = totalIdeaExposure * 0.10;
+
+    if (estimatedRisk > maxRisk) {
+      const hasRecentActivity = recentSameIdea.length > 0;
+      return {
+        allowed: false,
+        reason: `Risk per trade idea exceeded: estimated ₹${estimatedRisk.toFixed(0)} > ₹${maxRisk.toFixed(0)} (${rule.percent}% of ₹${startingBalance.toLocaleString('en-IN')}).${hasRecentActivity ? ` Recent trades on this instrument (within ${windowMinutes}min) count as the same idea.` : ''}`,
       };
     }
 
