@@ -279,12 +279,30 @@ if (process.env.NODE_ENV === 'production') {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   } else {
-    // dist/ not built — serve access-denied for all non-API GET routes
-    app.get('*', (req, res, next) => {
+    // dist/ not built — check session, serve minimal page or access denied
+    app.get('*', async (req, res, next) => {
       if (req.path.startsWith('/api') || req.path.startsWith('/auth') || req.path.startsWith('/health') || req.path.startsWith('/ws') || req.path.startsWith('/provisioning')) {
         return next();
       }
-      return res.status(401).send(getAccessDeniedHTML());
+      const cookieHeader = req.headers.cookie || '';
+      const sessionMatch = cookieHeader.match(/(?:^|;\s*)fw_session=([^;]*)/);
+      const token = sessionMatch ? sessionMatch[1] : null;
+      if (!token) {
+        return res.status(401).send(getAccessDeniedHTML());
+      }
+      const result = verifyJWT(token);
+      if (!result.valid) {
+        res.clearCookie('fw_session', { path: '/' });
+        return res.status(401).send(getAccessDeniedHTML());
+      }
+      // Valid session but no frontend build — serve placeholder
+      const { isSessionValid } = await import('./services/session.service.js');
+      const sessionActive = await isSessionValid(token);
+      if (!sessionActive) {
+        res.clearCookie('fw_session', { path: '/' });
+        return res.status(401).send(getAccessDeniedHTML());
+      }
+      return res.status(200).send(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>FundedWealth Terminal</title></head><body style="background:#0a0a0f;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;flex-direction:column;gap:16px"><h2>Terminal Loading...</h2><p style="color:#9ca3af">Frontend build pending. Please check back shortly.</p><a href="https://fundedwealth.com/dashboard" style="color:#7c3aed">Back to Dashboard</a></body></html>`);
     });
   }
 }
