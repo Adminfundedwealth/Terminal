@@ -36,9 +36,9 @@ import { config } from 'dotenv';
 
 config();
 
-const SSO_SHARED_SECRET = process.env.SSO_SHARED_SECRET;
+const SSO_SHARED_SECRET = process.env.SSO_SHARED_SECRET || process.env.SSO_API_KEY;
 if (!SSO_SHARED_SECRET) {
-  throw new Error('FATAL: SSO_SHARED_SECRET environment variable is required. Generate with: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))"');
+  throw new Error('FATAL: SSO_SHARED_SECRET or SSO_API_KEY environment variable is required.');
 }
 
 // Nonce store — uses Redis (SET NX EX) when available, Supabase fallback, in-memory last resort
