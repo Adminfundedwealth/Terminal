@@ -243,10 +243,13 @@ if (process.env.NODE_ENV === 'production') {
   const { fileURLToPath } = await import('url');
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const distPath = path.resolve(__dirname, '../dist');
-  const distExists = fs.existsSync(distPath);
-  console.log('[Terminal] dist exists:', distExists, 'at:', distPath);
+  // Also check ./dist (when server files are at same level as dist in Docker)
+  const distPath2 = path.resolve(__dirname, './dist');
+  const resolvedDistPath = fs.existsSync(distPath) ? distPath : (fs.existsSync(distPath2) ? distPath2 : distPath);
+  const distExists = fs.existsSync(resolvedDistPath);
+  console.log('[Terminal] dist exists:', distExists, 'at:', resolvedDistPath);
   if (distExists) {
-    app.use(express.static(distPath));
+    app.use(express.static(resolvedDistPath));
     app.get('*', async (req, res, next) => {
       // Don't serve index.html for API/auth/health routes
       if (req.path.startsWith('/api') || req.path.startsWith('/auth') || req.path.startsWith('/health') || req.path.startsWith('/ws')) {
@@ -276,7 +279,7 @@ if (process.env.NODE_ENV === 'production') {
       }
 
       // Valid session â€” serve terminal
-      res.sendFile(path.join(distPath, 'index.html'));
+      res.sendFile(path.join(resolvedDistPath, 'index.html'));
     });
   } else {
     // dist/ not built — check session, serve minimal page or access denied
