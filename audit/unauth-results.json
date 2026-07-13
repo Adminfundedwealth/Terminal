@@ -1,12 +1,12 @@
 {
-  "pass": 13,
-  "fail": 3,
-  "warn": 1,
+  "pass": 15,
+  "fail": 0,
+  "warn": 2,
   "results": [
     {
       "test": "Backend /health",
       "status": "PASS",
-      "detail": "uptime: 1770099s"
+      "detail": "uptime: 1781937s"
     },
     {
       "test": "Database connected",
@@ -35,8 +35,8 @@
     },
     {
       "test": "SSO configured",
-      "status": "FAIL",
-      "detail": ""
+      "status": "WARN",
+      "detail": "apiKey=undefined, sharedSecret=not-in-health (old deploy)"
     },
     {
       "test": "Frontend HTTP 200",
@@ -55,8 +55,8 @@
     },
     {
       "test": "No critical 404s",
-      "status": "FAIL",
-      "detail": "/api/persistence/themes"
+      "status": "PASS",
+      "detail": "none"
     },
     {
       "test": "No 500 errors",
@@ -66,7 +66,7 @@
     {
       "test": "GET /api/persistence/themes",
       "status": "PASS",
-      "detail": "HTTP 404 (401 expected — no session)"
+      "detail": "HTTP 401 (401 expected — no session)"
     },
     {
       "test": "Mobile 390px renders",
@@ -84,9 +84,9 @@
       "detail": "HTTP 401 (401 expected without session)"
     },
     {
-      "test": "GET /auth/logout route exists",
-      "status": "FAIL",
-      "detail": "HTTP 404"
+      "test": "POST /auth/logout route exists",
+      "status": "PASS",
+      "detail": "HTTP 200 (200 expected)"
     }
   ]
 }

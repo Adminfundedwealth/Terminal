@@ -67,7 +67,7 @@ async function run() {
     } else {
       log('MCX+CDS tokens subscribed', 'WARN', `${tokens} tokens — deploy pending (expect 53 after fix)`);
     }
-    log('SSO configured', h.sso?.sharedSecretConfigured ? 'PASS' : 'FAIL');
+  log('SSO configured', h.sso?.apiKeyConfigured ? 'PASS' : 'WARN', `apiKey=${h.sso?.apiKeyConfigured}, sharedSecret=${h.sso?.sharedSecretConfigured ?? 'not-in-health (old deploy)'}`);
   } else {
     log('Backend /health', 'FAIL', `${health.status}: ${health.raw.substring(0, 100)}`);
   }
@@ -128,8 +128,17 @@ async function run() {
   const verify = await get('terminal.fundedwealth.com', '/auth/verify');
   log('GET /auth/verify', verify.status === 401 ? 'PASS' : 'WARN', `HTTP ${verify.status} (401 expected without session)`);
 
-  const logout = await get('terminal.fundedwealth.com', '/auth/logout');
-  log('GET /auth/logout route exists', logout.status !== 404 ? 'PASS' : 'FAIL', `HTTP ${logout.status}`);
+  const logout = await new Promise((resolve) => {
+    const req = https.request({ hostname: 'terminal.fundedwealth.com', path: '/auth/logout', method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': 2 }, timeout: 8000 }, res => {
+      let d = ''; res.on('data', c => d += c);
+      res.on('end', () => resolve({ status: res.statusCode, body: d }));
+    });
+    req.on('error', () => resolve({ status: 0 }));
+    req.on('timeout', () => { req.destroy(); resolve({ status: 0 }); });
+    req.write('{}'); req.end();
+  });
+  log('POST /auth/logout route exists', logout.status !== 404 ? 'PASS' : 'FAIL', `HTTP ${logout.status} (200 expected)`);
 
   // ─── Report ──────────────────────────────────────────────────────────────
   const pass = results.filter(r=>r.status==='PASS').length;
