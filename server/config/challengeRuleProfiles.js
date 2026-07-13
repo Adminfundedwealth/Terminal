@@ -223,6 +223,158 @@ export function getInstantFundingRuleProfile(balance) {
 }
 
 /**
+ * 2-STEP EVALUATION Phase 1 — canonical rule profile.
+ * Called by provisioningService when planType === '2step' on initial purchase.
+ *
+ * @param {number} balance - account starting balance in INR
+ * @returns {object} rule profile
+ */
+export function get2StepPhase1RuleProfile(balance) {
+  return {
+    challengeType: '2step',
+    plan: '2step',
+    phase: 'phase_1',
+    initialBalance: balance,
+    rules: {
+      daily_loss_limit:   { percent: 3, amount: balance * 0.03 },
+      max_drawdown:       { percent: 8, amount: balance * 0.08, type: 'static' },
+      profit_target:      { percent: 8, amount: balance * 0.08 },
+      min_trading_days:   { count: 5 },
+      max_positions:      { count: 20 },
+      max_position_size:  { percent: 70, amount: balance * 0.70 },
+      daily_profit_cap:   { percent: 4, amount: balance * 0.04 },
+      max_risk_per_trade: { percent: 1.5, amount: balance * 0.015 },
+      allowed_segments:   { segments: ['NSE', 'NFO', 'BFO', 'CDS', 'MCX'] },
+      trading_hours:      { start: '09:15', end: '15:15' },
+      no_overnight:       { cutoffTime: '15:15', allowedProducts: ['MIS'], blockWeekends: true },
+      news_blackout:      { windows: [], blockAll: false },
+      profit_split:       { percent: 80 },
+      leverage_limit:     { maxMultiplier: 30 },
+      drawdown_type:      { type: 'static' },
+      inactivity_close:   { days: 60 },
+      scaling:            { triggerPct: 10, rewardPct: 25, capPct: 100, cycleDays: 90 },
+      // No consistency rule during evaluation
+    },
+  };
+}
+
+/**
+ * 2-STEP EVALUATION Phase 2 — canonical rule profile.
+ * Used at promotion from Phase 1 → Phase 2.
+ *
+ * @param {number} balance - account starting balance in INR
+ * @returns {object} rule profile
+ */
+export function get2StepPhase2RuleProfile(balance) {
+  const p1 = get2StepPhase1RuleProfile(balance);
+  return {
+    ...p1,
+    phase: 'phase_2',
+    rules: {
+      ...p1.rules,
+      profit_target: { percent: 5, amount: balance * 0.05 },
+      // All other limits same as Phase 1
+    },
+  };
+}
+
+/**
+ * 2-STEP FUNDED — canonical rule profile.
+ * Used at promotion from Phase 2 → Funded.
+ * Max drawdown drops from 8% (eval) to 6% (funded).
+ * Consistency rule (40%) activates. Profit target removed.
+ *
+ * @param {number} balance - account starting balance in INR
+ * @returns {object} rule profile
+ */
+export function get2StepFundedRuleProfile(balance) {
+  return {
+    challengeType: '2step',
+    plan: '2step',
+    phase: 'funded',
+    initialBalance: balance,
+    rules: {
+      daily_loss_limit:   { percent: 3,  amount: balance * 0.03 },
+      max_drawdown:       { percent: 6,  amount: balance * 0.06, type: 'static' }, // 6% funded
+      profit_target:      { percent: 0,  amount: 0 },                               // none when funded
+      payout_threshold:   { percent: 5,  amount: balance * 0.05 },
+      min_trading_days:   { count: 3 },                                              // 3 days per payout
+      consistency_rule:   { maxDayProfitPercent: 40 },                              // 40% funded rule
+      max_positions:      { count: 20 },
+      max_position_size:  { percent: 70, amount: balance * 0.70 },
+      daily_profit_cap:   { percent: 4,  amount: balance * 0.04 },
+      max_risk_per_trade: { percent: 1.5, amount: balance * 0.015 },
+      allowed_segments:   { segments: ['NSE', 'NFO', 'BFO', 'CDS', 'MCX'] },
+      trading_hours:      { start: '09:15', end: '15:15' },
+      no_overnight:       { cutoffTime: '15:15', allowedProducts: ['MIS'], blockWeekends: true },
+      news_blackout:      { windows: [], blockAll: false },
+      profit_split:       { percent: 80 },
+      leverage_limit:     { maxMultiplier: 30 },
+      drawdown_type:      { type: 'static' },
+      inactivity_close:   { days: 60 },
+      scaling:            { triggerPct: 10, rewardPct: 25, capPct: 100, cycleDays: 90 },
+    },
+  };
+}
+
+/**
+ * 1-STEP EVALUATION — canonical rule profile.
+ * Called by provisioningService when planType === '1step' on initial purchase.
+ *
+ * @param {number} balance - account starting balance in INR
+ * @returns {object} rule profile
+ */
+export function get1StepRuleProfile(balance) {
+  return {
+    challengeType: '1step',
+    plan: '1step',
+    phase: 'phase_1',
+    initialBalance: balance,
+    rules: {
+      daily_loss_limit:   { percent: 3, amount: balance * 0.03 },
+      max_drawdown:       { percent: 6, amount: balance * 0.06, type: 'static' },
+      profit_target:      { percent: 10, amount: balance * 0.10 },
+      min_trading_days:   { count: 5 },
+      max_positions:      { count: 20 },
+      max_position_size:  { percent: 70, amount: balance * 0.70 },
+      daily_profit_cap:   { percent: 4, amount: balance * 0.04 },
+      max_risk_per_trade: { percent: 1.5, amount: balance * 0.015 },
+      allowed_segments:   { segments: ['NSE', 'NFO', 'BFO', 'CDS', 'MCX'] },
+      trading_hours:      { start: '09:15', end: '15:15' },
+      no_overnight:       { cutoffTime: '15:15', allowedProducts: ['MIS'], blockWeekends: true },
+      news_blackout:      { windows: [], blockAll: false },
+      profit_split:       { percent: 80 },
+      leverage_limit:     { maxMultiplier: 30 },
+      drawdown_type:      { type: 'static' },
+      inactivity_close:   { days: 60 },
+      scaling:            { triggerPct: 10, rewardPct: 25, capPct: 100, cycleDays: 90 },
+    },
+  };
+}
+
+/**
+ * 1-STEP FUNDED — canonical rule profile.
+ * Used at promotion from Phase 1 → Funded (1-Step skips Phase 2).
+ *
+ * @param {number} balance - account starting balance in INR
+ * @returns {object} rule profile
+ */
+export function get1StepFundedRuleProfile(balance) {
+  const eval1 = get1StepRuleProfile(balance);
+  return {
+    ...eval1,
+    phase: 'funded',
+    rules: {
+      ...eval1.rules,
+      profit_target:    { percent: 0, amount: 0 },
+      payout_threshold: { percent: 5, amount: balance * 0.05 },
+      min_trading_days: { count: 3 },
+      consistency_rule: { maxDayProfitPercent: 40 },
+    },
+  };
+}
+
+/**
  * FALLBACK ONLY: Default rule profile used ONLY when Main Site does NOT
  * provide rules in the provisioning request. This ensures backward
  * compatibility with older provisioning calls.

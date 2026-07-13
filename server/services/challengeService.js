@@ -19,6 +19,12 @@ import { MetricsRepository } from '../repositories/metrics.repository.js';
 import { AuditRepository } from '../repositories/audit.repository.js';
 import { eventBus } from '../events/index.js';
 import { LifecycleCallbackClient } from '../clients/lifecycle.callback.js';
+import {
+  profileToRuleRows,
+  get1StepFundedRuleProfile,
+  get2StepPhase2RuleProfile,
+  get2StepFundedRuleProfile,
+} from '../config/challengeRuleProfiles.js';
 
 const challengeRepo = new ChallengeRepository();
 const accountRepo = new AccountRepository();
@@ -259,17 +265,29 @@ export class ChallengeService {
   // ============================================================
 
   /**
-   * Challenge plan configuration.
-   * Defines rules for each phase of the challenge.
+   * Challenge plan configuration keyed by current plan identifiers.
+   *
+   * FIX: Old keys (10K/25K/50K/1L) replaced with current plan-key system
+   * (flash/instant/1step/2step). Balance is read from challenge.initial_balance
+   * at promotion time — not hardcoded here.
+   *
+   * evalMaxDD / fundedMaxDD: max drawdown % for each phase.
+   *   2-Step evaluation: 8%  |  2-Step funded: 6%  (home.tsx confirmed)
+   *   1-Step evaluation: 6%  |  1-Step funded: 6%  (same limit both phases)
    */
   static getPlanConfig(plan) {
     const configs = {
-      '10K': { balance: 1000000, phase1Target: 8, phase2Target: 5, maxDD: 10, dailyLoss: 5, minDays: 5, durationDays: 30 },
-      '25K': { balance: 2500000, phase1Target: 8, phase2Target: 5, maxDD: 10, dailyLoss: 5, minDays: 5, durationDays: 45 },
-      '50K': { balance: 5000000, phase1Target: 8, phase2Target: 5, maxDD: 10, dailyLoss: 5, minDays: 5, durationDays: 45 },
-      '1L':  { balance: 10000000, phase1Target: 8, phase2Target: 5, maxDD: 10, dailyLoss: 5, minDays: 5, durationDays: 60 },
+      // Current plan keys
+      '2step': { phase1Target: 8, phase2Target: 5, evalMaxDD: 8, fundedMaxDD: 6, dailyLoss: 3, minDays: 5, fundedMinDays: 3, durationDays: 365 },
+      '1step': { phase1Target: 10, phase2Target: null, evalMaxDD: 6, fundedMaxDD: 6, dailyLoss: 3, minDays: 5, fundedMinDays: 3, durationDays: 365 },
+      // Legacy keys — backward compatibility
+      '10K': { phase1Target: 8, phase2Target: 5, evalMaxDD: 8, fundedMaxDD: 6, dailyLoss: 3, minDays: 5, fundedMinDays: 3, durationDays: 365 },
+      '25K': { phase1Target: 8, phase2Target: 5, evalMaxDD: 8, fundedMaxDD: 6, dailyLoss: 3, minDays: 5, fundedMinDays: 3, durationDays: 365 },
+      '50K': { phase1Target: 8, phase2Target: 5, evalMaxDD: 8, fundedMaxDD: 6, dailyLoss: 3, minDays: 5, fundedMinDays: 3, durationDays: 365 },
+      '1L':  { phase1Target: 8, phase2Target: 5, evalMaxDD: 8, fundedMaxDD: 6, dailyLoss: 3, minDays: 5, fundedMinDays: 3, durationDays: 365 },
     };
-    return configs[plan] || configs['10K'];
+    const key = String(plan || '').toLowerCase().replace(/[-\s]/g, '');
+    return configs[key] || configs['2step'];
   }
 
   /**
@@ -290,33 +308,65 @@ export class ChallengeService {
     if (challenge.status !== 'passed') return null;
 
     const planConfig = this.getPlanConfig(challenge.plan);
+    const planKey = String(challenge.plan || '').toLowerCase().replace(/[-\s]/g, '');
+    const is1Step = planKey === '1step';
 
-    // Determine current phase and next phase
+    // ── FIX: match actual stored type values from lib/products ──────────────
+    // DB stores: "2step_evaluation_phase1", "1step_evaluation", "evaluation_phase1",
+    //            "evaluation", "funded"
+    // Old code checked `challenge.type === 'evaluation'` which never matched.
+    const typeStr = String(challenge.type || '').toLowerCase();
+    const phaseStr = String(challenge.phase || '').toLowerCase();
+
+    const isPhase1 =
+      typeStr.includes('phase1') ||
+      typeStr === 'evaluation' ||
+      typeStr === 'evaluation_phase1' ||
+      phaseStr === 'phase_1' ||
+      (!phaseStr && typeStr.includes('evaluation'));
+
+    const isPhase2 =
+      typeStr.includes('phase2') ||
+      phaseStr === 'phase_2';
+
+    const isFundedAlready =
+      typeStr === 'funded' ||
+      phaseStr === 'funded';
+
+    if (isFundedAlready) return null; // Already funded
+
     let nextPhaseType = null;
     let nextPhaseLabel = null;
     let nextTargetPercent = null;
+    let nextMaxDD = null;
 
-    if (challenge.type === 'evaluation' && !challenge.phase) {
-      // Phase 1 complete → Phase 2
-      nextPhaseType = 'evaluation';
-      nextPhaseLabel = 'phase_2';
-      nextTargetPercent = planConfig.phase2Target;
-    } else if (challenge.type === 'evaluation' && challenge.phase === 'phase_2') {
-      // Phase 2 complete → Funded
+    if (isPhase1) {
+      if (is1Step) {
+        // ── 1-Step: Phase 1 passes → go straight to funded (no Phase 2) ──
+        nextPhaseType = 'funded';
+        nextPhaseLabel = 'funded';
+        nextTargetPercent = null;
+        nextMaxDD = planConfig.fundedMaxDD;
+      } else {
+        // ── 2-Step: Phase 1 passes → go to Phase 2 ──
+        nextPhaseType = 'evaluation_phase2';
+        nextPhaseLabel = 'phase_2';
+        nextTargetPercent = planConfig.phase2Target;
+        nextMaxDD = planConfig.evalMaxDD;
+      }
+    } else if (isPhase2) {
+      // ── 2-Step: Phase 2 passes → go to Funded ──
       nextPhaseType = 'funded';
       nextPhaseLabel = 'funded';
-      nextTargetPercent = null; // Funded accounts have no target (just trade)
-    } else if (challenge.type === 'evaluation' && challenge.phase === 'phase_1') {
-      // Explicit phase_1 → Phase 2
-      nextPhaseType = 'evaluation';
-      nextPhaseLabel = 'phase_2';
-      nextTargetPercent = planConfig.phase2Target;
+      nextTargetPercent = null;
+      nextMaxDD = planConfig.fundedMaxDD;
     } else {
-      // Already funded or unknown state
+      console.warn(`[ChallengeService] promoteToNextPhase: unrecognised phase for account ${accountId}`, { type: challenge.type, phase: challenge.phase, plan: challenge.plan });
       return null;
     }
 
-    // Create new challenge
+    // Use actual balance from the challenge row (not hardcoded)
+    const balance = Number(challenge.initial_balance) || 0;
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + planConfig.durationDays);
 
@@ -325,34 +375,42 @@ export class ChallengeService {
       type: nextPhaseType,
       plan: challenge.plan,
       phase: nextPhaseLabel,
-      initial_balance: planConfig.balance,
+      initial_balance: balance,
+      current_balance: balance,
+      peak_balance: balance,
+      profit_target_pct: nextTargetPercent || 0,
+      daily_loss_limit_pct: planConfig.dailyLoss,
+      max_drawdown_pct: nextMaxDD,
+      min_trading_days: nextPhaseLabel === 'funded' ? planConfig.fundedMinDays : planConfig.minDays,
       status: 'active',
-      min_trading_days: planConfig.minDays,
       started_at: new Date().toISOString(),
       expires_at: nextPhaseType === 'funded' ? null : expiresAt.toISOString(),
       previous_challenge_id: challenge.id,
     });
 
-    // Generate account code
     const accountCode = `FW-${nextPhaseLabel === 'funded' ? 'F' : 'P2'}-${Date.now().toString(36).toUpperCase()}`;
 
-    // Create new trading account
     const newAccount = await accountRepo.insert({
       trader_id: account.trader_id,
       account_code: accountCode,
       challenge_id: newChallenge.id,
       broker_provider: account.broker_provider,
-      broker_client_id: account.broker_client_id,
-      balance: planConfig.balance,
-      peak_balance: planConfig.balance,
+      broker_client_id: account.broker_client_id || accountCode,
+      balance,
+      peak_balance: balance,
       payout_eligible: nextPhaseType === 'funded',
       status: 'active',
     });
 
-    // Seed risk rules for new account
-    await this.seedRulesForAccount(newAccount.id, challenge.plan, nextPhaseLabel, planConfig, nextTargetPercent);
+    // Seed risk rules using the corrected plan config
+    const seedConfig = {
+      dailyLoss: planConfig.dailyLoss,
+      maxDD: nextMaxDD,
+      minDays: nextPhaseLabel === 'funded' ? planConfig.fundedMinDays : planConfig.minDays,
+      balance,
+    };
+    await this.seedRulesForAccount(newAccount.id, challenge.plan, nextPhaseLabel, seedConfig, nextTargetPercent);
 
-    // Audit
     await auditRepo.log({
       accountId: newAccount.id,
       userId: account.trader_id,
@@ -360,13 +418,13 @@ export class ChallengeService {
       eventData: {
         fromChallengeId: challenge.id,
         toChallengeId: newChallenge.id,
-        fromPhase: challenge.phase || 'phase_1',
+        fromPhase: challenge.phase || challenge.type,
         toPhase: nextPhaseLabel,
         plan: challenge.plan,
+        is1Step,
       },
     });
 
-    // Emit event
     eventBus.publish('challenge.updated', {
       challengeId: newChallenge.id,
       status: 'promoted',
@@ -374,30 +432,66 @@ export class ChallengeService {
       phase: nextPhaseLabel,
     }, { accountId: newAccount.id });
 
-    return {
-      challenge: newChallenge,
-      account: newAccount,
-      phase: nextPhaseLabel,
-    };
+    return { challenge: newChallenge, account: newAccount, phase: nextPhaseLabel };
   }
 
   /**
-   * Seed risk rules for a new phase account.
+   * Seed risk rules for a promoted phase account.
+   * Uses canonical profiles from challengeRuleProfiles.js when available.
+   * Falls back to config-based seeding for unknown/legacy plan types.
    */
   static async seedRulesForAccount(accountId, plan, phase, config, targetPercent) {
+    const balance = config.balance || 0;
+    const planKey = String(plan || '').toLowerCase().replace(/[-\s]/g, '');
+
+    // ── Use canonical profiles for known plan+phase combos ──────────────────
+    let canonicalProfile = null;
+    if (planKey === '1step' && phase === 'funded') {
+      canonicalProfile = get1StepFundedRuleProfile(balance);
+    } else if (planKey === '2step' && phase === 'phase_2') {
+      canonicalProfile = get2StepPhase2RuleProfile(balance);
+    } else if (planKey === '2step' && phase === 'funded') {
+      canonicalProfile = get2StepFundedRuleProfile(balance);
+    }
+
+    if (canonicalProfile) {
+      const rows = profileToRuleRows(accountId, canonicalProfile);
+      for (const rule of rows) {
+        await riskRulesRepo.insert(rule);
+      }
+      console.log(`[ChallengeService] ✓ Seeded ${rows.length} canonical rules for ${planKey}/${phase}`);
+      return;
+    }
+
+    // ── Fallback: config-based seeding for legacy/unknown types ─────────────
+    const maxDD = config.maxDD;
+    const dailyLoss = config.dailyLoss;
+    const minDays = config.minDays;
+
     const rules = [
-      { trading_account_id: accountId, rule_type: 'daily_loss_limit', value: { percent: config.dailyLoss }, is_active: true },
-      { trading_account_id: accountId, rule_type: 'max_drawdown', value: { percent: config.maxDD }, is_active: true },
-      { trading_account_id: accountId, rule_type: 'max_positions', value: { count: 10 }, is_active: true },
-      { trading_account_id: accountId, rule_type: 'allowed_segments', value: { segments: ['NSE', 'NFO', 'BFO'] }, is_active: true },
-      { trading_account_id: accountId, rule_type: 'trading_hours', value: { start: '09:15', end: '15:30' }, is_active: true },
-      { trading_account_id: accountId, rule_type: 'no_overnight', value: { cutoffTime: '15:15', allowedProducts: ['MIS'] }, is_active: true },
-      { trading_account_id: accountId, rule_type: 'min_trading_days', value: { count: config.minDays }, is_active: true },
+      { trading_account_id: accountId, rule_type: 'daily_loss_limit',  value: { percent: dailyLoss, amount: (dailyLoss / 100) * balance }, is_active: true },
+      { trading_account_id: accountId, rule_type: 'max_drawdown',       value: { percent: maxDD, amount: (maxDD / 100) * balance, type: 'static' }, is_active: true },
+      { trading_account_id: accountId, rule_type: 'max_positions',      value: { count: 20 }, is_active: true },
+      { trading_account_id: accountId, rule_type: 'max_position_size',  value: { percent: 70, amount: balance * 0.70 }, is_active: true },
+      { trading_account_id: accountId, rule_type: 'daily_profit_cap',   value: { percent: 4, amount: balance * 0.04 }, is_active: true },
+      { trading_account_id: accountId, rule_type: 'max_risk_per_trade', value: { percent: 1.5, amount: balance * 0.015 }, is_active: true },
+      { trading_account_id: accountId, rule_type: 'allowed_segments',   value: { segments: ['NSE', 'NFO', 'BFO', 'CDS', 'MCX'] }, is_active: true },
+      { trading_account_id: accountId, rule_type: 'trading_hours',      value: { start: '09:15', end: '15:15' }, is_active: true },
+      { trading_account_id: accountId, rule_type: 'no_overnight',       value: { cutoffTime: '15:15', allowedProducts: ['MIS'], blockWeekends: true }, is_active: true },
+      { trading_account_id: accountId, rule_type: 'min_trading_days',   value: { count: minDays }, is_active: true },
+      { trading_account_id: accountId, rule_type: 'news_blackout',      value: { windows: [], blockAll: false }, is_active: true },
+      { trading_account_id: accountId, rule_type: 'profit_split',       value: { percent: 80 }, is_active: true },
+      { trading_account_id: accountId, rule_type: 'inactivity_close',   value: { days: 60 }, is_active: true },
+      { trading_account_id: accountId, rule_type: 'scaling',            value: { triggerPct: 10, rewardPct: 25, capPct: 100, cycleDays: 90 }, is_active: true },
     ];
 
-    // Profit target only for evaluation phases, not funded
+    if (phase === 'funded') {
+      rules.push({ trading_account_id: accountId, rule_type: 'consistency_rule', value: { maxDayProfitPercent: 40 }, is_active: true });
+      rules.push({ trading_account_id: accountId, rule_type: 'payout_threshold', value: { percent: 5, amount: balance * 0.05 }, is_active: true });
+    }
+
     if (targetPercent) {
-      rules.push({ trading_account_id: accountId, rule_type: 'profit_target', value: { percent: targetPercent }, is_active: true });
+      rules.push({ trading_account_id: accountId, rule_type: 'profit_target', value: { percent: targetPercent, amount: (targetPercent / 100) * balance }, is_active: true });
     }
 
     for (const rule of rules) {

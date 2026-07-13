@@ -30,7 +30,7 @@ import { WebsiteCallbackClient } from '../clients/website.callback.js';
 import { LifecycleCallbackClient } from '../clients/lifecycle.callback.js';
 import { eventBus } from '../events/index.js';
 import { encryptCredentials } from './credentialEncryption.js';
-import { validateRuleProfile, profileToRuleRows, getDefaultFallbackProfile, getInstantFundingRuleProfile } from '../config/challengeRuleProfiles.js';
+import { validateRuleProfile, profileToRuleRows, getDefaultFallbackProfile, getInstantFundingRuleProfile, get1StepRuleProfile, get2StepPhase1RuleProfile } from '../config/challengeRuleProfiles.js';
 
 export class ProvisioningService {
 
@@ -98,6 +98,16 @@ export class ProvisioningService {
         const balance = planConfig.balance;
         resolvedProfile = getInstantFundingRuleProfile(balance);
         console.log(`[Provisioning] Using canonical Instant Funding rule profile for balance ₹${balance}`);
+      } else if (challengeType === '1step') {
+        // Auto-build canonical 1-Step profile
+        const balance = planConfig.balance;
+        resolvedProfile = get1StepRuleProfile(balance);
+        console.log(`[Provisioning] Using canonical 1-Step rule profile for balance ₹${balance}`);
+      } else if (challengeType === '2step') {
+        // Auto-build canonical 2-Step Phase 1 profile (Phase 2 seeded at promotion)
+        const balance = planConfig.balance;
+        resolvedProfile = get2StepPhase1RuleProfile(balance);
+        console.log(`[Provisioning] Using canonical 2-Step Phase 1 rule profile for balance ₹${balance}`);
       } else {
         // Fallback: use default profile (backward compatibility with older Main Site)
         resolvedProfile = getDefaultFallbackProfile(plan, challengeType || '2-step', 'phase_1');
