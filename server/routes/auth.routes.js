@@ -214,6 +214,37 @@ export function createAuthRouter() {
     res.json({ success: true, message: 'All sessions revoked' });
   });
 
+  /**
+   * POST /auth/test/session
+   * 
+   * TEST-ONLY endpoint — enabled only when ENABLE_TEST_SSO=true env var is set.
+   * Generates a real SSO token + session for automated testing without needing
+   * the main site's SSO_API_KEY.
+   * 
+   * Protected by TEST_SSO_SECRET env var. Returns a launchUrl to start session.
+   */
+  if (process.env.ENABLE_TEST_SSO === 'true') {
+    router.post('/test/session', async (req, res) => {
+      const testSecret = process.env.TEST_SSO_SECRET;
+      const provided = req.headers['x-test-secret'];
+      if (!testSecret || provided !== testSecret) {
+        return res.status(403).json({ error: 'forbidden' });
+      }
+
+      const { fwUserId = 'test-user', accountId, email = 'test@fundedwealth.com', name = 'Test Trader' } = req.body || {};
+      if (!accountId) return res.status(400).json({ error: 'accountId required' });
+
+      const token = generateSSOToken({ fwUserId, accountId, email, name });
+      const terminalBaseUrl = process.env.TERMINAL_URL || 'https://terminal.fundedwealth.com';
+      res.json({
+        success: true,
+        token,
+        launchUrl: `${terminalBaseUrl}/auth/sso?token=${encodeURIComponent(token)}`,
+        expiresIn: 60,
+      });
+    });
+  }
+
   return router;
 }
 
