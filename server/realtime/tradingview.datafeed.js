@@ -188,16 +188,25 @@ export class TradingViewDatafeed {
       const quote = quoteEvent.data || quoteEvent;
       if (!quote || !quote.ltp) return;
 
-      // Build/update the current bar
+      const ltp = quote.ltp;
+      // Snap time to the start of the current candle window (in ms for TV)
       const barTime = this._getBarTime(Date.now(), resolution);
-      const bar = {
-        time: barTime,
-        open: sub.lastBar?.time === barTime ? sub.lastBar.open : quote.ltp,
-        high: sub.lastBar?.time === barTime ? Math.max(sub.lastBar.high, quote.ltp) : quote.ltp,
-        low: sub.lastBar?.time === barTime ? Math.min(sub.lastBar.low, quote.ltp) : quote.ltp,
-        close: quote.ltp,
-        volume: quote.volume || 0,
-      };
+
+      let bar;
+      if (!sub.lastBar || sub.lastBar.time !== barTime) {
+        // New candle — open at current LTP, not at day open
+        bar = { time: barTime, open: ltp, high: ltp, low: ltp, close: ltp, volume: 0 };
+      } else {
+        // Update existing live candle using tracked state
+        bar = {
+          time: barTime,
+          open: sub.lastBar.open,
+          high: Math.max(sub.lastBar.high, ltp),
+          low: Math.min(sub.lastBar.low, ltp),
+          close: ltp,
+          volume: quote.volume || sub.lastBar.volume || 0,
+        };
+      }
 
       sub.lastBar = bar;
       callback(bar);

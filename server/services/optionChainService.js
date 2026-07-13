@@ -97,16 +97,29 @@ export class OptionChainService {
     if (/^\d{2}[A-Z]{3}\d{2}$/.test(expiry)) return expiry;
 
     // Parse ISO date: "2026-06-25" or "2026-06-25T00:00:00"
-    const date = new Date(expiry);
-    if (isNaN(date.getTime())) {
-      console.warn(`[OptionChain] Invalid expiry format: ${expiry}`);
-      return expiry; // Pass through and let API fail naturally
+    // Use explicit date-part splitting to avoid UTC-vs-local timezone issues.
+    // new Date('2026-07-14') is parsed as UTC midnight which can shift the date
+    // back by one day in IST (+5:30) when calling getDate()/getMonth().
+    const isoMatch = expiry.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!isoMatch) {
+      // Try generic Date parse as last resort
+      const date = new Date(expiry);
+      if (isNaN(date.getTime())) {
+        console.warn(`[OptionChain] Invalid expiry format: ${expiry}`);
+        return expiry;
+      }
+      const dd2 = String(date.getDate()).padStart(2, '0');
+      const months2 = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+      return `${dd2}${months2[date.getMonth()]}${String(date.getFullYear()).slice(-2)}`;
     }
 
-    const dd = String(date.getDate()).padStart(2, '0');
+    const year = parseInt(isoMatch[1]);
+    const month = parseInt(isoMatch[2]) - 1; // 0-indexed
+    const day = parseInt(isoMatch[3]);
     const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-    const mmm = months[date.getMonth()];
-    const yy = String(date.getFullYear()).slice(-2);
+    const dd = String(day).padStart(2, '0');
+    const mmm = months[month];
+    const yy = String(year).slice(-2);
     return `${dd}${mmm}${yy}`;
   }
 
@@ -231,7 +244,11 @@ export class OptionChainService {
 
         const fetched = resp.data?.data?.fetched || [];
         for (const q of fetched) {
-          quotes.set(q.symbolToken, {
+          // Angel One quote API returns symbolToken with capital T.
+          // searchScrip returns symboltoken with lowercase t.
+          // Normalise to lowercase so _buildChain lookups work correctly.
+          const key = q.symbolToken || q.symboltoken || '';
+          quotes.set(key, {
             ltp: q.ltp || 0,
             open: q.open || 0,
             high: q.high || 0,
@@ -267,7 +284,9 @@ export class OptionChainService {
         strikeMap.set(inst.strike, { strike: inst.strike });
       }
       const entry = strikeMap.get(inst.strike);
-      const q = quotes.get(inst.symboltoken) || {};
+      // Quote map is keyed with whatever case Angel returned (symbolToken).
+      // Try both cases to be safe.
+      const q = quotes.get(inst.symboltoken) || quotes.get(inst.symboltoken?.toUpperCase?.()) || {};
 
       if (inst.optionType === 'CE') {
         entry.callToken = inst.symboltoken;

@@ -80,7 +80,8 @@ export function OptionChainModal() {
         setChain(data);
         setRetryCount(0);
       } else {
-        // Empty response — might be market closed or feed not ready. Auto-retry up to 3 times with backoff.
+        // Empty response — might be market closed, invalid expiry, or feed not ready.
+        // Auto-retry up to 3 times with backoff.
         setChain([]);
         if (retryCount < 3) {
           const delay = (retryCount + 1) * 5000; // 5s, 10s, 15s
@@ -90,8 +91,10 @@ export function OptionChainModal() {
               loadChain();
             }
           }, delay);
+          // Set a soft message so user knows it's retrying, not stuck
+          setError(null);
         } else {
-          setError('No option chain data available. Market may be closed or feed is connecting.');
+          setError('No option chain data returned. Market may be closed or the expiry has no contracts.');
         }
       }
     } catch (err: any) {
@@ -211,23 +214,25 @@ export function OptionChainModal() {
         ) : chain.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full gap-3">
             <div className="w-12 h-12 rounded-xl bg-fw-bg border border-fw-border flex items-center justify-center">
-              <span className="text-[24px] text-fw-text-muted/60">⛓</span>
+              {retryCount > 0 && retryCount < 3 && !error
+                ? <div className="w-5 h-5 border-2 border-fw-accent border-t-transparent rounded-full animate-spin" />
+                : <span className="text-[24px] text-fw-text-muted/60">⛓</span>
+              }
             </div>
             <div className="text-center">
               <p className="text-[14px] text-fw-text-secondary font-semibold">
-                {error ? 'Option Chain Unavailable' : 'Loading Option Chain'}
+                {error ? 'Option Chain Unavailable' : retryCount > 0 ? 'Fetching Option Chain...' : 'No Data Yet'}
               </p>
-              <p className="text-[12px] text-fw-text-muted mt-1 max-w-[260px]">
-                {error || 'Connecting to market data feed...'}
+              <p className="text-[12px] text-fw-text-muted mt-1 max-w-[280px]">
+                {error
+                  ? error
+                  : retryCount > 0
+                    ? `Retrying (${retryCount}/3) — connecting to market feed...`
+                    : `Click Retry Now to load ${symbol} option chain for ${selectedExpiry}`
+                }
               </p>
             </div>
             <div className="flex items-center gap-2 mt-1">
-              {retryCount > 0 && retryCount < 3 && !error && (
-                <div className="flex items-center gap-1.5">
-                  <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
-                  <span className="text-[11px] text-orange-400 font-medium">Retrying ({retryCount}/3)...</span>
-                </div>
-              )}
               <button
                 onClick={handleManualRetry}
                 className="px-3 py-1 text-[11px] font-semibold bg-fw-accent text-white rounded hover:brightness-110 transition-all"

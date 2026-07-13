@@ -41,6 +41,7 @@ export function ChartPanel() {
   const macdContainerRef = useRef<HTMLDivElement>(null);
   const volumeContainerRef = useRef<HTMLDivElement>(null);
   const rawDataRef = useRef<OHLC[]>([]);
+  const liveBarRef = useRef<{ time: number; open: number; high: number; low: number; close: number } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [indicators, setIndicators] = useState<IndicatorConfig[]>(DEFAULT_INDICATORS);
@@ -205,6 +206,7 @@ export function ChartPanel() {
   // Load chart data when symbol/timeframe/chartType changes
   useEffect(() => {
     if (!chartRef.current || !activeSymbol) return;
+    liveBarRef.current = null; // reset live candle tracking on symbol/tf change
     loadChartData();
   }, [activeSymbol?.token, timeframe, chartType]);
 
@@ -380,14 +382,50 @@ export function ChartPanel() {
     });
   }
 
-  // Live tick update
+  // Live tick update — snap time to candle boundary, use LTP-based OHLC not day OHLC
   useEffect(() => {
-    if (!seriesRef.current || !quote) return;
-    const now = Math.floor(Date.now() / 1000);
-    if (chartType === 'line' || chartType === 'area') {
-      (seriesRef.current as any).update({ time: now, value: quote.ltp });
+    if (!seriesRef.current || !quote?.ltp) return;
+
+    // Snap timestamp to the start of the current candle window
+    const resMinutes = timeframeToMinutes(timeframe);
+    const nowMs = Date.now();
+    let candleTime: number;
+    if (timeframe === 'D' || timeframe === 'W') {
+      const d = new Date(nowMs);
+      d.setHours(0, 0, 0, 0);
+      candleTime = Math.floor(d.getTime() / 1000);
     } else {
-      (seriesRef.current as any).update({ time: now, open: quote.open || quote.ltp, high: quote.high || quote.ltp, low: quote.low || quote.ltp, close: quote.ltp });
+      const totalMinutes = Math.floor(nowMs / 60000); // total minutes since epoch
+      const snapped = Math.floor(totalMinutes / resMinutes) * resMinutes;
+      candleTime = snapped * 60;
+    }
+
+    const ltp = quote.ltp;
+
+    if (chartType === 'line' || chartType === 'area') {
+      (seriesRef.current as any).update({ time: candleTime, value: ltp });
+    } else {
+      // Get the last bar from the series to maintain proper candle OHLC
+      // We track current live candle state in a ref to avoid using day H/L
+      const prevLiveCandle = liveBarRef.current;
+      let updatedBar: { time: number; open: number; high: number; low: number; close: number };
+
+      if (!prevLiveCandle || prevLiveCandle.time !== candleTime) {
+        // New candle — open at current LTP
+        updatedBar = { time: candleTime, open: ltp, high: ltp, low: ltp, close: ltp };
+      } else {
+        // Update existing live candle
+        updatedBar = {
+          time: candleTime,
+          open: prevLiveCandle.open,
+          high: Math.max(prevLiveCandle.high, ltp),
+          low: Math.min(prevLiveCandle.low, ltp),
+          close: ltp,
+        };
+      }
+
+      liveBarRef.current = updatedBar;
+      (seriesRef.current as any).update(updatedBar);
     }
   }, [quote?.ltp]);
 
@@ -494,6 +532,11 @@ export function ChartPanel() {
       </div>
     </div>
   );
+}
+
+function timeframeToMinutes(tf: string): number {
+  const map: Record<string, number> = { '1': 1, '3': 3, '5': 5, '15': 15, '30': 30, '60': 60, '240': 240, 'D': 1440, 'W': 10080 };
+  return map[tf] || parseInt(tf) || 5;
 }
 
 function convertToHeikinAshi(data: OHLC[]): OHLC[] {

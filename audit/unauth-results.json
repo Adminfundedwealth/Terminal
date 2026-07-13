@@ -1,0 +1,92 @@
+{
+  "pass": 13,
+  "fail": 3,
+  "warn": 1,
+  "results": [
+    {
+      "test": "Backend /health",
+      "status": "PASS",
+      "detail": "uptime: 1770099s"
+    },
+    {
+      "test": "Database connected",
+      "status": "PASS",
+      "detail": "OK (tables pending migration)"
+    },
+    {
+      "test": "Market data feed",
+      "status": "PASS",
+      "detail": "adapter: angelone-smartstream"
+    },
+    {
+      "test": "Feed tick count",
+      "status": "PASS",
+      "detail": "8,572,485 ticks"
+    },
+    {
+      "test": "Subscribed tokens count",
+      "status": "PASS",
+      "detail": "9 tokens, 9 cached quotes"
+    },
+    {
+      "test": "MCX+CDS tokens subscribed",
+      "status": "WARN",
+      "detail": "9 tokens — deploy pending (expect 53 after fix)"
+    },
+    {
+      "test": "SSO configured",
+      "status": "FAIL",
+      "detail": ""
+    },
+    {
+      "test": "Frontend HTTP 200",
+      "status": "PASS",
+      "detail": "title: FundedWealth Terminal — Professional Trading"
+    },
+    {
+      "test": "SSO gate active",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "test": "JS/CSS assets load",
+      "status": "PASS",
+      "detail": "2 assets"
+    },
+    {
+      "test": "No critical 404s",
+      "status": "FAIL",
+      "detail": "/api/persistence/themes"
+    },
+    {
+      "test": "No 500 errors",
+      "status": "PASS",
+      "detail": "none"
+    },
+    {
+      "test": "GET /api/persistence/themes",
+      "status": "PASS",
+      "detail": "HTTP 404 (401 expected — no session)"
+    },
+    {
+      "test": "Mobile 390px renders",
+      "status": "PASS",
+      "detail": "243 chars"
+    },
+    {
+      "test": "Tablet 768px renders",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "test": "GET /auth/verify",
+      "status": "PASS",
+      "detail": "HTTP 401 (401 expected without session)"
+    },
+    {
+      "test": "GET /auth/logout route exists",
+      "status": "FAIL",
+      "detail": "HTTP 404"
+    }
+  ]
+}

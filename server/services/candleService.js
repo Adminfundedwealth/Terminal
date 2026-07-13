@@ -152,14 +152,28 @@ export class CandleService {
       if (!candles || !Array.isArray(candles)) return [];
 
       // Angel One returns: [[timestamp_str, open, high, low, close, volume], ...]
-      return candles.map(c => ({
-        time: Math.floor(new Date(c[0]).getTime() / 1000),
-        open: c[1],
-        high: c[2],
-        low: c[3],
-        close: c[4],
-        volume: c[5] || 0,
-      }));
+      // Filter out bad candles (zero/null OHLC or impossible values like high < low)
+      return candles
+        .map(c => ({
+          time: Math.floor(new Date(c[0]).getTime() / 1000),
+          open: parseFloat(c[1]) || 0,
+          high: parseFloat(c[2]) || 0,
+          low: parseFloat(c[3]) || 0,
+          close: parseFloat(c[4]) || 0,
+          volume: parseFloat(c[5]) || 0,
+        }))
+        .filter(c =>
+          c.time > 0 &&
+          c.open > 0 &&
+          c.high > 0 &&
+          c.low > 0 &&
+          c.close > 0 &&
+          c.high >= c.low &&
+          c.high >= c.open &&
+          c.high >= c.close &&
+          c.low <= c.open &&
+          c.low <= c.close
+        );
     } catch (err) {
       console.error(`[CandleService] Historical fetch failed for ${token}/${timeframe}:`, err.response?.data?.message || err.message);
       return [];

@@ -186,7 +186,7 @@ app.get('/health', async (req, res) => {
     uptime: process.uptime(),
     sso: {
       apiKeyConfigured: !!(process.env.SSO_API_KEY || process.env.PROVISIONING_API_KEY),
-      sharedSecretConfigured: !!process.env.SSO_SHARED_SECRET,
+      sharedSecretConfigured: !!(process.env.SSO_SHARED_SECRET) && process.env.SSO_SHARED_SECRET !== 'sso-shared-secret-change-in-production',
     },
   });
 });
@@ -216,7 +216,9 @@ app.use('/api/orders', orderLimiter);
 app.use('/api', createApiRouter(accountService, instrumentService, marketDataEngine, candleService, depthService, optionChainService));
 
 // Persistence routes (layouts, themes, journal, chart templates)
+// Mounted under both /api and /api/persistence for frontend compatibility
 app.use('/api', createPersistenceRouter());
+app.use('/api/persistence', createPersistenceRouter());
 
 // Advanced order routes (OCO, Basket, Bracket, Equity Curve, Chart Templates)
 app.use('/api', createAdvancedOrdersRouter());

@@ -1,0 +1,52 @@
+{
+  "pass": 4,
+  "fail": 2,
+  "warn": 3,
+  "results": [
+    {
+      "test": "SSO redirect",
+      "status": "WARN",
+      "detail": "Redirect to https://fundedwealth.com/terminal-error?reason=Invalid%20SSO%20token%20signature. — cookie not captured in this mode"
+    },
+    {
+      "test": "Session cookie",
+      "status": "FAIL",
+      "detail": "Could not obtain session — production SSO_SHARED_SECRET differs from local"
+    },
+    {
+      "test": "Frontend loads",
+      "status": "PASS",
+      "detail": "HTTP 200"
+    },
+    {
+      "test": "SSO gate active",
+      "status": "WARN",
+      "detail": ""
+    },
+    {
+      "test": "Backend health",
+      "status": "PASS",
+      "detail": "DB: true, Feed: true"
+    },
+    {
+      "test": "Angel One feed",
+      "status": "PASS",
+      "detail": "tokens: 9, ticks: 8572485"
+    },
+    {
+      "test": "MCX+CDS feed subscribed",
+      "status": "WARN",
+      "detail": "9 total (expect ≥13 after fix, old=9)"
+    },
+    {
+      "test": "GET /api/persistence/themes",
+      "status": "FAIL",
+      "detail": "HTTP 404"
+    },
+    {
+      "test": "Mobile (390px) renders",
+      "status": "PASS",
+      "detail": ""
+    }
+  ]
+}
