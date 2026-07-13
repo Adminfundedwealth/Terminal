@@ -7,6 +7,7 @@
     { "source": "/api/:path*", "destination": "https://terminal-production-4429.up.railway.app/api/:path*" },
     { "source": "/auth/:path*", "destination": "https://terminal-production-4429.up.railway.app/auth/:path*" },
     { "source": "/health", "destination": "https://terminal-production-4429.up.railway.app/health" },
-    { "source": "/ws/:path*", "destination": "https://terminal-production-4429.up.railway.app/ws/:path*" }
+    { "source": "/ws/:path*", "destination": "https://terminal-production-4429.up.railway.app/ws/:path*" },
+    { "source": "/socket.io/:path*", "destination": "https://terminal-production-4429.up.railway.app/socket.io/:path*" }
   ]
 }

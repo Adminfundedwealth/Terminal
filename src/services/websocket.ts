@@ -1,4 +1,5 @@
 import { useMarketStore } from '@/store/marketStore';
+import { useTradingStore } from '@/store/tradingStore';
 import type { MarketQuote, MarketDepth } from '@/types';
 
 type MessageHandler = (data: any) => void;
@@ -73,6 +74,7 @@ class WebSocketService {
 
   private handleMessage(data: any) {
     const store = useMarketStore.getState();
+    const trading = useTradingStore.getState();
 
     switch (data.type) {
       case 'quote':
@@ -91,17 +93,64 @@ class WebSocketService {
         }
         break;
       // Real-time trading event updates — forwarded by EventBridge
-      case 'order_update':
-      case 'position_update':
-      case 'risk_alert':
-      case 'account_locked':
-      case 'account_breached':
-      case 'account_unlocked':
-      case 'challenge_update':
-      case 'risk_progress':
-      case 'trade_executed':
-        // No direct store update here — components poll or listeners handle these
+      case 'order_update': {
+        const order = data.data || data.order;
+        if (order?.id) {
+          // Update existing order or prepend if new
+          const existing = trading.orders.find((o) => o.id === order.id);
+          if (existing) {
+            trading.updateOrder(order.id, order);
+          } else {
+            trading.addOrder(order);
+          }
+        }
         break;
+      }
+      case 'position_update': {
+        const position = data.data || data.position;
+        if (position?.id) {
+          trading.updatePosition(position.id, position);
+        }
+        break;
+      }
+      case 'trade_executed': {
+        // Refresh trades list — push new trade to front if provided
+        const trade = data.data || data.trade;
+        if (trade) {
+          trading.setTrades([trade, ...trading.trades].slice(0, 500));
+        }
+        break;
+      }
+      case 'risk_alert': {
+        // Risk alerts are surfaced via RiskMonitor toasts & RiskWidget polling.
+        // Log for debug — no store mutation needed here.
+        console.warn('[WS] risk_alert received:', data.data || data);
+        break;
+      }
+      case 'account_locked':
+      case 'account_breached': {
+        // Force account re-fetch so RiskOverlay fires immediately
+        console.warn('[WS] account status event:', data.type, data.data || data);
+        // Re-fetch account info to sync locked/breached state
+        import('@/services/api').then(({ getAccount }) => {
+          getAccount().then((acc) => trading.setAccount(acc)).catch(() => {});
+        });
+        break;
+      }
+      case 'account_unlocked': {
+        import('@/services/api').then(({ getAccount }) => {
+          getAccount().then((acc) => trading.setAccount(acc)).catch(() => {});
+        });
+        break;
+      }
+      case 'challenge_update':
+      case 'risk_progress': {
+        // Re-fetch account to sync challenge/risk progress
+        import('@/services/api').then(({ getAccount }) => {
+          getAccount().then((acc) => trading.setAccount(acc)).catch(() => {});
+        });
+        break;
+      }
     }
 
     // Notify handlers (allows components to subscribe to specific event types)

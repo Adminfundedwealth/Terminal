@@ -1,4 +1,4 @@
-﻿/**
+/**
  * FUNDEDWEALTH TERMINAL â€” SERVER ENTRY POINT
  * 
  * Wires together all backend components:
@@ -572,8 +572,35 @@ async function connectAngelFeed() {
       marketDataEngine.pushQuote(t.token, { symbol: t.symbol, exchange: t.exchange, segment: t.exchange });
     });
 
+    // MCX commodity tokens (mode 2 -- Quote with OHLC + volume)
+    const mcxTokens = [
+      { token: '429604', exchange: 'MCX', symbol: 'GOLD' },
+      { token: '429638', exchange: 'MCX', symbol: 'SILVER' },
+      { token: '425475', exchange: 'MCX', symbol: 'CRUDEOIL' },
+      { token: '431765', exchange: 'MCX', symbol: 'NATURALGAS' },
+      { token: '430596', exchange: 'MCX', symbol: 'COPPER' },
+      { token: '438629', exchange: 'MCX', symbol: 'ALUMINIUM' },
+      { token: '437561', exchange: 'MCX', symbol: 'ZINC' },
+      { token: '431659', exchange: 'MCX', symbol: 'LEAD' },
+      { token: '432468', exchange: 'MCX', symbol: 'NICKEL' },
+    ];
+
+    // CDS currency tokens (mode 2 -- Quote)
+    const cdsTokens = [
+      { token: '11091', exchange: 'CDS', symbol: 'USDINR' },
+      { token: '11363', exchange: 'CDS', symbol: 'EURINR' },
+      { token: '11096', exchange: 'CDS', symbol: 'GBPINR' },
+      { token: '11098', exchange: 'CDS', symbol: 'JPYINR' },
+    ];
+
+    // Seed MCX + CDS symbols into engine
+    [...mcxTokens, ...cdsTokens].forEach(t => {
+      marketDataEngine.pushQuote(t.token, { symbol: t.symbol, exchange: t.exchange, segment: t.exchange });
+    });
+
     // Register token exchanges for candle service
     defaultTokens.forEach(t => candleService.registerTokenExchange(t.token, t.exchange));
+    [...mcxTokens, ...cdsTokens].forEach(t => candleService.registerTokenExchange(t.token, t.exchange));
 
     // Split tokens: indices (mode 1 LTP) vs stocks (mode 2 Quote)
     const indexTokens = defaultTokens.filter(t => t.token.startsWith('999'));
@@ -585,10 +612,18 @@ async function connectAngelFeed() {
     if (stockTokens.length > 0) {
       angelFeed.subscribe(stockTokens, 2); // Quote mode for stocks (OHLC + volume + change)
     }
-    console.log(`[AngelFeed] âœ“ ${indexTokens.length} indices (mode 1) + ${stockTokens.length} stocks (mode 2) subscribed`);
+    if (mcxTokens.length > 0) {
+      angelFeed.subscribe(mcxTokens, 2); // Quote mode for MCX commodities
+    }
+    if (cdsTokens.length > 0) {
+      angelFeed.subscribe(cdsTokens, 2); // Quote mode for CDS currencies
+    }
+    console.log(`[AngelFeed] subscribed: ${indexTokens.length} indices + ${stockTokens.length} stocks + ${mcxTokens.length} MCX + ${cdsTokens.length} CDS`);
+
+    const allFeedTokens = [...defaultTokens, ...mcxTokens, ...cdsTokens];
 
     // Hook live ticks into candle aggregation
-    for (const t of defaultTokens) {
+    for (const t of allFeedTokens) {
       marketDataEngine.subscribe(t.token, (event) => {
         if (event.data?.ltp) {
           candleService.processLiveTick(t.token, event.data.ltp, event.data.volume, event.data.timestamp);
@@ -597,9 +632,9 @@ async function connectAngelFeed() {
     }
 
     // Position P&L tracking starts when authenticated sessions are active
-    // (no dev bypass â€” sessions drive tracking)
+    // (no dev bypass -- sessions drive tracking)
   } catch (err) {
-    console.warn(`[AngelFeed] âœ— Connection failed: ${err.message}`);
+    console.warn(`[AngelFeed] Connection failed: ${err.message}`);
     console.warn('[AngelFeed]   Market data will be empty until feed connects');
   }
 }

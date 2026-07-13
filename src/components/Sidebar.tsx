@@ -1,10 +1,16 @@
 import { 
   LayoutDashboard, BarChart3, TrendingUp, LineChart, Activity, Diamond, DollarSign,
-  Search, Bell, ScanLine, PieChart, BookOpen, Settings, Wifi, WifiOff, Bot, Users
+  Search, Bell, ScanLine, PieChart, BookOpen, Settings, Wifi, WifiOff, Bot, Users, User, LogOut
 } from 'lucide-react';
 import { useAppStore, type Workspace } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
 import { cn } from '@/utils/helpers';
+import { useState } from 'react';
+import { SettingsPanel } from '@/components/SettingsPanel';
+import { ProfilePanel } from '@/components/ProfilePanel';
+import { logout } from '@/hooks/useAuth';
+
+const DASHBOARD_URL = (import.meta as any).env?.VITE_FW_DASHBOARD_URL || 'https://fundedwealth.com';
 
 const WORKSPACES: { id: Workspace; icon: React.ReactNode; label: string; color: string }[] = [
   { id: 'index', icon: <BarChart3 size={18} />, label: 'Index', color: '#2962ff' },
@@ -18,8 +24,11 @@ const WORKSPACES: { id: Workspace; icon: React.ReactNode; label: string; color: 
 export function Sidebar() {
   const { activeWorkspace, setActiveWorkspace, setSearchOpen, setBottomTab } = useAppStore();
   const marketStatus = useMarketStore((s) => s.marketStatus);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
 
   return (
+    <>
     <div className="w-[48px] min-w-[48px] h-full bg-[#08090e] border-r border-fw-border/60 flex flex-col items-center py-2 select-none flex-shrink-0">
       {/* Brand Icon */}
       <div className="mb-2 pb-2 border-b border-fw-border/30 w-full flex justify-center">
@@ -45,7 +54,7 @@ export function Sidebar() {
         icon={<LayoutDashboard size={16} />}
         label="Dashboard"
         active={false}
-        onClick={() => {}}
+        onClick={() => window.open(DASHBOARD_URL, '_blank', 'noopener,noreferrer')}
       />
 
       {/* Divider */}
@@ -103,11 +112,18 @@ export function Sidebar() {
         </div>
       </div>
 
-      {/* Settings */}
-      <div className="pt-1.5 border-t border-fw-border/30 w-full flex justify-center">
-        <SidebarBtn icon={<Settings size={15} />} label="Settings" onClick={() => {}} />
+      {/* Bottom Actions */}
+      <div className="pt-1.5 border-t border-fw-border/30 w-full flex flex-col items-center gap-0.5">
+        <SidebarBtn icon={<User size={15} />} label="Profile" onClick={() => setShowProfile(true)} />
+        <SidebarBtn icon={<Settings size={15} />} label="Settings" onClick={() => setShowSettings(true)} />
+        <SidebarBtn icon={<LogOut size={15} />} label="Logout" onClick={() => logout()} />
       </div>
     </div>
+
+    {/* Modals */}
+    {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
+    {showProfile && <ProfilePanel onClose={() => setShowProfile(false)} />}
+    </>
   );
 }
 

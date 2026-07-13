@@ -4,7 +4,7 @@ import { useAppStore } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
 import { placeOrder } from '@/services/api';
 import { cn, formatPrice } from '@/utils/helpers';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
 import type { OrderSide, OrderType, ProductType } from '@/types';
 
 const ORDER_TYPES: { value: OrderType; label: string }[] = [
@@ -31,11 +31,45 @@ export function OrderPanel() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [slPrice, setSlPrice] = useState<number>(0);
   const [tpPrice, setTpPrice] = useState<number>(0);
+  const [confirmOrder, setConfirmOrder] = useState<{ side: OrderSide } | null>(null);
 
   const symbol = orderForm.symbol || activeSymbol?.symbol || '';
   const token = orderForm.token || activeSymbol?.token || '';
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 2500); };
+
+  // Client-side validation before order submission
+  function validateOrder(side: OrderSide): string | null {
+    if (!symbol || !token) return 'No symbol selected';
+    if (!orderForm.qty || orderForm.qty <= 0) return 'Quantity must be greater than 0';
+    if ((orderForm.orderType === 'LIMIT' || orderForm.orderType === 'SL') && (!orderForm.price || orderForm.price <= 0)) {
+      return 'Price must be greater than 0 for Limit orders';
+    }
+    if ((orderForm.orderType === 'SL' || orderForm.orderType === 'SL-M') && (!orderForm.triggerPrice || orderForm.triggerPrice <= 0)) {
+      return 'Trigger price must be greater than 0 for Stop Loss orders';
+    }
+    return null;
+  }
+
+  const handleSubmitRequest = (side: OrderSide) => {
+    const err = validateOrder(side);
+    if (err) { showToast(err); return; }
+    // Show confirmation dialog before placing
+    setConfirmOrder({ side });
+  };
+
+  const handleConfirmSubmit = async () => {
+    if (!confirmOrder) return;
+    const { side } = confirmOrder;
+    setConfirmOrder(null);
+    if (!symbol || !token) return;
+    setIsSubmitting(true);
+    try {
+      await placeOrder({ symbol, token, segment: activeSymbol?.segment || 'NSE', side, orderType: orderForm.orderType, productType: orderForm.productType, qty: orderForm.qty, price: orderForm.orderType === 'LIMIT' || orderForm.orderType === 'SL' ? orderForm.price : undefined, triggerPrice: orderForm.orderType === 'SL' || orderForm.orderType === 'SL-M' ? orderForm.triggerPrice : undefined });
+      showToast(`${side} ${orderForm.qty}×${symbol} placed (paper)`);
+    } catch (err: any) { showToast(err.message || 'Order failed — check risk rules'); }
+    finally { setIsSubmitting(false); }
+  };
 
   if (!symbol && !activeSymbol) {
     return (
@@ -46,20 +80,47 @@ export function OrderPanel() {
     );
   }
 
-  const handleSubmit = async (side: OrderSide) => {
-    if (!symbol || !token) return;
-    setIsSubmitting(true);
-    try {
-      const result = await placeOrder({ symbol, token, segment: activeSymbol?.segment || 'NSE', side, orderType: orderForm.orderType, productType: orderForm.productType, qty: orderForm.qty, price: orderForm.orderType === 'LIMIT' || orderForm.orderType === 'SL' ? orderForm.price : undefined, triggerPrice: orderForm.orderType === 'SL' || orderForm.orderType === 'SL-M' ? orderForm.triggerPrice : undefined });
-      showToast(`${side} ${orderForm.qty}×${symbol} placed (paper)`);
-    } catch (err: any) { showToast(err.message || 'Order failed — check risk rules'); }
-    finally { setIsSubmitting(false); }
-  };
-
   const lotSize = activeSymbol?.lotSize || 1;
 
   return (
-    <div className="flex flex-col h-full bg-[#0c0e14] overflow-y-auto scrollbar-none">
+    <div className="relative flex flex-col h-full bg-[#0c0e14] overflow-y-auto scrollbar-none">
+      {/* Order Confirmation Dialog */}
+      {confirmOrder && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="bg-[#12141f] border border-fw-border rounded-xl shadow-2xl p-5 w-[240px] mx-3 flex flex-col gap-4">
+            <div className="flex items-center gap-2">
+              <AlertTriangle size={16} className={confirmOrder.side === 'BUY' ? 'text-green' : 'text-red'} />
+              <span className="text-[13px] font-black text-fw-text">Confirm Order</span>
+            </div>
+            <div className="text-[12px] text-fw-text-secondary leading-relaxed">
+              <span className={cn('font-black', confirmOrder.side === 'BUY' ? 'text-green' : 'text-red')}>{confirmOrder.side}</span>
+              {' '}{orderForm.qty} × <span className="font-bold text-fw-text">{symbol}</span>
+              <br />
+              <span className="text-fw-text-muted">{orderForm.orderType} · {orderForm.productType}</span>
+              {(orderForm.orderType === 'LIMIT' || orderForm.orderType === 'SL') && (
+                <><br /><span className="text-fw-text-muted">Price: </span><span className="font-mono font-bold text-fw-text">₹{formatPrice(orderForm.price)}</span></>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => setConfirmOrder(null)}
+                className="py-2 rounded-md text-[12px] font-bold bg-fw-bg border border-fw-border text-fw-text-secondary hover:text-fw-text transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmSubmit}
+                className={cn(
+                  'py-2 rounded-md text-[12px] font-black text-white transition-all active:scale-[0.98]',
+                  confirmOrder.side === 'BUY' ? 'bg-[var(--fw-green)]' : 'bg-[var(--fw-red)]'
+                )}
+              >
+                {confirmOrder.side}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Compact Header with Symbol + LTP */}
       <div className="px-3 py-2.5 border-b border-fw-border bg-gradient-to-r from-[#10121a] to-[#0e1018] flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-2">
@@ -326,14 +387,14 @@ export function OrderPanel() {
       <div className="px-3 py-3 border-t border-fw-border bg-[#0a0c12] flex-shrink-0">
         <div className="grid grid-cols-2 gap-2">
           <button
-            onClick={() => handleSubmit('BUY')}
+            onClick={() => handleSubmitRequest('BUY')}
             disabled={isSubmitting || !symbol}
             className="py-3 rounded-md text-[14px] font-black text-white bg-[var(--fw-green)] hover:brightness-110 disabled:opacity-40 shadow-[0_2px_12px_rgba(34,197,94,0.25)] transition-all active:scale-[0.98]"
           >
             BUY
           </button>
           <button
-            onClick={() => handleSubmit('SELL')}
+            onClick={() => handleSubmitRequest('SELL')}
             disabled={isSubmitting || !symbol}
             className="py-3 rounded-md text-[14px] font-black text-white bg-[var(--fw-red)] hover:brightness-110 disabled:opacity-40 shadow-[0_2px_12px_rgba(239,68,68,0.25)] transition-all active:scale-[0.98]"
           >
