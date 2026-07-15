@@ -2,9 +2,8 @@ import { useState, useEffect } from 'react';
 import { useMarketStore } from '@/store/marketStore';
 import { useAppStore } from '@/store/appStore';
 import { wsService } from '@/services/websocket';
-import { getTerminalStatus, type TerminalStatus } from '@/services/api';
 import { cn } from '@/utils/helpers';
-import { Wifi, WifiOff, Loader2, FileText } from 'lucide-react';
+import { Wifi, WifiOff, Loader2 } from 'lucide-react';
 
 type WsState = 'connected' | 'connecting' | 'reconnecting' | 'disconnected';
 
@@ -60,16 +59,6 @@ export function StatusBar() {
     POST_CLOSE: 'text-orange-400',
   };
 
-  const [terminalStatus, setTerminalStatus] = useState<TerminalStatus | null>(null);
-  useEffect(() => {
-    const fetch = () => getTerminalStatus().then(setTerminalStatus).catch(() => {});
-    fetch();
-    const interval = setInterval(fetch, 15000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const execMode = terminalStatus?.executionMode?.mode || 'paper';
-
   const wsConfig: Record<WsState, { dot: string; label: string; color: string; icon: React.ReactNode }> = {
     connected: { dot: 'bg-emerald-500', label: 'Connected', color: 'text-emerald-400', icon: <Wifi size={9} className="text-emerald-400" /> },
     connecting: { dot: 'bg-yellow-500 animate-pulse', label: 'Connecting...', color: 'text-yellow-400', icon: <Loader2 size={9} className="text-yellow-400 animate-spin" /> },
@@ -81,12 +70,6 @@ export function StatusBar() {
 
   return (
     <div className="h-[22px] min-h-[22px] bg-[#08090e] border-t border-fw-border/50 flex items-center px-3 gap-4 text-[9px] select-none">
-      {/* Execution Mode Badge */}
-      <div className={cn('flex items-center gap-1 px-1.5 py-0.5 rounded border font-bold', execMode === 'paper' ? 'border-yellow-800/40 bg-yellow-900/15 text-yellow-400' : 'border-emerald-800/40 bg-emerald-900/15 text-emerald-400')}>
-        <FileText size={8} />
-        {execMode === 'paper' ? 'PAPER' : 'LIVE'}
-      </div>
-
       {/* Broker Feed Status */}
       <div className="flex items-center gap-1">
         {ws.icon}

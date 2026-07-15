@@ -66,17 +66,11 @@ export function TerminalReadiness() {
       </div>
 
       {/* Status Details Row */}
-      <div className="flex items-center gap-3 text-[9px]">
-        {mode === 'paper' && (
-          <span className="text-yellow-400/80">Orders are simulated — not sent to broker</span>
-        )}
-        {mode === 'live' && (
-          <span className="text-emerald-400/80">Live execution — real orders to Angel One</span>
-        )}
-        {isLocked && (
+      {isLocked && (
+        <div className="flex items-center gap-3 text-[9px]">
           <span className="text-red/80 font-semibold">⚠ Account {accountStatus} — trading disabled</span>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
