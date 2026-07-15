@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { getTerminalStatus, type TerminalStatus } from '@/services/api';
 import { useTradingStore } from '@/store/tradingStore';
 import { cn } from '@/utils/helpers';
-import { Shield, Wifi, WifiOff, FileText, Zap, AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
+import { Shield, Wifi, WifiOff, Zap, AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
 
 /**
  * Terminal Readiness Strip
@@ -23,7 +23,6 @@ export function TerminalReadiness() {
     try { setStatus(await getTerminalStatus()); } catch {}
   }
 
-  const mode = status?.executionMode?.mode || 'paper';
   const brokerOk = status?.broker?.connected ?? false;
   const feedOk = status?.feed?.isLive ?? false;
   const accountStatus = account?.status || 'active';
@@ -44,10 +43,6 @@ export function TerminalReadiness() {
           <div className={cn('flex items-center gap-1 px-2 py-0.5 rounded border text-[9px] font-black', readinessBg)}>
             {isReady ? <CheckCircle size={9} className={readinessColor} /> : <AlertTriangle size={9} className={readinessColor} />}
             <span className={readinessColor}>{readinessLabel}</span>
-          </div>
-          <div className={cn('flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-bold', mode === 'paper' ? 'border-yellow-800/30 bg-yellow-900/10 text-yellow-400' : 'border-emerald-800/30 bg-emerald-900/10 text-emerald-400')}>
-            <FileText size={8} />
-            {mode.toUpperCase()}
           </div>
         </div>
         <div className="flex items-center gap-1.5">
