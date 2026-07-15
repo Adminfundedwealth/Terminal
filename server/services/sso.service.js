@@ -50,12 +50,27 @@ const nonceStore = new NonceStore();
  * Returns terminal JWT if valid, error if not.
  */
 export async function validateSSOToken(ssoToken, { ipAddress, userAgent } = {}) {
-  // Step 1: Verify SSO token signature and expiry
+  // Step 1: Verify SSO token signature — try all known secrets so any matching key works
+  const secrets = [
+    process.env.SSO_SHARED_SECRET,
+    process.env.SSO_API_KEY,
+    process.env.SSO_SECRET,
+    process.env.JWT_SECRET,
+  ].filter(Boolean).map(s => s.trim()).filter(s => s.length > 0);
+
   let decoded;
-  try {
-    decoded = jwt.verify(ssoToken, SSO_SHARED_SECRET, { maxAge: '120s' });
-  } catch (err) {
-    if (err.name === 'TokenExpiredError') {
+  let lastErr;
+  for (const secret of secrets) {
+    try {
+      decoded = jwt.verify(ssoToken, secret, { maxAge: '120s' });
+      break; // success
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+
+  if (!decoded) {
+    if (lastErr && lastErr.name === 'TokenExpiredError') {
       return { success: false, error: 'SSO token expired. Please try again from Dashboard.' };
     }
     return { success: false, error: 'Invalid SSO token signature.' };
