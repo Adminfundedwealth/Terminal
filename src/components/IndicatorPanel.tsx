@@ -48,6 +48,10 @@ export function IndicatorPanel({ indicators, onToggle, onUpdatePeriod }: Indicat
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
 
+  const _onToggle = (id: string) => {
+    onToggle(id);
+  };
+
   const activeCount = indicators.filter(i => i.enabled).length;
 
   return (
@@ -81,7 +85,7 @@ export function IndicatorPanel({ indicators, onToggle, onUpdatePeriod }: Indicat
               <IndicatorRow
                 key={ind.id}
                 indicator={ind}
-                onToggle={onToggle}
+                onToggle={_onToggle}
                 editingId={editingId}
                 setEditingId={setEditingId}
                 editValue={editValue}
@@ -100,7 +104,7 @@ export function IndicatorPanel({ indicators, onToggle, onUpdatePeriod }: Indicat
               <IndicatorRow
                 key={ind.id}
                 indicator={ind}
-                onToggle={onToggle}
+                onToggle={_onToggle}
                 editingId={editingId}
                 setEditingId={setEditingId}
                 editValue={editValue}

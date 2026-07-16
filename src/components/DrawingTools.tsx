@@ -7,10 +7,10 @@
  */
 
 import { useState } from 'react';
-import { PenTool, Minus, GitBranch, Square, Type, Trash2, X } from 'lucide-react';
+import { PenTool, Minus, GitBranch, Square, Type, Trash2, X, TrendingUp, AlignCenter } from 'lucide-react';
 import { cn } from '@/utils/helpers';
 
-export type DrawingMode = 'none' | 'trendline' | 'hline' | 'fibonacci' | 'rectangle' | 'text';
+export type DrawingMode = 'none' | 'trendline' | 'hline' | 'vline' | 'fibonacci' | 'rectangle' | 'text';
 
 interface DrawingToolsProps {
   activeMode: DrawingMode;
@@ -20,11 +20,12 @@ interface DrawingToolsProps {
 }
 
 const TOOLS: { mode: DrawingMode; icon: React.ReactNode; label: string; shortcut: string }[] = [
-  { mode: 'trendline', icon: <PenTool size={11} />, label: 'Trendline', shortcut: 'Click 2 points' },
-  { mode: 'hline', icon: <Minus size={11} />, label: 'Horizontal Line', shortcut: 'Click price level' },
-  { mode: 'fibonacci', icon: <GitBranch size={11} />, label: 'Fibonacci Retracement', shortcut: 'Click high/low' },
-  { mode: 'rectangle', icon: <Square size={11} />, label: 'Price Zone', shortcut: 'Drag to draw' },
-  { mode: 'text', icon: <Type size={11} />, label: 'Text Note', shortcut: 'Click to place' },
+  { mode: 'trendline', icon: <TrendingUp size={11} />, label: 'Trendline', shortcut: 'T — click 2 points' },
+  { mode: 'hline', icon: <Minus size={11} />, label: 'Horizontal Line', shortcut: 'H — click price level' },
+  { mode: 'vline', icon: <AlignCenter size={11} />, label: 'Vertical Line', shortcut: 'V — click time' },
+  { mode: 'fibonacci', icon: <GitBranch size={11} />, label: 'Fibonacci Retracement', shortcut: 'F — click high/low' },
+  { mode: 'rectangle', icon: <Square size={11} />, label: 'Price Zone', shortcut: 'R — click 2 points' },
+  { mode: 'text', icon: <Type size={11} />, label: 'Text Note', shortcut: 'N — click to place' },
 ];
 
 export function DrawingTools({ activeMode, onModeChange, onClearAll, drawingCount }: DrawingToolsProps) {

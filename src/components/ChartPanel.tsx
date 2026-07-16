@@ -5,9 +5,10 @@ import { useMarketStore } from '@/store/marketStore';
 import { getHistoricalData } from '@/services/api';
 import { cn, timeframeToLabel, formatPrice } from '@/utils/helpers';
 import type { ChartType, Timeframe, OHLC } from '@/types';
-import { Maximize2, Camera, Crosshair, Layers } from 'lucide-react';
+import { Maximize2 } from 'lucide-react';
 import { IndicatorPanel, DEFAULT_INDICATORS, type IndicatorConfig, type IndicatorType } from './IndicatorPanel';
 import { DrawingTools, type DrawingMode } from './DrawingTools';
+import { ChartDrawingToolbar } from './ChartDrawingToolbar';
 import { calculateSMA, calculateEMA, calculateRSI, calculateMACD, calculateBollinger, calculateVWAP, extractVolume } from '@/utils/indicators';
 
 const TIMEFRAMES: Timeframe[] = ['1', '3', '5', '15', '30', '60', '240', 'D', 'W'];
@@ -50,6 +51,23 @@ export function ChartPanel() {
   const drawClicksRef = useRef<{ time: number; price: number }[]>([]);
   const priceLineSeriesRef = useRef<any[]>([]);
 
+  // Refs that mirror state so chart click handler always reads current values (no stale closure)
+  const drawingModeRef = useRef<DrawingMode>('none');
+  const drawingsRef = useRef<any[]>([]);
+  const activeSymbolRef = useRef(activeSymbol);
+  const trendlineSeriesRef = useRef<Map<string, any>>(new Map());
+
+  // Keep refs in sync with state/props
+  useEffect(() => { drawingModeRef.current = drawingMode; }, [drawingMode]);
+  useEffect(() => { drawingsRef.current = drawings; }, [drawings]);
+  useEffect(() => { activeSymbolRef.current = activeSymbol; }, [activeSymbol]);
+
+  const setDrawingModeSync = (mode: DrawingMode) => {
+    drawingModeRef.current = mode;
+    drawClicksRef.current = [];
+    setDrawingMode(mode);
+  };
+
   const quote = useMarketStore((s) => activeSymbol ? s.quotes[activeSymbol.token] : undefined);
 
   // Load drawings for active symbol
@@ -77,23 +95,49 @@ export function ChartPanel() {
     });
     ro.observe(chartContainerRef.current);
 
-    // Drawing click handler
+    // Drawing click handler — uses refs so it always reads current mode/drawings
     chart.subscribeClick((param) => {
-      if (drawingMode === 'none' || !param.point || !param.time) return;
+      if (drawingModeRef.current === 'none' || !param.point || !param.time) return;
       const price = seriesRef.current ? (seriesRef.current as any).coordinateToPrice(param.point.y) : 0;
-      handleDrawingClick({ time: param.time as number, price });
+      if (price == null || price === 0) return;
+      handleDrawingClickRef.current({ time: param.time as number, price });
     });
 
-    return () => { ro.disconnect(); chart.remove(); chartRef.current = null; seriesRef.current = null; };
+    // Keyboard shortcuts
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      switch (e.key.toLowerCase()) {
+        case 'escape': setDrawingModeSync('none'); break;
+        case 't': setDrawingModeSync('trendline'); break;
+        case 'h': setDrawingModeSync('hline'); break;
+        case 'v': setDrawingModeSync('vline'); break;
+        case 'f': setDrawingModeSync('fibonacci'); break;
+        case 'r': setDrawingModeSync('rectangle'); break;
+        case 'n': setDrawingModeSync('text'); break;
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+
+    return () => {
+      ro.disconnect();
+      chart.remove();
+      chartRef.current = null;
+      seriesRef.current = null;
+      window.removeEventListener('keydown', handleKey);
+    };
   }, []);
 
-  // Handle drawing tool clicks
+  // Stable ref so the chart click handler (registered once at mount) always calls latest version
+  const handleDrawingClickRef = useRef<(point: { time: number; price: number }) => void>(() => {});
+
+  // Handle drawing tool clicks — reads from refs to avoid stale closures
   const handleDrawingClick = useCallback((point: { time: number; price: number }) => {
-    if (!chartRef.current || !seriesRef.current || !activeSymbol) return;
+    const mode = drawingModeRef.current;
+    const sym = activeSymbolRef.current;
+    if (!chartRef.current || !seriesRef.current || !sym) return;
     const clicks = drawClicksRef.current;
 
-    if (drawingMode === 'hline') {
-      // Single click — horizontal line
+    if (mode === 'hline') {
       const priceLine = (seriesRef.current as any).createPriceLine({
         price: point.price,
         color: '#f59e0b',
@@ -104,56 +148,112 @@ export function ChartPanel() {
       });
       priceLineSeriesRef.current.push(priceLine);
       const newDrawing = { type: 'hline', price: point.price, id: Date.now() };
-      const updated = [...drawings, newDrawing];
+      const updated = [...drawingsRef.current, newDrawing];
+      drawingsRef.current = updated;
       setDrawings(updated);
-      saveDrawings(activeSymbol.token, updated);
-      setDrawingMode('none');
-    } else if (drawingMode === 'text') {
+      saveDrawings(sym.token, updated);
+      setDrawingModeSync('none');
+
+    } else if (mode === 'vline') {
+      const newDrawing = { type: 'vline', time: point.time, id: Date.now() };
+      const updated = [...drawingsRef.current, newDrawing];
+      drawingsRef.current = updated;
+      setDrawings(updated);
+      saveDrawings(sym.token, updated);
+      applyVlineDrawings(updated);
+      setDrawingModeSync('none');
+
+    } else if (mode === 'text') {
       const text = prompt('Enter text annotation:');
       if (text) {
         const marker = { time: point.time, position: 'aboveBar' as const, color: '#f59e0b', shape: 'circle' as const, text };
         const newDrawing = { type: 'text', marker, id: Date.now() };
-        const updated = [...drawings, newDrawing];
+        const updated = [...drawingsRef.current, newDrawing];
+        drawingsRef.current = updated;
         setDrawings(updated);
-        saveDrawings(activeSymbol.token, updated);
+        saveDrawings(sym.token, updated);
         applyTextMarkers(updated);
       }
-      setDrawingMode('none');
-    } else if (drawingMode === 'trendline' || drawingMode === 'fibonacci' || drawingMode === 'rectangle') {
+      setDrawingModeSync('none');
+
+    } else if (mode === 'trendline' || mode === 'fibonacci' || mode === 'rectangle') {
       clicks.push(point);
       if (clicks.length === 2) {
-        const newDrawing = { type: drawingMode, points: [...clicks], id: Date.now() };
-        const updated = [...drawings, newDrawing];
+        const newDrawing = { type: mode, points: [...clicks], id: Date.now() };
+        const updated = [...drawingsRef.current, newDrawing];
+        drawingsRef.current = updated;
         setDrawings(updated);
-        saveDrawings(activeSymbol.token, updated);
+        saveDrawings(sym.token, updated);
         applyOverlayDrawings(updated);
         drawClicksRef.current = [];
-        setDrawingMode('none');
+        setDrawingModeSync('none');
       }
     }
-  }, [drawingMode, drawings, activeSymbol]);
+  }, []);
+
+  // Keep the ref updated with the latest callback
+  useEffect(() => { handleDrawingClickRef.current = handleDrawingClick; }, [handleDrawingClick]);
 
   function applyTextMarkers(drawingsList: any[]) {
     if (!seriesRef.current) return;
     const markers = drawingsList.filter(d => d.type === 'text').map(d => d.marker);
-    (seriesRef.current as any).setMarkers(markers);
+    (seriesRef.current as any).setMarkers(markers.sort((a: any, b: any) => a.time - b.time));
+  }
+
+  function applyVlineDrawings(drawingsList: any[]) {
+    if (!chartRef.current || !seriesRef.current) return;
+    // Vertical lines are shown as markers with a vertical-bar shape on the candle
+    const existing = drawingsList.filter(d => d.type === 'text').map(d => d.marker);
+    const vlineMarkers = drawingsList
+      .filter(d => d.type === 'vline')
+      .map(d => ({ time: d.time, position: 'belowBar' as const, color: '#06b6d4', shape: 'arrowUp' as const, text: '|' }));
+    const allMarkers = [...existing, ...vlineMarkers].sort((a, b) => a.time - b.time);
+    (seriesRef.current as any).setMarkers(allMarkers);
   }
 
   function applyOverlayDrawings(drawingsList: any[]) {
-    // Trendlines and Fibonacci drawn as price lines (simplified for lightweight-charts)
-    if (!seriesRef.current) return;
-    // Remove old price lines from drawings
+    if (!chartRef.current || !seriesRef.current) return;
+
+    // Remove old price lines
     priceLineSeriesRef.current.forEach(pl => {
       try { (seriesRef.current as any).removePriceLine(pl); } catch {}
     });
     priceLineSeriesRef.current = [];
-    // Re-apply hlines
+
+    // Remove old trendline series
+    trendlineSeriesRef.current.forEach(s => {
+      try { chartRef.current!.removeSeries(s); } catch {}
+    });
+    trendlineSeriesRef.current.clear();
+
+    // Horizontal lines
     drawingsList.filter(d => d.type === 'hline').forEach(d => {
       const pl = (seriesRef.current as any).createPriceLine({
         price: d.price, color: '#f59e0b', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: `H ${d.price.toFixed(2)}`,
       });
       priceLineSeriesRef.current.push(pl);
     });
+
+    // True diagonal trendlines via LineSeries with 2 points
+    drawingsList.filter(d => d.type === 'trendline').forEach(d => {
+      if (!chartRef.current) return;
+      const [p1, p2] = d.points;
+      const sorted = [p1, p2].sort((a: any, b: any) => a.time - b.time);
+      const series = chartRef.current.addLineSeries({
+        color: '#06b6d4',
+        lineWidth: 2 as any,
+        lineStyle: 0,
+        lastValueVisible: false,
+        priceLineVisible: false,
+        crosshairMarkerVisible: false,
+      });
+      series.setData([
+        { time: sorted[0].time as any, value: sorted[0].price },
+        { time: sorted[1].time as any, value: sorted[1].price },
+      ]);
+      trendlineSeriesRef.current.set(String(d.id), series);
+    });
+
     // Fibonacci levels
     drawingsList.filter(d => d.type === 'fibonacci').forEach(d => {
       const [p1, p2] = d.points;
@@ -170,17 +270,8 @@ export function ChartPanel() {
         priceLineSeriesRef.current.push(pl);
       });
     });
-    // Trendlines as start/end price lines (simplified)
-    drawingsList.filter(d => d.type === 'trendline').forEach(d => {
-      const [p1, p2] = d.points;
-      [p1, p2].forEach(p => {
-        const pl = (seriesRef.current as any).createPriceLine({
-          price: p.price, color: '#06b6d4', lineWidth: 1, lineStyle: 1, axisLabelVisible: false, title: '',
-        });
-        priceLineSeriesRef.current.push(pl);
-      });
-    });
-    // Rectangle as two horizontal lines (top/bottom)
+
+    // Rectangle as top + bottom horizontal lines
     drawingsList.filter(d => d.type === 'rectangle').forEach(d => {
       const [p1, p2] = d.points;
       [p1.price, p2.price].forEach(price => {
@@ -190,6 +281,21 @@ export function ChartPanel() {
         priceLineSeriesRef.current.push(pl);
       });
     });
+
+    // Re-apply markers (text + vlines)
+    applyAllMarkers(drawingsList);
+  }
+
+  function applyAllMarkers(drawingsList: any[]) {
+    if (!seriesRef.current) return;
+    const textMarkers = drawingsList
+      .filter(d => d.type === 'text')
+      .map(d => d.marker);
+    const vlineMarkers = drawingsList
+      .filter(d => d.type === 'vline')
+      .map(d => ({ time: d.time, position: 'belowBar' as const, color: '#06b6d4', shape: 'arrowUp' as const, text: '|' }));
+    const all = [...textMarkers, ...vlineMarkers].sort((a: any, b: any) => a.time - b.time);
+    (seriesRef.current as any).setMarkers(all);
   }
 
   function clearAllDrawings() {
@@ -198,9 +304,23 @@ export function ChartPanel() {
       try { (seriesRef.current as any).removePriceLine(pl); } catch {}
     });
     priceLineSeriesRef.current = [];
+    trendlineSeriesRef.current.forEach(s => {
+      try { chartRef.current!.removeSeries(s); } catch {}
+    });
+    trendlineSeriesRef.current.clear();
     if (seriesRef.current) (seriesRef.current as any).setMarkers([]);
+    drawingsRef.current = [];
     setDrawings([]);
     saveDrawings(activeSymbol.token, []);
+  }
+
+  function clearLastDrawing() {
+    if (!activeSymbol || drawingsRef.current.length === 0) return;
+    const updated = drawingsRef.current.slice(0, -1);
+    drawingsRef.current = updated;
+    setDrawings(updated);
+    saveDrawings(activeSymbol.token, updated);
+    applyOverlayDrawings(updated);
   }
 
   // Load chart data when symbol/timeframe/chartType changes
@@ -224,8 +344,7 @@ export function ChartPanel() {
         rawDataRef.current = data;
         updateChartSeries(data);
         applyIndicators();
-        applyOverlayDrawings(drawings);
-        applyTextMarkers(drawings);
+        applyOverlayDrawings(drawingsRef.current);
       }
     } catch {} finally { setIsLoading(false); }
   };
@@ -495,8 +614,8 @@ export function ChartPanel() {
         <div className="w-px h-4 bg-fw-border/40 mx-1" />
         {/* Indicators Dropdown */}
         <IndicatorPanel indicators={indicators} onToggle={handleToggleIndicator} onUpdatePeriod={handleUpdatePeriod} />
-        {/* Drawing Tools Dropdown */}
-        <DrawingTools activeMode={drawingMode} onModeChange={setDrawingMode} onClearAll={clearAllDrawings} drawingCount={drawings.length} />
+        {/* Drawing Tools Dropdown (also accessible from left sidebar) */}
+        <DrawingTools activeMode={drawingMode} onModeChange={setDrawingModeSync} onClearAll={clearAllDrawings} drawingCount={drawings.length} />
         <div className="flex-1" />
         <button onClick={() => setIsFullscreen(!isFullscreen)} className="p-1 rounded text-fw-text-muted hover:text-fw-text hover:bg-fw-hover transition-colors" title="Fullscreen">
           <Maximize2 size={12} />
@@ -504,31 +623,46 @@ export function ChartPanel() {
       </div>
 
       {/* Chart Area */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="flex-1 relative" ref={chartContainerRef}>
-          {isLoading && (
-            <div className="absolute inset-0 flex items-center justify-center bg-[#0d0f15]/80 z-10">
-              <div className="w-4 h-4 border-2 border-fw-accent border-t-transparent rounded-full animate-spin" />
-            </div>
-          )}
-          {!activeSymbol && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="text-center">
-                <p className="text-[12px] text-fw-text-secondary">Select a symbol</p>
-                <p className="text-[10px] text-fw-text-muted mt-1">Ctrl+K to search</p>
+      <div className="flex-1 flex overflow-hidden">
+        {/* Left Drawing Toolbar — TradingView style */}
+        <ChartDrawingToolbar
+          activeMode={drawingMode}
+          onModeChange={setDrawingModeSync}
+          onClearLast={clearLastDrawing}
+          onClearAll={clearAllDrawings}
+          drawingCount={drawings.length}
+        />
+
+        {/* Chart + sub-panes */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex-1 relative" ref={chartContainerRef}>
+            {isLoading && (
+              <div className="absolute inset-0 flex items-center justify-center bg-[#0d0f15]/80 z-10">
+                <div className="w-4 h-4 border-2 border-fw-accent border-t-transparent rounded-full animate-spin" />
               </div>
-            </div>
-          )}
-          {drawingMode !== 'none' && (
-            <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 px-3 py-1 rounded-full bg-fw-accent/90 text-white text-[10px] font-medium">
-              {drawingMode === 'hline' ? 'Click to set price level' : drawingMode === 'text' ? 'Click to place text' : `Click point ${drawClicksRef.current.length + 1} of 2`}
-            </div>
-          )}
+            )}
+            {!activeSymbol && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="text-center">
+                  <p className="text-[12px] text-fw-text-secondary">Select a symbol</p>
+                  <p className="text-[10px] text-fw-text-muted mt-1">Ctrl+K to search</p>
+                </div>
+              </div>
+            )}
+            {drawingMode !== 'none' && (
+              <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 px-3 py-1 rounded-full bg-fw-accent/90 text-white text-[10px] font-medium pointer-events-none">
+                {drawingMode === 'hline' && 'Click to place horizontal line'}
+                {drawingMode === 'vline' && 'Click to place vertical line'}
+                {drawingMode === 'text' && 'Click to place text note'}
+                {(drawingMode === 'trendline' || drawingMode === 'fibonacci' || drawingMode === 'rectangle') && `Click point ${drawClicksRef.current.length + 1} of 2`}
+              </div>
+            )}
+          </div>
+          {/* Sub-chart panes */}
+          {hasVolume && <div ref={volumeContainerRef} className="h-[60px] min-h-[60px] border-t border-fw-border/30" />}
+          {hasRSI && <div ref={rsiContainerRef} className="h-[80px] min-h-[80px] border-t border-fw-border/30" />}
+          {hasMACD && <div ref={macdContainerRef} className="h-[80px] min-h-[80px] border-t border-fw-border/30" />}
         </div>
-        {/* Sub-chart panes */}
-        {hasVolume && <div ref={volumeContainerRef} className="h-[60px] min-h-[60px] border-t border-fw-border/30" />}
-        {hasRSI && <div ref={rsiContainerRef} className="h-[80px] min-h-[80px] border-t border-fw-border/30" />}
-        {hasMACD && <div ref={macdContainerRef} className="h-[80px] min-h-[80px] border-t border-fw-border/30" />}
       </div>
     </div>
   );
