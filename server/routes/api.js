@@ -485,12 +485,20 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
 
     // Use CandleService for historical data from Angel One API
     if (candleService) {
-      const candles = await candleService.getHistoricalCandles(
-        token, tf,
-        from ? parseInt(from) : undefined,
-        to ? parseInt(to) : undefined
-      );
-      if (candles.length > 0) return res.json(candles);
+      try {
+        const candles = await candleService.getHistoricalCandles(
+          token, tf,
+          from ? parseInt(from) : undefined,
+          to ? parseInt(to) : undefined
+        );
+        if (candles.length > 0) return res.json(candles);
+
+        // If no candles returned, try to trigger a fresh Angel One login
+        // (handles case where server restarted but Angel Feed hasn't reconnected yet)
+        console.warn(`[API] /market/history returned 0 candles for ${token}/${tf} — candleService may lack auth token`);
+      } catch (err) {
+        console.error('[API] /market/history error:', err.message);
+      }
     }
 
     // Fallback: return empty

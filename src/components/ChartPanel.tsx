@@ -44,6 +44,7 @@ export function ChartPanel() {
   const liveBarRef = useRef<{ time: number; open: number; high: number; low: number; close: number } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [noData, setNoData] = useState(false);
   const [indicators, setIndicators] = useState<IndicatorConfig[]>(DEFAULT_INDICATORS);
   const [drawingMode, setDrawingMode] = useState<DrawingMode>('none');
   const [drawings, setDrawings] = useState<any[]>([]);
@@ -218,6 +219,7 @@ export function ChartPanel() {
   const loadChartData = async () => {
     if (!chartRef.current || !activeSymbol) return;
     setIsLoading(true);
+    setNoData(false);
     try {
       const data = await getHistoricalData(activeSymbol.token, timeframe);
       if (data && data.length > 0) {
@@ -226,8 +228,14 @@ export function ChartPanel() {
         applyIndicators();
         applyOverlayDrawings(drawings);
         applyTextMarkers(drawings);
+        setNoData(false);
+      } else {
+        setNoData(true);
       }
-    } catch {} finally { setIsLoading(false); }
+    } catch (err) {
+      console.error('[ChartPanel] loadChartData failed:', err);
+      setNoData(true);
+    } finally { setIsLoading(false); }
   };
 
   const updateChartSeries = (data: OHLC[]) => {
@@ -516,6 +524,21 @@ export function ChartPanel() {
               <div className="text-center">
                 <p className="text-[12px] text-fw-text-secondary">Select a symbol</p>
                 <p className="text-[10px] text-fw-text-muted mt-1">Ctrl+K to search</p>
+              </div>
+            </div>
+          )}
+          {activeSymbol && noData && !isLoading && (
+            <div className="absolute inset-0 flex items-center justify-center z-10">
+              <div className="text-center flex flex-col items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-fw-hover flex items-center justify-center text-fw-text-muted text-lg">📡</div>
+                <p className="text-[12px] text-fw-text-secondary font-medium">Chart data unavailable</p>
+                <p className="text-[10px] text-fw-text-muted">Market feed reconnecting…</p>
+                <button
+                  onClick={loadChartData}
+                  className="mt-1 px-3 py-1 rounded text-[10px] bg-fw-accent/20 hover:bg-fw-accent/40 text-fw-accent border border-fw-accent/30 transition-colors"
+                >
+                  Retry
+                </button>
               </div>
             </div>
           )}
