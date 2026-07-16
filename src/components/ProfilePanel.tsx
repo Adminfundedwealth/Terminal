@@ -112,8 +112,8 @@ export function ProfilePanel({ onClose }: ProfilePanelProps) {
             </InfoRow>
 
             <InfoRow label="Broker">
-              <span className="text-[12px] font-bold text-fw-text capitalize">
-                {account?.broker || account?.brokerProvider || 'Paper'}
+              <span className="text-[12px] font-bold text-fw-text">
+                FundedWealth
               </span>
             </InfoRow>
 
