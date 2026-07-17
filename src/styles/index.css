@@ -592,6 +592,8 @@ button, [role="button"] {
 .fw-tab-inactive {
   opacity: 0.55;
   color: var(--fw-text-muted) !important;
+  font-size: 14px !important;
+  padding: 6px 10px !important;
 }
 
 /* Bottom tab — active full contrast + weight */
@@ -599,6 +601,8 @@ button, [role="button"] {
   opacity: 1 !important;
   font-weight: 600 !important;
   color: var(--fw-accent) !important;
+  font-size: 14px !important;
+  padding: 6px 10px !important;
 }
 
 /* Ticker price — semi-bold monospace numbers */

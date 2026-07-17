@@ -7,7 +7,7 @@ import { RefreshCw, X, RotateCcw, Plus, Edit, TrendingUp, Shield, Target, StopCi
 import { useToast } from '@/components/ToastProvider';
 import { JournalPanel } from '@/components/JournalPanel';
 import { AlertsPanel } from '@/components/AlertsPanel';
-import { SymbolIcon } from '@/components/SymbolIcon';
+import SymbolLogo from '@/components/SymbolLogo';
 import { AnalyticsPanel } from '@/components/AnalyticsPanel';
 import { RiskPanel } from '@/components/RiskPanel';
 import { AIPanel } from '@/components/AIPanel';
@@ -113,22 +113,22 @@ export function BottomPanel() {
   return (
     <div className="h-full flex flex-col bg-gradient-to-b from-fw-surface to-fw-surface-2">
       {/* Tabs — Professional Console Strip */}
-      <div className="flex items-center border-b border-fw-border px-1 bg-fw-surface flex-shrink-0">
+      <div className="flex items-center border-b border-fw-border px-2 py-1 bg-fw-surface flex-shrink-0">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setBottomTab(tab.id)}
             className={cn(
-              'px-3 py-2 text-[11px] border-b-2 transition-all relative',
+              'px-4 py-3 text-[13px] border-b-2 transition-all relative min-h-[44px]',
               bottomTab === tab.id
-                ? 'fw-tab-active border-fw-accent bg-fw-accent/[0.04]'
-                : 'fw-tab-inactive border-transparent hover:opacity-80 hover:bg-fw-hover/20'
+                ? 'fw-tab-active border-fw-accent bg-fw-accent/[0.06]'
+                : 'fw-tab-inactive border-transparent hover:opacity-90 hover:bg-fw-hover/20'
             )}
           >
             {tab.label}
             {tab.count > 0 && (
               <span className={cn(
-                'ml-1.5 px-1.5 min-w-[16px] text-center text-xxs rounded-full font-mono inline-block',
+                'ml-2 px-2 min-w-[20px] text-center text-[12px] rounded-full font-mono inline-block',
                 bottomTab === tab.id ? 'bg-fw-accent/20 text-fw-accent' : 'bg-fw-border text-fw-text-secondary'
               )}>
                 {tab.count}
@@ -295,7 +295,7 @@ function PositionsTable({ positions, onExit, onPartialClose, onReverse }: {
               <td>
                 <div className="flex items-center gap-2">
                   <div className={cn('w-1.5 h-5 rounded-full', pos.qty > 0 ? 'bg-green' : 'bg-red')} />
-                  <SymbolIcon symbol={pos.symbol} size={18} />
+                  <SymbolLogo symbol={pos.symbol} size={18} />
                   <div>
                     <span className="font-semibold text-fw-text text-lg">{pos.symbol}</span>
                     <span className="ml-2 text-xs text-fw-text-secondary bg-fw-bg px-1 py-0.5 rounded">{pos.productType}</span>
@@ -475,7 +475,7 @@ function OrdersTable({ orders, onCancel }: { orders: Order[]; onCancel: (id: str
             <td className="text-fw-text-secondary font-mono text-base tabular-nums">{new Date(order.timestamp).toLocaleTimeString()}</td>
             <td>
               <div className="flex items-center gap-2">
-                <SymbolIcon symbol={order.symbol} size={18} />
+                <SymbolLogo symbol={order.symbol} size={18} />
                 <span className="font-semibold text-fw-text">{order.symbol}</span>
               </div>
             </td>
@@ -545,7 +545,7 @@ function TradesTable({ trades }: { trades: Trade[] }) {
             <td className="text-fw-text-secondary font-mono text-base tabular-nums">{new Date(trade.timestamp).toLocaleTimeString()}</td>
             <td>
               <div className="flex items-center gap-2">
-                <SymbolIcon symbol={trade.symbol} size={18} />
+                <SymbolLogo symbol={trade.symbol} size={18} />
                 <span className="font-semibold text-fw-text">{trade.symbol}</span>
               </div>
             </td>
