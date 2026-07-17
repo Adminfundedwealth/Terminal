@@ -7,10 +7,21 @@
  */
 
 import { useState } from 'react';
-import { PenTool, Minus, GitBranch, Square, Type, Trash2, X, TrendingUp, AlignCenter } from 'lucide-react';
+import { PenTool, Minus, GitBranch, Square, Type, Trash2, X, TrendingUp, AlignCenter, Brush, Smile, Ruler, ZoomIn } from 'lucide-react';
 import { cn } from '@/utils/helpers';
 
-export type DrawingMode = 'none' | 'trendline' | 'hline' | 'vline' | 'fibonacci' | 'rectangle' | 'text';
+export type DrawingMode =
+  | 'none'
+  | 'trendline'
+  | 'hline'
+  | 'vline'
+  | 'fibonacci'
+  | 'rectangle'
+  | 'text'
+  | 'brush'
+  | 'emoji'
+  | 'measure'
+  | 'zoom';
 
 interface DrawingToolsProps {
   activeMode: DrawingMode;
@@ -20,12 +31,16 @@ interface DrawingToolsProps {
 }
 
 const TOOLS: { mode: DrawingMode; icon: React.ReactNode; label: string; shortcut: string }[] = [
-  { mode: 'trendline', icon: <TrendingUp size={11} />, label: 'Trendline', shortcut: 'T — click 2 points' },
-  { mode: 'hline', icon: <Minus size={11} />, label: 'Horizontal Line', shortcut: 'H — click price level' },
-  { mode: 'vline', icon: <AlignCenter size={11} />, label: 'Vertical Line', shortcut: 'V — click time' },
-  { mode: 'fibonacci', icon: <GitBranch size={11} />, label: 'Fibonacci Retracement', shortcut: 'F — click high/low' },
-  { mode: 'rectangle', icon: <Square size={11} />, label: 'Price Zone', shortcut: 'R — click 2 points' },
-  { mode: 'text', icon: <Type size={11} />, label: 'Text Note', shortcut: 'N — click to place' },
+  { mode: 'trendline', icon: <TrendingUp size={11} />, label: 'Trendline',             shortcut: 'T — click 2 points' },
+  { mode: 'hline',     icon: <Minus       size={11} />, label: 'Horizontal Line',      shortcut: 'H — click price level' },
+  { mode: 'vline',     icon: <AlignCenter size={11} />, label: 'Vertical Line',        shortcut: 'V — click time' },
+  { mode: 'fibonacci', icon: <GitBranch   size={11} />, label: 'Fibonacci Retracement',shortcut: 'F — click high/low' },
+  { mode: 'rectangle', icon: <Square      size={11} />, label: 'Price Zone',           shortcut: 'R — click 2 points' },
+  { mode: 'text',      icon: <Type        size={11} />, label: 'Text Note',            shortcut: 'N — click to place' },
+  { mode: 'brush',     icon: <Brush       size={11} />, label: 'Brush (Freehand)',     shortcut: 'B — click & drag' },
+  { mode: 'emoji',     icon: <Smile       size={11} />, label: 'Emoji Marker',         shortcut: 'E — click to place' },
+  { mode: 'measure',   icon: <Ruler       size={11} />, label: 'Measure (Ruler)',      shortcut: 'M — click 2 points' },
+  { mode: 'zoom',      icon: <ZoomIn      size={11} />, label: 'Zoom Selection',       shortcut: 'Z — drag to zoom' },
 ];
 
 export function DrawingTools({ activeMode, onModeChange, onClearAll, drawingCount }: DrawingToolsProps) {
