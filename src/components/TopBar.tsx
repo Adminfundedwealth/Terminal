@@ -84,36 +84,41 @@ export function TopBar() {
 
         {/* Market + Feed Status */}
         <div className="flex items-center gap-1.5 mr-3 flex-shrink-0">
-          <div className={cn('flex items-center gap-1 px-2 py-1 rounded text-[11px] font-bold border', marketStatus === 'OPEN' ? 'border-emerald-700/40 bg-emerald-900/15 text-emerald-400' : 'border-red-800/30 bg-red-900/15 text-red-400')}>
-            <div className={cn('w-2 h-2 rounded-full', marketStatus === 'OPEN' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500')} />
+          <div className={cn('fw-badge', marketStatus === 'OPEN' ? 'fw-badge-green' : 'fw-badge-red')}>
+            <div className={cn('w-1.5 h-1.5 rounded-full', marketStatus === 'OPEN' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500')} />
             {marketStatus === 'OPEN' ? 'LIVE' : 'CLOSED'}
           </div>
         </div>
 
         {/* Challenge Phase Badge */}
         <div className="flex items-center gap-1.5 mr-3 pr-3 border-r border-fw-border/30 flex-shrink-0">
-          <div className="flex items-center gap-1 px-2 py-1 rounded bg-fw-accent/10 border border-fw-accent/25">
+          <div className="fw-badge fw-badge-blue">
             <Zap size={11} className="text-fw-accent" />
-            <span className="text-[11px] font-black text-fw-accent uppercase">{phase}</span>
+            {phase}
           </div>
-          <div className={cn('flex items-center gap-1 px-2 py-1 rounded text-[11px] font-bold border', riskBg)}>
-            <Shield size={10} className={riskColor} />
+          <div className={cn('fw-badge', riskLevel === 'HIGH' ? 'fw-badge-red' : riskLevel === 'CAUTION' ? 'fw-badge-orange' : 'fw-badge-green')}>
+            <Shield size={9} className={riskColor} />
             <span className={riskColor}>{riskLevel}</span>
           </div>
         </div>
 
         {/* Index Pulse Strip */}
-        <div className="flex items-center gap-3 mr-3 pr-3 border-r border-fw-border/30 flex-shrink-0 overflow-hidden">
+        <div className="flex items-center gap-5 mr-3 pr-3 border-r border-fw-border/30 flex-shrink-0 overflow-hidden">
           {PULSE_TOKENS.map(({ token, symbol }) => {
             const q = quotes[token];
+            const up = (q?.changePercent || 0) >= 0;
             return (
-              <div key={token} className="flex items-center gap-1">
-                <span className="text-[11px] font-bold text-fw-text-muted">{symbol}</span>
+              <div key={token} className="flex items-center gap-1.5">
+                <span className="text-[11px] font-semibold text-fw-text-muted tracking-wide">{symbol}</span>
                 {q ? (
-                  <span className={cn('text-[12px] font-mono font-bold tabular-nums', (q.changePercent || 0) >= 0 ? 'text-green' : 'text-red')}>
-                    {formatPrice(q.ltp)}
-                    <span className="text-[10px] ml-0.5">{(q.changePercent || 0) >= 0 ? '+' : ''}{(q.changePercent || 0).toFixed(1)}%</span>
-                  </span>
+                  <>
+                    <span className={cn('ticker-price text-[12px]', up ? 'text-green' : 'text-red')}>
+                      {formatPrice(q.ltp)}
+                    </span>
+                    <span className={cn('ticker-change', up ? 'ticker-change-up' : 'ticker-change-down')}>
+                      {up ? '+' : ''}{(q.changePercent || 0).toFixed(2)}%
+                    </span>
+                  </>
                 ) : (
                   <span className="text-[11px] text-fw-text-muted/50 font-mono">—</span>
                 )}
@@ -205,7 +210,7 @@ function MetricInline({ label, value, className }: { label: string; value: strin
 function PanelBtn({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
     <button onClick={onClick}
-      className={cn('px-2 py-1 text-[11px] font-bold rounded transition-all', active ? 'bg-fw-accent/15 text-fw-accent border border-fw-accent/30' : 'text-fw-text-muted hover:text-fw-text hover:bg-fw-hover border border-transparent')}>
+      className={cn('fw-badge transition-all cursor-pointer', active ? 'fw-badge-blue' : 'fw-badge-muted hover:opacity-80')}>
       {label}
     </button>
   );

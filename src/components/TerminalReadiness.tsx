@@ -33,14 +33,14 @@ export function TerminalReadiness() {
   const isReady = brokerOk && feedOk && tradingAllowed && !isLocked;
   const readinessLabel = isLocked ? 'BLOCKED' : !brokerOk ? 'NO FEED' : !tradingAllowed ? 'RESTRICTED' : isReady ? 'READY' : 'DEGRADED';
   const readinessColor = isLocked ? 'text-red' : !brokerOk ? 'text-orange-400' : isReady ? 'text-emerald-400' : 'text-yellow-400';
-  const readinessBg = isLocked ? 'bg-red-900/10 border-red-800/30' : !brokerOk ? 'bg-orange-900/10 border-orange-800/30' : isReady ? 'bg-emerald-900/10 border-emerald-800/30' : 'bg-yellow-900/10 border-yellow-800/30';
+  const readinessBadge = isLocked ? 'fw-badge-red' : !brokerOk ? 'fw-badge-orange' : isReady ? 'fw-badge-green' : 'fw-badge-yellow';
 
   return (
     <div className="px-3 py-2 border-b border-fw-border bg-gradient-to-r from-[#0a0c12] to-[#0c0e16]">
       {/* Readiness Row */}
       <div className="flex items-center justify-between mb-1.5">
         <div className="flex items-center gap-2">
-          <div className={cn('flex items-center gap-1 px-2 py-0.5 rounded border text-[9px] font-black', readinessBg)}>
+          <div className={cn('fw-badge', readinessBadge)}>
             {isReady ? <CheckCircle size={9} className={readinessColor} /> : <AlertTriangle size={9} className={readinessColor} />}
             <span className={readinessColor}>{readinessLabel}</span>
           </div>

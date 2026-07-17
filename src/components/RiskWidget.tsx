@@ -53,14 +53,14 @@ export function RiskWidget() {
       {/* Challenge Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-fw-border/30">
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-fw-accent/10 border border-fw-accent/20">
+          <div className="fw-badge fw-badge-blue">
             <Zap size={9} className="text-fw-accent" />
-            <span className="text-[9px] font-black text-fw-accent">{phase}</span>
+            {phase}
           </div>
           {isLocked && (
-            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-900/20 border border-red-800/30">
+            <div className="fw-badge fw-badge-red">
               <Lock size={8} className="text-red-400" />
-              <span className="text-[9px] font-bold text-red-400">LOCKED</span>
+              LOCKED
             </div>
           )}
         </div>
@@ -153,17 +153,24 @@ function RiskRow({ icon, label, pct, remaining, limit, color, isTarget }: {
 }
 
 function RiskBadge({ level }: { level: string }) {
-  const config: Record<string, { bg: string; text: string; border: string }> = {
-    SAFE: { bg: 'bg-emerald-900/15', text: 'text-emerald-400', border: 'border-emerald-800/30' },
-    CAUTION: { bg: 'bg-yellow-900/15', text: 'text-yellow-400', border: 'border-yellow-800/30' },
-    HIGH: { bg: 'bg-orange-900/15', text: 'text-orange-400', border: 'border-orange-800/30' },
-    CRITICAL: { bg: 'bg-red-900/15', text: 'text-red-400', border: 'border-red-800/30' },
+  const variantMap: Record<string, string> = {
+    SAFE: 'fw-badge-green',
+    CAUTION: 'fw-badge-yellow',
+    HIGH: 'fw-badge-orange',
+    CRITICAL: 'fw-badge-red',
   };
-  const c = config[level] || config.SAFE;
+  const iconColorMap: Record<string, string> = {
+    SAFE: 'text-emerald-400',
+    CAUTION: 'text-yellow-400',
+    HIGH: 'text-orange-400',
+    CRITICAL: 'text-red-400',
+  };
+  const variant = variantMap[level] || 'fw-badge-green';
+  const iconColor = iconColorMap[level] || 'text-emerald-400';
   return (
-    <div className={cn('flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-bold', c.bg, c.border)}>
-      <Shield size={8} className={c.text} />
-      <span className={c.text}>{level}</span>
+    <div className={cn('fw-badge', variant)}>
+      <Shield size={8} className={iconColor} />
+      {level}
     </div>
   );
 }

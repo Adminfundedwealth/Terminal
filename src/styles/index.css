@@ -101,7 +101,7 @@ body,
 
 /* Monospace for all financial data */
 .font-mono {
-  font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', ui-monospace, SFMono-Regular, monospace;
+  font-family: 'Roboto Mono', 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', ui-monospace, SFMono-Regular, monospace;
 }
 
 /* Tabular nums for all monospace data */
@@ -558,3 +558,67 @@ button, [role="button"] {
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--fw-border), transparent);
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   PHASE 1 POLISH — Typography, Badges, Tabs, Ticker
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Shared pill badge — used for FUNDED, SAFE, WL, ORD, OC, DOM, BTM, NO FEED, LIVE, CLOSED, Phase */
+.fw-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  border-width: 1px;
+  border-style: solid;
+  white-space: nowrap;
+}
+
+/* Badge color variants */
+.fw-badge-green  { background: rgba(34,197,94,0.1);   border-color: rgba(34,197,94,0.3);   color: #22c55e; }
+.fw-badge-red    { background: rgba(239,68,68,0.1);   border-color: rgba(239,68,68,0.3);   color: #ef4444; }
+.fw-badge-blue   { background: rgba(59,130,246,0.1);  border-color: rgba(59,130,246,0.25); color: #3b82f6; }
+.fw-badge-orange { background: rgba(249,115,22,0.1);  border-color: rgba(249,115,22,0.3);  color: #f97316; }
+.fw-badge-yellow { background: rgba(245,158,11,0.1);  border-color: rgba(245,158,11,0.3);  color: #f59e0b; }
+.fw-badge-cyan   { background: rgba(6,182,212,0.1);   border-color: rgba(6,182,212,0.3);   color: #06b6d4; }
+.fw-badge-muted  { background: rgba(38,42,54,0.6);    border-color: rgba(38,42,54,0.8);    color: #6b7280; }
+
+/* Bottom tab — inactive reduced contrast */
+.fw-tab-inactive {
+  opacity: 0.55;
+  color: var(--fw-text-muted) !important;
+}
+
+/* Bottom tab — active full contrast + weight */
+.fw-tab-active {
+  opacity: 1 !important;
+  font-weight: 600 !important;
+  color: var(--fw-accent) !important;
+}
+
+/* Ticker price — semi-bold monospace numbers */
+.ticker-price {
+  font-family: 'Roboto Mono', 'JetBrains Mono', ui-monospace, monospace;
+  font-weight: 600;
+  font-feature-settings: "tnum";
+  font-variant-numeric: tabular-nums;
+}
+
+/* Ticker % change pill */
+.ticker-change {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: 'Roboto Mono', ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.ticker-change-up   { background: rgba(34,197,94,0.12);  color: #22c55e; }
+.ticker-change-down { background: rgba(239,68,68,0.12);  color: #ef4444; }
