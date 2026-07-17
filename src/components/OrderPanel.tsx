@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useTradingStore } from '@/store/tradingStore';
 import { useAppStore } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
-import { placeOrder, exitPosition, getTerminalStatus } from '@/services/api';
+import { placeOrder, exitPosition } from '@/services/api';
 import { cn, formatPrice } from '@/utils/helpers';
 import { orderSuccessMessage, exitSuccessMessage } from '@/utils/orderMessages';
 import { ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
@@ -33,14 +33,6 @@ export function OrderPanel() {
   const [slPrice, setSlPrice] = useState<number>(0);
   const [tpPrice, setTpPrice] = useState<number>(0);
   const [confirmOrder, setConfirmOrder] = useState<{ side: OrderSide } | null>(null);
-  // Track whether the backend is running in paper execution mode
-  const [isPaperMode, setIsPaperMode] = useState(false);
-
-  useEffect(() => {
-    getTerminalStatus()
-      .then((s) => setIsPaperMode(s.executionMode?.isPaper ?? false))
-      .catch(() => {/* non-critical — defaults to false (live) */});
-  }, []);
 
   const symbol = orderForm.symbol || activeSymbol?.symbol || '';
   const token = orderForm.token || activeSymbol?.token || '';
@@ -80,7 +72,7 @@ export function OrderPanel() {
     setIsSubmitting(true);
     try {
       await placeOrder({ symbol, token, segment: activeSymbol?.segment || 'NSE', side, orderType: orderForm.orderType, productType: orderForm.productType, qty: orderForm.qty, price: orderForm.orderType === 'LIMIT' || orderForm.orderType === 'SL' ? orderForm.price : undefined, triggerPrice: orderForm.orderType === 'SL' || orderForm.orderType === 'SL-M' ? orderForm.triggerPrice : undefined, validity: orderForm.validity === 'GTD' ? 'GTC' : orderForm.validity, isAmo: orderForm.isAmo });
-      showToast(orderSuccessMessage({ side, qty: orderForm.qty, symbol, isPaperMode, account }));
+      showToast(orderSuccessMessage({ side, qty: orderForm.qty, symbol }));
     } catch (err: any) { showToast(err.message || 'Order failed — check risk rules'); }
     finally { setIsSubmitting(false); }
   };
@@ -367,7 +359,7 @@ export function OrderPanel() {
             setIsSubmitting(true);
             try {
               await exitPosition(pos.id);
-              showToast(exitSuccessMessage({ side: pos.qty > 0 ? 'LONG' : 'SHORT', qty: Math.abs(pos.qty), symbol, isPaperMode, account }));
+              showToast(exitSuccessMessage({ side: pos.qty > 0 ? 'LONG' : 'SHORT', qty: Math.abs(pos.qty), symbol }));
             } catch (err: any) { showToast(err.message || 'Exit failed'); }
             finally { setIsSubmitting(false); }
           }} className={cn('hover:text-red hover:border-red-800/40', !openPosition && 'opacity-40 cursor-not-allowed')} />
