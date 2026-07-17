@@ -138,7 +138,7 @@ export function IndicatorPanel({ indicators, onToggle, onUpdatePeriod }: Indicat
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          'flex items-center gap-1 px-1.5 py-0.5 text-[10px] rounded font-medium transition-colors',
+          'flex items-center gap-1 px-1.5 py-0.5 text-xs rounded font-medium transition-colors',
           activeCount > 0 ? 'bg-fw-accent/20 text-fw-accent' : 'text-fw-text-secondary hover:text-fw-text hover:bg-fw-hover'
         )}
       >
@@ -279,7 +279,7 @@ function IndicatorRow({
         ) : (
           <button
             onClick={() => { setEditingId(ind.id); setEditValue(String(ind.period)); }}
-            className="text-[9px] text-fw-text-muted hover:text-fw-text px-1"
+            className="text-xs text-fw-text-secondary hover:text-fw-text px-1"
             title="Edit period"
           >
             <Settings size={9} />

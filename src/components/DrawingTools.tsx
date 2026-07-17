@@ -51,7 +51,7 @@ export function DrawingTools({ activeMode, onModeChange, onClearAll, drawingCoun
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          'flex items-center gap-1 px-1.5 py-0.5 text-[10px] rounded font-medium transition-colors',
+          'flex items-center gap-1 px-1.5 py-0.5 text-xs rounded font-medium transition-colors',
           activeMode !== 'none' ? 'bg-fw-accent/20 text-fw-accent' : 'text-fw-text-secondary hover:text-fw-text hover:bg-fw-hover'
         )}
       >
@@ -62,9 +62,9 @@ export function DrawingTools({ activeMode, onModeChange, onClearAll, drawingCoun
       {isOpen && (
         <div className="absolute top-full left-0 mt-1 w-[200px] bg-fw-surface border border-fw-border rounded-lg shadow-xl z-[100] overflow-hidden">
           <div className="px-3 py-2 border-b border-fw-border/50 flex items-center justify-between">
-            <span className="text-[10px] font-bold text-fw-text-muted uppercase tracking-wider">Drawing Tools</span>
+            <span className="text-xs font-bold text-fw-text-secondary uppercase tracking-wider">Drawing Tools</span>
             <button onClick={() => setIsOpen(false)} className="p-0.5 rounded hover:bg-fw-hover">
-              <X size={10} className="text-fw-text-muted" />
+              <X size={10} className="text-fw-text-secondary" />
             </button>
           </div>
 
@@ -85,10 +85,10 @@ export function DrawingTools({ activeMode, onModeChange, onClearAll, drawingCoun
                   {tool.icon}
                 </div>
                 <div className="flex-1">
-                  <span className={cn('text-[11px] block', activeMode === tool.mode ? 'text-fw-accent font-medium' : 'text-fw-text')}>
+                  <span className={cn('text-sm block', activeMode === tool.mode ? 'text-fw-accent font-medium' : 'text-fw-text')}>
                     {tool.label}
                   </span>
-                  <span className="text-[9px] text-fw-text-muted">{tool.shortcut}</span>
+                  <span className="text-xs text-fw-text-secondary">{tool.shortcut}</span>
                 </div>
               </button>
             ))}
@@ -98,7 +98,7 @@ export function DrawingTools({ activeMode, onModeChange, onClearAll, drawingCoun
             <div className="border-t border-fw-border/50 p-2">
               <button
                 onClick={() => { onClearAll(); setIsOpen(false); }}
-                className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded text-[10px] font-medium text-red-400 hover:bg-red-500/10 transition-colors"
+                className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium text-red-400 hover:bg-red-500/10 transition-colors"
               >
                 <Trash2 size={10} />
                 Clear All Drawings ({drawingCount})

@@ -120,17 +120,17 @@ export function AnalyticsPanel() {
 
   return (
     <div className="h-full overflow-y-auto px-3 py-2">
-      <div className="text-[12px] font-bold text-fw-text mb-2">Performance Analytics</div>
+      <div className="text-base font-bold text-fw-text mb-2">Performance Analytics</div>
 
       {analytics.totalTrades === 0 ? (
-        <div className="text-[12px] text-fw-text-secondary text-center py-8">
+        <div className="text-base text-fw-text-secondary text-center py-8">
           No trade data yet. Analytics compute from positions, trade book, and journal entries.
         </div>
       ) : (
         <div className="space-y-3">
           {/* Period P&L Section */}
           <div>
-            <div className="text-[10px] text-fw-text-secondary uppercase font-semibold mb-1.5">P&L Summary</div>
+            <div className="text-xs text-fw-text-secondary uppercase font-semibold mb-1.5">P&L Summary</div>
             <div className="grid grid-cols-4 gap-2">
               <StatCard label="Daily P&L" value={formatINR(analytics.dailyPnl)} color={analytics.dailyPnl >= 0 ? 'green' : 'red'} />
               <StatCard label="Weekly P&L" value={formatINR(analytics.weeklyPnl)} color={analytics.weeklyPnl >= 0 ? 'green' : 'red'} />
@@ -141,7 +141,7 @@ export function AnalyticsPanel() {
 
           {/* Key Metrics */}
           <div>
-            <div className="text-[10px] text-fw-text-secondary uppercase font-semibold mb-1.5">Key Metrics</div>
+            <div className="text-xs text-fw-text-secondary uppercase font-semibold mb-1.5">Key Metrics</div>
             <div className="grid grid-cols-4 gap-2">
               <StatCard label="Win Rate" value={`${analytics.winRate.toFixed(1)}%`} color={analytics.winRate >= 50 ? 'green' : 'red'} />
               <StatCard label="Profit Factor" value={analytics.profitFactor === Infinity ? '∞' : analytics.profitFactor.toFixed(2)} color={analytics.profitFactor >= 1.5 ? 'green' : analytics.profitFactor >= 1 ? 'yellow' : 'red'} />
@@ -152,7 +152,7 @@ export function AnalyticsPanel() {
 
           {/* Trade Stats */}
           <div>
-            <div className="text-[10px] text-fw-text-secondary uppercase font-semibold mb-1.5">Trade Statistics</div>
+            <div className="text-xs text-fw-text-secondary uppercase font-semibold mb-1.5">Trade Statistics</div>
             <div className="grid grid-cols-4 gap-2">
               <StatCard label="Total Trades" value={analytics.totalTrades.toString()} />
               <StatCard label="Today's Trades" value={analytics.dailyTradeCount.toString()} />
@@ -178,8 +178,8 @@ function StatCard({ label, value, color }: { label: string; value: string; color
   const textColor = color === 'green' ? 'text-green' : color === 'red' ? 'text-red' : color === 'yellow' ? 'text-yellow-400' : 'text-fw-text';
   return (
     <div className="bg-fw-bg border border-fw-border rounded px-2 py-1.5">
-      <div className="text-[9px] text-fw-text-secondary uppercase">{label}</div>
-      <div className={cn('text-[14px] font-bold font-mono', textColor)}>{value}</div>
+      <div className="text-xs text-fw-text-secondary uppercase">{label}</div>
+      <div className={cn('text-md font-bold font-mono', textColor)}>{value}</div>
     </div>
   );
 }

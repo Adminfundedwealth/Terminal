@@ -38,22 +38,22 @@ export function FullDOMPanel() {
   const bidPct = totalBid + totalAsk > 0 ? (totalBid / (totalBid + totalAsk)) * 100 : 50;
 
   return (
-    <div className="h-full flex flex-col bg-[#0a0c12] select-none">
+    <div className="h-full flex flex-col bg-fw-surface select-none">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-fw-border bg-[#10121a] flex-shrink-0">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-fw-border bg-fw-surface flex-shrink-0">
         <div className="flex items-center gap-2">
-          <span className="text-[12px] font-bold text-fw-text">20-Level DOM</span>
-          {activeSymbol && <span className="text-[10px] text-fw-text-muted">{activeSymbol.symbol}</span>}
+          <span className="text-base font-bold text-fw-text">20-Level DOM</span>
+          {activeSymbol && <span className="text-xs text-fw-text-secondary">{activeSymbol.symbol}</span>}
         </div>
         {quote && (
-          <span className={cn('text-[14px] font-mono font-black', (quote.changePercent || 0) >= 0 ? 'text-green' : 'text-red')}>
+          <span className={cn('text-md font-mono font-black', (quote.changePercent || 0) >= 0 ? 'text-green' : 'text-red')}>
             {formatPrice(quote.ltp)}
           </span>
         )}
       </div>
 
       {/* Column Headers */}
-      <div className="grid grid-cols-[50px_1fr_80px_80px_1fr_50px] px-1 py-1 border-b border-fw-border/30 bg-[#0d0f15] flex-shrink-0 text-[9px] font-bold text-fw-text-muted uppercase">
+      <div className="grid grid-cols-[50px_1fr_80px_80px_1fr_50px] px-1 py-1 border-b border-fw-border/30 bg-fw-surface-2 flex-shrink-0 text-xs font-bold text-fw-text-secondary uppercase">
         <span className="text-center">#</span>
         <span className="text-right pr-1">Bid Qty</span>
         <span className="text-center text-green">Bid</span>
@@ -81,13 +81,13 @@ export function FullDOMPanel() {
               </div>
 
               {/* Bid # Orders */}
-              <div className="relative text-center text-[10px] font-mono text-fw-text-muted tabular-nums">
+              <div className="relative text-center text-xs font-mono text-fw-text-secondary tabular-nums">
                 {bid?.orders || ''}
               </div>
 
               {/* Bid Qty */}
               <div
-                className="relative text-right pr-2 text-[11px] font-mono tabular-nums text-green/80 font-semibold cursor-pointer hover:text-green"
+                className="relative text-right pr-2 text-sm font-mono tabular-nums text-green/80 font-semibold cursor-pointer hover:text-green"
                 onClick={() => bid && setOrderForm({ price: bid.price, side: 'BUY' })}
               >
                 {bid ? fmtQty(bid.qty) : ''}
@@ -95,7 +95,7 @@ export function FullDOMPanel() {
 
               {/* Bid Price */}
               <div
-                className={cn('relative text-center text-[11px] font-mono tabular-nums font-bold cursor-pointer hover:text-green', i === 0 ? 'text-green' : 'text-fw-text/80')}
+                className={cn('relative text-center text-sm font-mono tabular-nums font-bold cursor-pointer hover:text-green', i === 0 ? 'text-green' : 'text-fw-text/80')}
                 onClick={() => bid && setOrderForm({ price: bid.price, side: 'BUY' })}
               >
                 {bid ? formatPrice(bid.price) : ''}
@@ -103,7 +103,7 @@ export function FullDOMPanel() {
 
               {/* Ask Price */}
               <div
-                className={cn('relative text-center text-[11px] font-mono tabular-nums font-bold cursor-pointer hover:text-red', i === 0 ? 'text-red' : 'text-fw-text/80')}
+                className={cn('relative text-center text-sm font-mono tabular-nums font-bold cursor-pointer hover:text-red', i === 0 ? 'text-red' : 'text-fw-text/80')}
                 onClick={() => ask && setOrderForm({ price: ask.price, side: 'SELL' })}
               >
                 {ask ? formatPrice(ask.price) : ''}
@@ -111,14 +111,14 @@ export function FullDOMPanel() {
 
               {/* Ask Qty */}
               <div
-                className="relative text-left pl-2 text-[11px] font-mono tabular-nums text-red/80 font-semibold cursor-pointer hover:text-red"
+                className="relative text-left pl-2 text-sm font-mono tabular-nums text-red/80 font-semibold cursor-pointer hover:text-red"
                 onClick={() => ask && setOrderForm({ price: ask.price, side: 'SELL' })}
               >
                 {ask ? fmtQty(ask.qty) : ''}
               </div>
 
               {/* Ask # Orders */}
-              <div className="relative text-center text-[10px] font-mono text-fw-text-muted tabular-nums">
+              <div className="relative text-center text-xs font-mono text-fw-text-secondary tabular-nums">
                 {ask?.orders || ''}
               </div>
             </div>
@@ -127,17 +127,17 @@ export function FullDOMPanel() {
       </div>
 
       {/* Totals + Pressure */}
-      <div className="border-t border-fw-border bg-[#10121a] px-3 py-2 flex-shrink-0">
-        <div className="flex justify-between text-[11px] mb-1">
+      <div className="border-t border-fw-border bg-fw-surface px-3 py-2 flex-shrink-0">
+        <div className="flex justify-between text-sm mb-1">
           <span className="font-mono text-green font-bold tabular-nums">{fmtQty(totalBid)}</span>
-          <span className="text-[9px] text-fw-text-muted">{bidPct.toFixed(0)}% / {(100-bidPct).toFixed(0)}%</span>
+          <span className="text-xs text-fw-text-secondary">{bidPct.toFixed(0)}% / {(100-bidPct).toFixed(0)}%</span>
           <span className="font-mono text-red font-bold tabular-nums">{fmtQty(totalAsk)}</span>
         </div>
         <div className="h-[6px] rounded-full overflow-hidden bg-fw-border/30 flex">
           <div className="h-full rounded-l-full transition-all duration-500" style={{ width: `${bidPct}%`, background: 'linear-gradient(to right, #16a34a, #22c55e)' }} />
           <div className="h-full flex-1 rounded-r-full" style={{ background: 'linear-gradient(to right, #ef4444, #dc2626)' }} />
         </div>
-        <div className="text-[9px] text-fw-text-muted mt-1 text-center">
+        <div className="text-xs text-fw-text-secondary mt-1 text-center">
           {bids.length + asks.length > 10 ? `${bids.length} bid + ${asks.length} ask levels` : 'Awaiting full depth from broker feed'}
         </div>
       </div>

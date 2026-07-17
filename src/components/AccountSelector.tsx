@@ -211,7 +211,7 @@ export function AccountSelector() {
           'flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all select-none',
           isOpen
             ? 'bg-fw-accent/10 border-fw-accent/50 text-white'
-            : 'bg-[#0e1018] border-fw-border hover:border-fw-accent/40 hover:bg-fw-hover text-fw-text-secondary hover:text-white'
+            : 'bg-fw-bg border-fw-border hover:border-fw-accent/40 hover:bg-fw-hover text-fw-text-secondary hover:text-white'
         )}
         title="Switch Trading Account"
       >
@@ -250,17 +250,16 @@ export function AccountSelector() {
 
       {/* ── Dropdown ── */}
       {isOpen && (
-        <div className="absolute top-full right-0 mt-1.5 w-[340px] bg-[#0c0e14] border border-fw-border/70 rounded-xl shadow-2xl z-[500] overflow-hidden flex flex-col"
-          style={{ boxShadow: '0 8px 40px rgba(0,0,0,0.6)' }}>
+        <div className="absolute top-full right-0 mt-1.5 w-[340px] bg-fw-surface border border-fw-border/70 rounded-xl shadow-2xl z-[500] overflow-hidden flex flex-col" style={{ boxShadow: '0 8px 40px rgba(0,0,0,0.6)' }}>
 
           {/* Header */}
-          <div className="px-4 py-3 border-b border-white/8 bg-[#0e1018]">
+          <div className="px-4 py-3 border-b border-fw-border/50 bg-fw-bg">
             <p className="text-[10px] font-black text-fw-text-muted uppercase tracking-[0.18em] mb-2">
               Trading Accounts
             </p>
             {/* Search — only shown when there are multiple accounts */}
             {activeAccounts.length > 1 && (
-              <div className="flex items-center gap-2 bg-[#090b10] border border-white/10 rounded-lg px-3 py-2">
+              <div className="flex items-center gap-2 bg-fw-bg border border-fw-border/70 rounded-lg px-3 py-2">
                 <Search size={11} className="text-fw-text-muted flex-shrink-0" />
                 <input
                   ref={searchRef}
@@ -302,7 +301,7 @@ export function AccountSelector() {
           </div>
 
           {/* Footer */}
-          <div className="px-4 py-2 border-t border-white/5 bg-[#090b10] flex items-center justify-between">
+          <div className="px-4 py-2 border-t border-fw-border/50 bg-fw-bg flex items-center justify-between">
             <span className="text-[9px] text-fw-text-muted">
               {activeAccounts.length} active account{activeAccounts.length !== 1 ? 's' : ''}
             </span>

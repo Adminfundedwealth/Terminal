@@ -11,9 +11,9 @@
   --fw-surface-2: #1e2230;
   --fw-border: #262a36;
   --fw-border-light: #2f3444;
-  --fw-text: #e1e4eb;
-  --fw-text-secondary: #6b7280;
-  --fw-text-muted: #4b5060;
+  --fw-text: #F8FAFC;
+  --fw-text-secondary: #D1D5DB;
+  --fw-text-muted: #9CA3AF;
   --fw-accent: #3b82f6;
   --fw-accent-hover: #2563eb;
   --fw-green: #22c55e;
@@ -35,9 +35,9 @@
   --fw-surface-2: #252a37;
   --fw-border: #2a2e39;
   --fw-border-light: #363a45;
-  --fw-text: #d1d4dc;
-  --fw-text-secondary: #787b86;
-  --fw-text-muted: #5d606b;
+  --fw-text: #F8FAFC;
+  --fw-text-secondary: #D1D5DB;
+  --fw-text-muted: #9CA3AF;
   --fw-accent: #2962ff;
   --fw-accent-hover: #1e50e6;
   --fw-green: #26a69a;
@@ -60,9 +60,9 @@
   --fw-surface-2: #1a1c28;
   --fw-border: #222433;
   --fw-border-light: #2c2f40;
-  --fw-text: #dce0e8;
-  --fw-text-secondary: #6e7280;
-  --fw-text-muted: #4a4f5c;
+  --fw-text: #F8FAFC;
+  --fw-text-secondary: #D1D5DB;
+  --fw-text-muted: #9CA3AF;
   --fw-accent: #3b82f6;
   --fw-accent-hover: #2563eb;
   --fw-green: #10b981;
@@ -95,7 +95,7 @@ body,
   color: var(--fw-text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  font-size: 13px;
+  font-size: 16px;
   line-height: 1.4;
 }
 

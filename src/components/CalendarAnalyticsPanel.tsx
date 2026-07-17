@@ -74,28 +74,28 @@ export function CalendarAnalyticsPanel() {
   const maxDayPnl = Math.max(...Array.from(dayPnlMap.values()).map(v => Math.abs(v.pnl)), 1);
 
   return (
-    <div className="h-full flex flex-col bg-[#0c0e14]">
+    <div className="h-full flex flex-col bg-fw-surface">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-fw-border bg-[#10121a] flex-shrink-0">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-fw-border bg-fw-surface flex-shrink-0">
         <div className="flex items-center gap-2">
-          <button onClick={prevMonth} className="p-1 rounded hover:bg-fw-hover text-fw-text-muted"><ChevronLeft size={14} /></button>
-          <span className="text-[12px] font-bold text-fw-text w-36 text-center">{monthStr}</span>
-          <button onClick={nextMonth} className="p-1 rounded hover:bg-fw-hover text-fw-text-muted"><ChevronRight size={14} /></button>
+          <button onClick={prevMonth} className="p-1 rounded hover:bg-fw-hover text-fw-text-secondary"><ChevronLeft size={14} /></button>
+          <span className="text-base font-bold text-fw-text w-36 text-center">{monthStr}</span>
+          <button onClick={nextMonth} className="p-1 rounded hover:bg-fw-hover text-fw-text-secondary"><ChevronRight size={14} /></button>
         </div>
-        <div className="flex items-center gap-3 text-[10px]">
+        <div className="flex items-center gap-3 text-xs">
           <span className={cn('font-mono font-bold', monthStats.totalPnl >= 0 ? 'text-green' : 'text-red')}>
             {monthStats.totalPnl >= 0 ? '+' : ''}₹{monthStats.totalPnl.toLocaleString('en-IN')}
           </span>
           <span className="text-green">{monthStats.greenDays}G</span>
           <span className="text-red">{monthStats.redDays}R</span>
-          <span className="text-fw-text-muted">{monthStats.totalTrades} trades</span>
+          <span className="text-fw-text-secondary">{monthStats.totalTrades} trades</span>
         </div>
       </div>
 
       {/* Day headers */}
       <div className="grid grid-cols-7 px-3 py-1.5 border-b border-fw-border/30 flex-shrink-0">
         {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
-          <div key={d} className="text-center text-[9px] font-bold text-fw-text-muted uppercase">{d}</div>
+          <div key={d} className="text-center text-xs font-bold text-fw-text-secondary uppercase">{d}</div>
         ))}
       </div>
 
@@ -124,9 +124,9 @@ export function CalendarAnalyticsPanel() {
                   )}
                   style={{ backgroundColor: bgColor }}
                 >
-                  <span className={cn('text-[11px] font-bold', isToday ? 'text-fw-accent' : data ? 'text-fw-text' : 'text-fw-text-muted')}>{day}</span>
+                  <span className={cn('text-sm font-bold', isToday ? 'text-fw-accent' : data ? 'text-fw-text' : 'text-fw-text-secondary')}>{day}</span>
                   {data && (
-                    <span className={cn('text-[8px] font-mono font-bold', data.pnl >= 0 ? 'text-green' : 'text-red')}>
+                  <span className={cn('text-xxs font-mono font-bold', data.pnl >= 0 ? 'text-green' : 'text-red')}>
                       {data.pnl >= 0 ? '+' : ''}{data.pnl >= 1000 ? `${(data.pnl / 1000).toFixed(1)}K` : data.pnl.toFixed(0)}
                     </span>
                   )}

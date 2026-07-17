@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useMarketStore } from '@/store/marketStore';
 import { useAppStore } from '@/store/appStore';
+import { SymbolIcon } from '@/components/SymbolIcon';
 import { wsService } from '@/services/websocket';
 import { cn } from '@/utils/helpers';
 import { Wifi, WifiOff, Loader2 } from 'lucide-react';
@@ -79,8 +80,8 @@ export function StatusBar() {
       {/* Latency */}
       {wsState === 'connected' && (
         <div className="flex items-center gap-1">
-          <span className="text-fw-text-muted">Ping:</span>
-          <span className={cn('font-mono tabular-nums', latency === null ? 'text-fw-text-muted' : latency < 50 ? 'text-emerald-400' : latency < 150 ? 'text-yellow-400' : 'text-red-400')}>
+          <span className="text-fw-text-secondary">Ping:</span>
+          <span className={cn('font-mono tabular-nums', latency === null ? 'text-fw-text-secondary' : latency < 50 ? 'text-emerald-400' : latency < 150 ? 'text-yellow-400' : 'text-red-400')}>
             {latency !== null ? `${latency}ms` : '—'}
           </span>
         </div>
@@ -97,13 +98,18 @@ export function StatusBar() {
       <div className="flex-1" />
 
       {/* Workspace + Symbol */}
-      <span className="text-fw-text-muted">
+      <span className="text-fw-text-secondary">
         <span className="text-fw-text-secondary uppercase font-medium">{activeWorkspace}</span>
-        {activeSymbol && <span className="ml-2 text-fw-text-muted font-mono">{activeSymbol.symbol}</span>}
+        {activeSymbol && (
+          <div className="ml-2 flex items-center gap-1.5">
+            <SymbolIcon symbol={activeSymbol.symbol} size={14} />
+            <span className="text-fw-text-secondary font-mono">{activeSymbol.symbol}</span>
+          </div>
+        )}
       </span>
 
       {/* Version */}
-      <span className="text-fw-text-muted/60 font-mono">v1.0</span>
+      <span className="text-fw-text-secondary/60 font-mono">v1.0</span>
     </div>
   );
 }

@@ -33,15 +33,15 @@ export class ErrorBoundary extends Component<Props, State> {
             <div className="w-8 h-8 rounded-lg bg-red-900/20 border border-red-800/30 flex items-center justify-center">
               <AlertTriangle size={16} className="text-red-400" />
             </div>
-            <p className="text-[11px] font-medium text-fw-text-secondary">
+            <p className="text-sm font-medium text-fw-text-secondary">
               {this.props.fallbackTitle || 'Component Error'}
             </p>
-            <p className="text-[9px] text-fw-text-muted">
+            <p className="text-xs text-fw-text-secondary">
               {this.state.error?.message?.slice(0, 80) || 'Something went wrong'}
             </p>
             <button
               onClick={() => this.setState({ hasError: false, error: null })}
-              className="mt-1 flex items-center gap-1 px-2 py-1 text-[10px] font-medium text-fw-accent bg-fw-accent/10 border border-fw-accent/20 rounded hover:bg-fw-accent/20 transition-colors"
+              className="mt-1 flex items-center gap-1 px-2 py-1 text-xs font-medium text-fw-accent bg-fw-accent/10 border border-fw-accent/20 rounded hover:bg-fw-accent/20 transition-colors"
             >
               <RefreshCw size={10} /> Retry
             </button>

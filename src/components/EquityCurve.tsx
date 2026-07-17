@@ -46,7 +46,7 @@ export function EquityCurve() {
     if (!chartRef.current || data.length === 0) return;
 
     chart.current = createChart(chartRef.current, {
-      layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: '#6b7280' },
+      layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: '#D1D5DB' },
       grid: { vertLines: { color: '#262a36' }, horzLines: { color: '#262a36' } },
       rightPriceScale: { borderColor: '#262a36' },
       timeScale: { borderColor: '#262a36', timeVisible: true },
@@ -101,12 +101,12 @@ export function EquityCurve() {
       {/* Chart */}
       <div className="flex-1 relative">
         {loading && (
-          <div className="absolute inset-0 flex items-center justify-center text-fw-text-muted text-xs">
+          <div className="absolute inset-0 flex items-center justify-center text-fw-text-secondary text-xs">
             Loading equity data...
           </div>
         )}
         {!loading && data.length === 0 && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-fw-text-muted">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-fw-text-secondary">
             <TrendingUp className="w-8 h-8 opacity-30" />
             <span className="text-xs">No equity data yet. Start trading to see your curve.</span>
           </div>

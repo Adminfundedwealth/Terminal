@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Activity } from 'lucide-react';
 import { useAppStore } from '@/store/appStore';
+import { SymbolIcon } from '@/components/SymbolIcon';
 import { wsService } from '@/services/websocket';
 
 interface Tick {
@@ -65,18 +66,23 @@ export function TimeAndSales() {
         <div className="flex items-center gap-2">
           <Activity className="w-4 h-4 text-fw-accent" />
           <span className="text-xs font-bold text-fw-text uppercase tracking-wide">Time & Sales</span>
-          {activeSymbol && <span className="text-xs text-fw-text-secondary">{activeSymbol.symbol}</span>}
+          {activeSymbol && (
+            <div className="flex items-center gap-1.5">
+              <SymbolIcon symbol={activeSymbol.symbol} size={16} />
+              <span className="text-xs text-fw-text-secondary">{activeSymbol.symbol}</span>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setPaused(p => !p)}
-            className={`text-[10px] px-2 py-0.5 rounded border ${paused ? 'border-fw-accent text-fw-accent' : 'border-fw-border text-fw-text-secondary'}`}
+            className={`text-xs px-2 py-0.5 rounded border ${paused ? 'border-fw-accent text-fw-accent' : 'border-fw-border text-fw-text-secondary'}`}
           >
             {paused ? '▶ Resume' : '⏸ Pause'}
           </button>
           <button
             onClick={() => setTicks([])}
-            className="text-[10px] px-2 py-0.5 rounded border border-fw-border text-fw-text-secondary hover:border-fw-text-secondary"
+            className="text-xs px-2 py-0.5 rounded border border-fw-border text-fw-text-secondary hover:border-fw-text-secondary"
           >
             Clear
           </button>
@@ -84,7 +90,7 @@ export function TimeAndSales() {
       </div>
 
       {/* Column Headers */}
-      <div className="grid grid-cols-4 px-3 py-1 border-b border-fw-border text-[10px] text-fw-text-muted font-bold uppercase">
+      <div className="grid grid-cols-4 px-3 py-1 border-b border-fw-border text-xs text-fw-text-secondary font-bold uppercase">
         <span>Time</span>
         <span className="text-right">Price</span>
         <span className="text-right">Change</span>
@@ -94,7 +100,7 @@ export function TimeAndSales() {
       {/* Tick Stream */}
       <div ref={listRef} className="flex-1 overflow-y-auto">
         {ticks.length === 0 && (
-          <div className="flex items-center justify-center h-20 text-fw-text-muted text-xs">
+          <div className="flex items-center justify-center h-20 text-fw-text-secondary text-xs">
             {activeSymbol ? 'Waiting for ticks...' : 'Select a symbol'}
           </div>
         )}
@@ -104,11 +110,11 @@ export function TimeAndSales() {
             className={`grid grid-cols-4 px-3 py-[3px] border-b border-fw-border/20 text-xs font-mono
               ${tick.side === 'buy' ? 'bg-fw-green-dim' : tick.side === 'sell' ? 'bg-fw-red-dim' : ''}`}
           >
-            <span className="text-fw-text-muted">{tick.time}</span>
+            <span className="text-fw-text-secondary">{tick.time}</span>
             <span className={`text-right font-bold ${tick.side === 'buy' ? 'text-green' : tick.side === 'sell' ? 'text-red' : 'text-fw-text'}`}>
               {tick.price.toFixed(2)}
             </span>
-            <span className={`text-right ${tick.change > 0 ? 'text-green' : tick.change < 0 ? 'text-red' : 'text-fw-text-muted'}`}>
+            <span className={`text-right ${tick.change > 0 ? 'text-green' : tick.change < 0 ? 'text-red' : 'text-fw-text-secondary'}`}>
               {tick.change > 0 ? '+' : ''}{tick.change !== 0 ? tick.change.toFixed(2) : '—'}
             </span>
             <span className="text-right text-fw-text-secondary">
@@ -119,7 +125,7 @@ export function TimeAndSales() {
       </div>
 
       {/* Footer */}
-      <div className="px-3 py-1 border-t border-fw-border text-[10px] text-fw-text-muted">
+      <div className="px-3 py-1 border-t border-fw-border text-xs text-fw-text-secondary">
         {ticks.length} ticks{paused ? ' (paused)' : ''}
       </div>
     </div>

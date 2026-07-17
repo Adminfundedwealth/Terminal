@@ -129,26 +129,26 @@ export function EquityCurvePanel() {
   }, [equityData]);
 
   return (
-    <div className="h-full flex flex-col bg-[#0c0e14]">
-      <div className="flex items-center justify-between px-3 py-2 border-b border-fw-border bg-[#10121a] flex-shrink-0">
-        <span className="text-[12px] font-bold text-fw-text">Equity Curve</span>
+    <div className="h-full flex flex-col bg-fw-surface">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-fw-border bg-fw-surface flex-shrink-0">
+        <span className="text-base font-bold text-fw-text">Equity Curve</span>
         <div className="flex items-center gap-3">
           <div className="text-right">
-            <span className="text-[9px] text-fw-text-muted block">Return</span>
-            <span className={cn('text-[12px] font-mono font-bold', totalReturn >= 0 ? 'text-green' : 'text-red')}>
+            <span className="text-xs text-fw-text-secondary block">Return</span>
+            <span className={cn('text-base font-mono font-bold', totalReturn >= 0 ? 'text-green' : 'text-red')}>
               {totalReturn >= 0 ? '+' : ''}₹{totalReturn.toLocaleString('en-IN')} ({returnPct.toFixed(2)}%)
             </span>
           </div>
           <div className="text-right">
-            <span className="text-[9px] text-fw-text-muted block">Max DD</span>
-            <span className="text-[12px] font-mono font-bold text-red">{maxDrawdown.toFixed(2)}%</span>
+            <span className="text-xs text-fw-text-secondary block">Max DD</span>
+            <span className="text-base font-mono font-bold text-red">{maxDrawdown.toFixed(2)}%</span>
           </div>
         </div>
       </div>
 
       <div className="flex-1 relative min-h-0">
         {equityData.length < 2 ? (
-          <div className="flex items-center justify-center h-full text-[12px] text-fw-text-muted">
+          <div className="flex items-center justify-center h-full text-base text-fw-text-secondary">
             Need at least 2 data points. Add journal entries with P&L to build curve.
           </div>
         ) : (

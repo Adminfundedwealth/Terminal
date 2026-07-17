@@ -36,7 +36,7 @@ export function TerminalReadiness() {
   const readinessBadge = isLocked ? 'fw-badge-red' : !brokerOk ? 'fw-badge-orange' : isReady ? 'fw-badge-green' : 'fw-badge-yellow';
 
   return (
-    <div className="px-3 py-2 border-b border-fw-border bg-gradient-to-r from-[#0a0c12] to-[#0c0e16]">
+    <div className="px-3 py-2 border-b border-fw-border bg-gradient-to-r from-fw-surface to-fw-surface-2">
       {/* Readiness Row */}
       <div className="flex items-center justify-between mb-1.5">
         <div className="flex items-center gap-2">
@@ -49,13 +49,13 @@ export function TerminalReadiness() {
           {/* Broker */}
           <div className="flex items-center gap-1" title={brokerOk ? 'Broker connected' : 'Broker disconnected'}>
             {brokerOk ? <Wifi size={9} className="text-emerald-400" /> : <WifiOff size={9} className="text-red-400" />}
-            <span className={cn('text-[9px] font-medium', brokerOk ? 'text-emerald-400' : 'text-red-400')}>
+            <span className={cn('text-xs font-medium', brokerOk ? 'text-emerald-400' : 'text-red-400')}>
               {brokerOk ? 'Feed' : 'No Feed'}
             </span>
           </div>
           {/* Quotes */}
           {status?.feed?.cachedQuotes != null && (
-            <span className="text-[8px] text-fw-text-muted font-mono">{status.feed.cachedQuotes}q</span>
+            <span className="text-xxs text-fw-text-secondary font-mono">{status.feed.cachedQuotes}q</span>
           )}
         </div>
       </div>

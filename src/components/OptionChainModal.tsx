@@ -183,33 +183,33 @@ export function OptionChainModal() {
     <div className="flex flex-col h-full bg-fw-surface overflow-hidden">
       {/* Header */}
       <div className="flex items-center gap-2 px-2 py-1.5 border-b border-fw-border">
-        <span className="text-[12px] font-bold text-fw-text">OPTION CHAIN</span>
+        <span className="text-base font-bold text-fw-text">OPTION CHAIN</span>
         <div className="flex items-center gap-0.5">
           {INDEX_SYMBOLS.map((s) => (
             <button key={s} onClick={() => setSymbol(s)}
-              className={cn('px-1.5 py-0.5 text-[11px] rounded font-semibold', symbol === s ? 'bg-fw-accent text-white' : 'text-fw-text-secondary hover:text-fw-text')}>
+              className={cn('px-1.5 py-0.5 text-sm rounded font-semibold', symbol === s ? 'bg-fw-accent text-white' : 'text-fw-text-secondary hover:text-fw-text')}>
               {s}
             </button>
           ))}
         </div>
         <select value={selectedExpiry} onChange={(e) => setSelectedExpiry(e.target.value)}
-          className="ml-auto bg-fw-bg text-fw-text text-[11px] border border-fw-border rounded px-1.5 py-0.5 font-mono">
+          className="ml-auto bg-fw-bg text-fw-text text-sm border border-fw-border rounded px-1.5 py-0.5 font-mono">
           {expiries.map((e) => <option key={e} value={e}>{e}</option>)}
         </select>
         {spotPrice > 0 && (
-          <span className="ml-2 text-[11px] font-mono font-bold text-fw-accent tabular-nums">
+          <span className="ml-2 text-sm font-mono font-bold text-fw-accent tabular-nums">
             Spot: {formatPrice(spotPrice)}
           </span>
         )}
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-auto text-[11px]">
+      <div className="flex-1 overflow-auto text-sm">
         {isLoading ? (
           <div className="flex flex-col items-center justify-center h-full gap-3">
             <div className="w-5 h-5 border-2 border-fw-accent border-t-transparent rounded-full animate-spin" />
-            <p className="text-[13px] text-fw-text-secondary font-medium">Loading option chain...</p>
-            <p className="text-[11px] text-fw-text-muted">{symbol} · {selectedExpiry}</p>
+            <p className="text-lg text-fw-text-secondary font-medium">Loading option chain...</p>
+            <p className="text-sm text-fw-text-secondary">{symbol} · {selectedExpiry}</p>
           </div>
         ) : chain.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full gap-3">
@@ -235,7 +235,7 @@ export function OptionChainModal() {
             <div className="flex items-center gap-2 mt-1">
               <button
                 onClick={handleManualRetry}
-                className="px-3 py-1 text-[11px] font-semibold bg-fw-accent text-white rounded hover:brightness-110 transition-all"
+                className="px-3 py-1 text-sm font-semibold bg-fw-accent text-white rounded hover:brightness-110 transition-all"
               >
                 Retry Now
               </button>
@@ -244,7 +244,7 @@ export function OptionChainModal() {
         ) : (
           <table className="w-full border-collapse">
             <thead className="sticky top-0 bg-fw-surface z-10">
-              <tr className="border-b border-fw-border text-[9px] text-fw-text-secondary uppercase">
+              <tr className="border-b border-fw-border text-xs text-fw-text-secondary uppercase">
                 <th className="px-1 py-1 text-center">B/S</th>
                 <th className="px-1 py-1 text-right">OI</th>
                 <th className="px-1 py-1 text-right">Vol</th>
@@ -270,8 +270,8 @@ export function OptionChainModal() {
                 return (
                   <tr key={e.strike} className={cn('border-b border-fw-border/20 hover:bg-fw-hover/40', isAtm && 'bg-fw-accent/[0.03]', (isSelectedCE || isSelectedPE) && 'bg-fw-accent/[0.08] border-l-2 border-l-fw-accent')}>
                     <td className="px-1 py-[3px] text-center">
-                      <button onClick={() => { handleStrikeClick(e.strike, 'CE', callLtp); setOrderForm({ side: 'BUY' }); }} className="text-[8px] text-green-400 font-bold hover:bg-green-900/30 px-1 rounded">B</button>
-                      <button onClick={() => { handleStrikeClick(e.strike, 'CE', callLtp); setOrderForm({ side: 'SELL' }); }} className="text-[8px] text-red-400 font-bold hover:bg-red-900/30 px-1 rounded">S</button>
+                    <button onClick={() => { handleStrikeClick(e.strike, 'CE', callLtp); setOrderForm({ side: 'BUY' }); }} className="text-xxs text-green-400 font-bold hover:bg-green-900/30 px-1 rounded">B</button>
+                    <button onClick={() => { handleStrikeClick(e.strike, 'CE', callLtp); setOrderForm({ side: 'SELL' }); }} className="text-xxs text-red-400 font-bold hover:bg-red-900/30 px-1 rounded">S</button>
                     </td>
                     <td className="px-1 py-[3px] text-right font-mono tabular-nums text-fw-text-secondary">{formatNumber(callOi)}</td>
                     <td className="px-1 py-[3px] text-right font-mono tabular-nums text-fw-text-secondary">{formatNumber(callVol)}</td>
@@ -281,8 +281,8 @@ export function OptionChainModal() {
                     <td className="px-1 py-[3px] text-left font-mono tabular-nums text-fw-text-secondary">{formatNumber(putVol)}</td>
                     <td className="px-1 py-[3px] text-left font-mono tabular-nums text-fw-text-secondary">{formatNumber(putOi)}</td>
                     <td className="px-1 py-[3px] text-center">
-                      <button onClick={() => { handleStrikeClick(e.strike, 'PE', putLtp); setOrderForm({ side: 'BUY' }); }} className="text-[8px] text-green-400 font-bold hover:bg-green-900/30 px-1 rounded">B</button>
-                      <button onClick={() => { handleStrikeClick(e.strike, 'PE', putLtp); setOrderForm({ side: 'SELL' }); }} className="text-[8px] text-red-400 font-bold hover:bg-red-900/30 px-1 rounded">S</button>
+                    <button onClick={() => { handleStrikeClick(e.strike, 'PE', putLtp); setOrderForm({ side: 'BUY' }); }} className="text-xxs text-green-400 font-bold hover:bg-green-900/30 px-1 rounded">B</button>
+                    <button onClick={() => { handleStrikeClick(e.strike, 'PE', putLtp); setOrderForm({ side: 'SELL' }); }} className="text-xxs text-red-400 font-bold hover:bg-red-900/30 px-1 rounded">S</button>
                     </td>
                   </tr>
                 );

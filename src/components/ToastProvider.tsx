@@ -123,8 +123,8 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: (id: string)
       <div className="flex items-start gap-3">
         <div className="flex-shrink-0 mt-0.5">{icons[toast.type]}</div>
         <div className="flex-1 min-w-0">
-          <p className="text-[12px] font-bold text-white">{toast.title}</p>
-          <p className="text-[11px] text-white/70 mt-0.5 leading-relaxed">{toast.message}</p>
+          <p className="text-base font-bold text-white">{toast.title}</p>
+          <p className="text-sm text-white/70 mt-0.5 leading-relaxed">{toast.message}</p>
         </div>
         <button onClick={() => onDismiss(toast.id)} className="flex-shrink-0 p-0.5 rounded hover:bg-white/10 transition-colors">
           <X size={12} className="text-white/50" />

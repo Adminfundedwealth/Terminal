@@ -34,7 +34,16 @@ export default {
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
       },
       fontSize: {
-        'xxs': '10px',
+        'xxs': ['10px', '1.3'],
+        'xs': ['11px', '1.3'],
+        'sm': ['12px', '1.4'],
+        'base': ['16px', '1.4'],
+        'label': ['14px', '1.4'],
+        'button': ['18px', '1.4'],
+        'price': ['16px', '1.4'],
+        'price-lg': ['18px', '1.4'],
+        'title': ['18px', '1.3'],
+        'title-lg': ['20px', '1.3'],
       },
       animation: {
         'fade-in': 'fadeIn 0.15s ease-out',

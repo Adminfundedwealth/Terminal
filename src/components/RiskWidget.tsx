@@ -49,7 +49,7 @@ export function RiskWidget() {
   const riskLevel = overallRisk > 80 ? 'CRITICAL' : overallRisk > 60 ? 'HIGH' : overallRisk > 30 ? 'CAUTION' : 'SAFE';
 
   return (
-    <div className="border-b border-fw-border bg-gradient-to-b from-[#0c0e16] to-[#0a0c12] select-none">
+    <div className="border-b border-fw-border bg-gradient-to-b from-fw-surface to-fw-surface-2 select-none">
       {/* Challenge Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-fw-border/30">
         <div className="flex items-center gap-2">
@@ -72,20 +72,20 @@ export function RiskWidget() {
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1">
             {todayPnl >= 0 ? <TrendingUp size={10} className="text-green" /> : <TrendingDown size={10} className="text-red" />}
-            <span className="text-[9px] text-fw-text-muted">Day P&L</span>
-            <span className={cn('text-[11px] font-mono font-bold tabular-nums', todayPnl >= 0 ? 'text-green' : 'text-red')}>
+            <span className="text-xs text-fw-text-secondary">Day P&L</span>
+            <span className={cn('text-sm font-mono font-bold tabular-nums', todayPnl >= 0 ? 'text-green' : 'text-red')}>
               {todayPnl >= 0 ? '+' : ''}₹{fmtRisk(Math.abs(todayPnl))}
             </span>
           </div>
           <div className="flex items-center gap-1">
-            <Activity size={9} className="text-fw-text-muted" />
-            <span className="text-[9px] text-fw-text-muted">Trades</span>
-            <span className="text-[10px] font-mono font-bold text-fw-text tabular-nums">{todayTrades}</span>
+            <Activity size={9} className="text-fw-text-secondary" />
+            <span className="text-xs text-fw-text-secondary">Trades</span>
+            <span className="text-xs font-mono font-bold text-fw-text tabular-nums">{todayTrades}</span>
           </div>
         </div>
         <div className="flex items-center gap-1">
-          <span className="text-[9px] text-fw-text-muted">Equity</span>
-          <span className="text-[10px] font-mono font-bold text-fw-text tabular-nums">₹{fmtRisk(equity)}</span>
+          <span className="text-xs text-fw-text-secondary">Equity</span>
+          <span className="text-xs font-mono font-bold text-fw-text tabular-nums">₹{fmtRisk(equity)}</span>
         </div>
       </div>
 
@@ -134,13 +134,13 @@ function RiskRow({ icon, label, pct, remaining, limit, color, isTarget }: {
       <div className="flex items-center justify-between mb-1">
         <div className="flex items-center gap-1.5">
           <span className={iconColor}>{icon}</span>
-          <span className="text-[10px] text-fw-text-secondary font-semibold">{label}</span>
+          <span className="text-xs text-fw-text-secondary font-semibold">{label}</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-[9px] text-fw-text-muted font-mono tabular-nums">
+          <span className="text-xs text-fw-text-secondary font-mono tabular-nums">
             {isTarget ? `₹${fmtRisk(Math.max(0, limit - remaining))} / ₹${fmtRisk(limit)}` : `₹${fmtRisk(remaining)} left`}
           </span>
-          <span className={cn('text-[10px] font-mono font-black tabular-nums min-w-[28px] text-right', textColor)}>
+          <span className={cn('text-xs font-mono font-black tabular-nums min-w-[28px] text-right', textColor)}>
             {pct.toFixed(0)}%
           </span>
         </div>

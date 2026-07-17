@@ -85,21 +85,21 @@ export function CalendarAnalytics() {
       {/* Month Summary */}
       <div className="flex gap-4 px-4 py-2 border-b border-fw-border">
         <div>
-          <div className="text-fw-text-muted">Month P&L</div>
+          <div className="text-fw-text-secondary">Month P&L</div>
           <div className={`font-mono font-bold ${monthStats.pnl >= 0 ? 'text-green' : 'text-red'}`}>
             {monthStats.pnl >= 0 ? '+' : ''}₹{monthStats.pnl.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
           </div>
         </div>
         <div>
-          <div className="text-fw-text-muted">Trading Days</div>
+          <div className="text-fw-text-secondary">Trading Days</div>
           <div className="font-mono font-bold text-fw-text">{monthStats.tradingDays}</div>
         </div>
         <div>
-          <div className="text-fw-text-muted">Win Days</div>
+          <div className="text-fw-text-secondary">Win Days</div>
           <div className="font-mono font-bold text-green">{monthStats.winDays}</div>
         </div>
         <div>
-          <div className="text-fw-text-muted">Total Trades</div>
+          <div className="text-fw-text-secondary">Total Trades</div>
           <div className="font-mono font-bold text-fw-text">{monthStats.trades}</div>
         </div>
       </div>
@@ -109,7 +109,7 @@ export function CalendarAnalytics() {
         {/* Day headers */}
         <div className="grid grid-cols-7 gap-1 mb-1">
           {DAYS.map(d => (
-            <div key={d} className="text-center text-fw-text-muted font-bold py-1">{d}</div>
+            <div key={d} className="text-center text-fw-text-secondary font-bold py-1">{d}</div>
           ))}
         </div>
 
@@ -142,12 +142,12 @@ export function CalendarAnalytics() {
                 <div className={`font-bold ${isToday ? 'text-fw-accent' : 'text-fw-text'}`}>{day}</div>
                 {hasTrades && (
                   <>
-                    <div className={`font-mono text-[10px] font-bold mt-0.5 ${isProfit ? 'text-green' : 'text-red'}`}>
+                    <div className={`font-mono text-xs font-bold mt-0.5 ${isProfit ? 'text-green' : 'text-red'}`}>
                       {isProfit ? '+' : ''}₹{Math.abs(metric.pnl) >= 1000
                         ? (metric.pnl / 1000).toFixed(1) + 'k'
                         : metric.pnl.toFixed(0)}
                     </div>
-                    <div className="text-fw-text-muted text-[10px]">{metric.trades}T</div>
+                    <div className="text-fw-text-secondary text-xs">{metric.trades}T</div>
                   </>
                 )}
               </div>
@@ -159,13 +159,13 @@ export function CalendarAnalytics() {
       {/* Selected Day Detail */}
       {selected && (
         <div className="px-4 py-2 border-t border-fw-border bg-fw-surface-2 flex items-center gap-6">
-          <span className="text-fw-text-muted">{selected.date}</span>
+          <span className="text-fw-text-secondary">{selected.date}</span>
           <span className={`font-mono font-bold ${selected.pnl >= 0 ? 'text-green' : 'text-red'}`}>
             {selected.pnl >= 0 ? '+' : ''}₹{selected.pnl.toFixed(2)}
           </span>
           <span className="text-fw-text-secondary">{selected.trades} trades</span>
           <span className="text-fw-text-secondary">Win rate: {selected.winRate.toFixed(0)}%</span>
-          <button onClick={() => setSelected(null)} className="ml-auto text-fw-text-muted hover:text-fw-text">✕</button>
+          <button onClick={() => setSelected(null)} className="ml-auto text-fw-text-secondary hover:text-fw-text">✕</button>
         </div>
       )}
     </div>

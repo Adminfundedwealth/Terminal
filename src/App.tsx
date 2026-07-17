@@ -188,14 +188,14 @@ export default function App() {
             </div>
           </div>
           <div className="flex flex-col items-center gap-1">
-            <span className="text-[14px] font-extrabold tracking-wide bg-gradient-to-r from-[#00D4FF] via-[#4F46E5] to-[#7C3AED] bg-clip-text text-transparent">
+            <span className="text-title font-extrabold tracking-wide bg-gradient-to-r from-[#00D4FF] via-[#4F46E5] to-[#7C3AED] bg-clip-text text-transparent">
               FUNDEDWEALTH
             </span>
-            <span className="text-[10px] font-bold tracking-[0.25em] text-fw-accent/70">
+            <span className="text-xxs font-bold tracking-[0.25em] text-fw-accent/70">
               TERMINAL
             </span>
           </div>
-          <div className="flex items-center gap-2 text-fw-text-muted text-[11px]">
+          <div className="flex items-center gap-2 text-fw-text-muted text-xs">
             <div className="w-3 h-3 border-2 border-fw-accent border-t-transparent rounded-full animate-spin" />
             Connecting...
           </div>
@@ -226,7 +226,7 @@ export default function App() {
 
   return (
     <ToastProvider>
-    <div className="h-screen w-screen flex bg-fw-bg overflow-hidden text-[13px]">
+      <div className="h-screen w-screen flex bg-fw-bg overflow-hidden text-base">
       {/* Left Sidebar Rail */}
       <Sidebar />
 

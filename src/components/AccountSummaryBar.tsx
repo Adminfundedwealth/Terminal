@@ -77,7 +77,7 @@ export function AccountSummaryBar() {
       <Separator />
       {/* Phase */}
       <div className="flex items-center gap-1.5 px-2">
-        <span className="text-[9px] text-fw-text-muted uppercase">{phase}</span>
+        <span className="text-xs text-fw-text-secondary uppercase">{phase}</span>
       </div>
     </div>
   );
@@ -86,8 +86,8 @@ export function AccountSummaryBar() {
 function MetricPill({ label, value, className }: { label: string; value: string; className?: string }) {
   return (
     <div className="flex items-center gap-1.5 px-2">
-      <span className="text-[9px] text-fw-text-muted uppercase whitespace-nowrap">{label}</span>
-      <span className={cn('text-[11px] font-mono font-semibold tabular-nums whitespace-nowrap', className || 'text-fw-text')}>{value}</span>
+      <span className="text-xs text-fw-text-secondary uppercase whitespace-nowrap">{label}</span>
+      <span className={cn('text-sm font-mono font-semibold tabular-nums whitespace-nowrap', className || 'text-fw-text')}>{value}</span>
     </div>
   );
 }

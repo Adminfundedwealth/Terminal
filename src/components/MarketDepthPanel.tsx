@@ -5,6 +5,7 @@ import { useTradingStore } from '@/store/tradingStore';
 import { cn, formatPrice } from '@/utils/helpers';
 import { Layers, ArrowUpDown } from 'lucide-react';
 import type { MarketDepthLevel } from '@/types';
+import { SymbolIcon } from '@/components/SymbolIcon';
 
 function fmtQty(n: number): string {
   if (n >= 10_000_000) return (n / 10_000_000).toFixed(1) + 'Cr';
@@ -34,50 +35,55 @@ export function MarketDepthPanel() {
   const hasData = depth.bids.length > 0 || depth.asks.length > 0;
 
   return (
-    <div className="flex flex-col bg-[#090b10] select-none h-full overflow-hidden">
+    <div className="flex flex-col bg-fw-surface select-none h-full overflow-hidden">
       {/* Header — Strong */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-fw-border bg-gradient-to-r from-[#10121a] to-[#0e1018] flex-shrink-0">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-fw-border bg-gradient-to-r from-fw-surface to-fw-surface-2 flex-shrink-0">
         <div className="flex items-center gap-1.5">
           <Layers size={12} className="text-fw-accent" />
-          <span className="text-[10px] font-black text-fw-text uppercase tracking-wider">Depth</span>
-          {activeSymbol && <span className="text-[9px] text-fw-text-muted font-mono ml-1">{activeSymbol.symbol}</span>}
+          <span className="text-xs font-black text-fw-text uppercase tracking-wider">Depth</span>
+          {activeSymbol && (
+            <div className="flex items-center gap-1.5">
+              <SymbolIcon symbol={activeSymbol.symbol} size={16} />
+              <span className="text-xs text-fw-text-secondary font-mono ml-1">{activeSymbol.symbol}</span>
+            </div>
+          )}
         </div>
         {quote && (
-          <span className={cn('text-[13px] font-mono font-black tabular-nums', (quote.changePercent || 0) >= 0 ? 'text-green' : 'text-red')}>
+          <span className={cn('text-lg font-mono font-black tabular-nums', (quote.changePercent || 0) >= 0 ? 'text-green' : 'text-red')}>
             {formatPrice(quote.ltp)}
           </span>
         )}
       </div>
 
       {/* Spread + Pressure Summary */}
-      <div className="flex items-center justify-between px-3 py-1.5 border-b border-fw-border/30 bg-[#0b0d12] flex-shrink-0">
+      <div className="flex items-center justify-between px-3 py-1.5 border-b border-fw-border/30 bg-fw-surface flex-shrink-0">
         <div className="flex items-center gap-1">
-          <ArrowUpDown size={9} className="text-fw-text-muted" />
-          <span className="text-[9px] text-fw-text-muted">Spread:</span>
-          <span className="text-[10px] font-mono font-bold text-fw-text tabular-nums">{spread > 0 ? formatPrice(spread) : '—'}</span>
+          <ArrowUpDown size={9} className="text-fw-text-secondary" />
+          <span className="text-xs text-fw-text-secondary">Spread:</span>
+          <span className="text-xs font-mono font-bold text-fw-text tabular-nums">{spread > 0 ? formatPrice(spread) : '—'}</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-[9px] font-mono text-green tabular-nums font-bold">{fmtQty(totalBid)}</span>
-          <span className="text-[8px] text-fw-text-muted">vs</span>
-          <span className="text-[9px] font-mono text-red tabular-nums font-bold">{fmtQty(totalAsk)}</span>
+          <span className="text-xs font-mono text-green tabular-nums font-bold">{fmtQty(totalBid)}</span>
+          <span className="text-xxs text-fw-text-secondary">vs</span>
+          <span className="text-xs font-mono text-red tabular-nums font-bold">{fmtQty(totalAsk)}</span>
         </div>
       </div>
 
       {/* Column Headers */}
       <div className="grid grid-cols-[1fr_68px_68px_1fr] px-2 py-1 border-b border-fw-border/20 flex-shrink-0">
-        <span className="text-[8px] text-fw-text-muted font-bold uppercase text-right pr-2">BID QTY</span>
-        <span className="text-[8px] text-green font-bold uppercase text-center">BID</span>
-        <span className="text-[8px] text-red font-bold uppercase text-center">ASK</span>
-        <span className="text-[8px] text-fw-text-muted font-bold uppercase text-left pl-2">ASK QTY</span>
+        <span className="text-xxs text-fw-text-secondary font-bold uppercase text-right pr-2">BID QTY</span>
+        <span className="text-xxs text-green font-bold uppercase text-center">BID</span>
+        <span className="text-xxs text-red font-bold uppercase text-center">ASK</span>
+        <span className="text-xxs text-fw-text-secondary font-bold uppercase text-left pl-2">ASK QTY</span>
       </div>
 
       {/* Depth Levels */}
       <div className="flex-1 overflow-hidden min-h-0">
         {!hasData ? (
           <div className="flex flex-col items-center justify-center h-full gap-2 py-4">
-            <Layers size={20} className="text-fw-text-muted/20" />
-            <span className="text-[10px] text-fw-text-muted">Waiting for depth data</span>
-            <span className="text-[9px] text-fw-text-muted/60">Click price to set order</span>
+            <Layers size={20} className="text-fw-text-secondary/20" />
+            <span className="text-xs text-fw-text-secondary">Waiting for depth data</span>
+            <span className="text-xs text-fw-text-secondary/60">Click price to set order</span>
           </div>
         ) : (
           [0, 1, 2, 3, 4].map((i) => {
@@ -98,20 +104,20 @@ export function MarketDepthPanel() {
                 </div>
 
                 {/* Bid Qty */}
-                <div className="relative text-right pr-2 text-[11px] font-mono tabular-nums text-green/80 font-bold cursor-pointer hover:text-green transition-colors" onClick={() => bid && setOrderForm({ price: bid.price, side: 'BUY', orderType: 'LIMIT' })}>
-                  {bid ? fmtQty(bid.qty) : <span className="text-fw-text-muted/30">—</span>}
+                <div className="relative text-right pr-2 text-sm font-mono tabular-nums text-green/80 font-bold cursor-pointer hover:text-green transition-colors" onClick={() => bid && setOrderForm({ price: bid.price, side: 'BUY', orderType: 'LIMIT' })}>
+                  {bid ? fmtQty(bid.qty) : <span className="text-fw-text-secondary/30">—</span>}
                 </div>
                 {/* Bid Price */}
-                <div className={cn('relative text-center text-[11px] font-mono tabular-nums font-bold cursor-pointer hover:text-green transition-colors', i === 0 ? 'text-green' : 'text-fw-text/80')} onClick={() => bid && setOrderForm({ price: bid.price, side: 'BUY', orderType: 'LIMIT' })}>
-                  {bid ? formatPrice(bid.price) : <span className="text-fw-text-muted/30">—</span>}
+                <div className={cn('relative text-center text-sm font-mono tabular-nums font-bold cursor-pointer hover:text-green transition-colors', i === 0 ? 'text-green' : 'text-fw-text/80')} onClick={() => bid && setOrderForm({ price: bid.price, side: 'BUY', orderType: 'LIMIT' })}>
+                  {bid ? formatPrice(bid.price) : <span className="text-fw-text-secondary/30">—</span>}
                 </div>
                 {/* Ask Price */}
-                <div className={cn('relative text-center text-[11px] font-mono tabular-nums font-bold cursor-pointer hover:text-red transition-colors', i === 0 ? 'text-red' : 'text-fw-text/80')} onClick={() => ask && setOrderForm({ price: ask.price, side: 'SELL', orderType: 'LIMIT' })}>
-                  {ask ? formatPrice(ask.price) : <span className="text-fw-text-muted/30">—</span>}
+                <div className={cn('relative text-center text-sm font-mono tabular-nums font-bold cursor-pointer hover:text-red transition-colors', i === 0 ? 'text-red' : 'text-fw-text/80')} onClick={() => ask && setOrderForm({ price: ask.price, side: 'SELL', orderType: 'LIMIT' })}>
+                  {ask ? formatPrice(ask.price) : <span className="text-fw-text-secondary/30">—</span>}
                 </div>
                 {/* Ask Qty */}
-                <div className="relative text-left pl-2 text-[11px] font-mono tabular-nums text-red/80 font-bold cursor-pointer hover:text-red transition-colors" onClick={() => ask && setOrderForm({ price: ask.price, side: 'SELL', orderType: 'LIMIT' })}>
-                  {ask ? fmtQty(ask.qty) : <span className="text-fw-text-muted/30">—</span>}
+                <div className="relative text-left pl-2 text-sm font-mono tabular-nums text-red/80 font-bold cursor-pointer hover:text-red transition-colors" onClick={() => ask && setOrderForm({ price: ask.price, side: 'SELL', orderType: 'LIMIT' })}>
+                  {ask ? fmtQty(ask.qty) : <span className="text-fw-text-secondary/30">—</span>}
                 </div>
               </div>
             );
@@ -120,8 +126,8 @@ export function MarketDepthPanel() {
       </div>
 
       {/* Pressure Bar — Full Width */}
-      <div className="border-t border-fw-border bg-[#0b0d14] px-3 py-2 flex-shrink-0">
-        <div className="flex items-center justify-between text-[9px] mb-1">
+      <div className="border-t border-fw-border bg-fw-surface flex-shrink-0 px-3 py-2">
+        <div className="flex items-center justify-between text-xs mb-1">
           <span className="font-mono text-green font-bold">{bidPct.toFixed(0)}% Buy</span>
           <span className="font-mono text-red font-bold">{(100 - bidPct).toFixed(0)}% Sell</span>
         </div>
