@@ -15,9 +15,9 @@ interface OrderForm {
 }
 
 export interface SelectedContract {
-  symbol: string;      // e.g. "NIFTY 24000 CE"
+  symbol: string;
   token: string;
-  underlying: string;  // e.g. "NIFTY"
+  underlying: string;
   strike: number;
   optionType: 'CE' | 'PE';
   expiry: string;
@@ -30,6 +30,11 @@ interface TradingState {
   orders: Order[];
   trades: Trade[];
   account: AccountInfo | null;
+  // Multi-account: all active accounts for the session user
+  accounts: AccountInfo[];
+  isSwitching: boolean;
+  isLoadingAccounts: boolean;
+  switchError: string | null;
   orderForm: OrderForm;
   selectedContract: SelectedContract | null;
 
@@ -40,6 +45,10 @@ interface TradingState {
   updateOrder: (id: string, update: Partial<Order>) => void;
   setTrades: (trades: Trade[]) => void;
   setAccount: (account: AccountInfo) => void;
+  setAccounts: (accounts: AccountInfo[]) => void;
+  setIsSwitching: (v: boolean) => void;
+  setIsLoadingAccounts: (v: boolean) => void;
+  setSwitchError: (e: string | null) => void;
   setOrderForm: (form: Partial<OrderForm>) => void;
   resetOrderForm: () => void;
   setSelectedContract: (contract: SelectedContract | null) => void;
@@ -63,6 +72,10 @@ export const useTradingStore = create<TradingState>((set) => ({
   orders: [],
   trades: [],
   account: null,
+  accounts: [],
+  isSwitching: false,
+  isLoadingAccounts: false,
+  switchError: null,
   orderForm: { ...defaultOrderForm },
   selectedContract: null,
 
@@ -79,6 +92,10 @@ export const useTradingStore = create<TradingState>((set) => ({
     })),
   setTrades: (trades) => set({ trades }),
   setAccount: (account) => set({ account }),
+  setAccounts: (accounts) => set({ accounts }),
+  setIsSwitching: (isSwitching) => set({ isSwitching }),
+  setIsLoadingAccounts: (isLoadingAccounts) => set({ isLoadingAccounts }),
+  setSwitchError: (switchError) => set({ switchError }),
   setOrderForm: (form) =>
     set((state) => ({ orderForm: { ...state.orderForm, ...form } })),
   resetOrderForm: () => set({ orderForm: { ...defaultOrderForm }, selectedContract: null }),
