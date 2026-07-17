@@ -9,6 +9,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "check:logos": "node ./scripts/check-logos.js",
     "server:dev": "node --watch server/index.js",
     "test": "vitest --run",
     "test:watch": "vitest"
