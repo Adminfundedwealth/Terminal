@@ -119,10 +119,10 @@ export function BottomPanel() {
             key={tab.id}
             onClick={() => setBottomTab(tab.id)}
             className={cn(
-              'px-4 py-3 text-[13px] border-b-2 transition-all relative min-h-[44px]',
+              'px-5 py-4 text-[15px] border-b-2 transition-all relative min-h-[52px]',
               bottomTab === tab.id
-                ? 'fw-tab-active border-fw-accent bg-fw-accent/[0.06]'
-                : 'fw-tab-inactive border-transparent hover:opacity-90 hover:bg-fw-hover/20'
+                ? 'fw-tab-active border-fw-accent bg-fw-accent/[0.08]'
+                : 'fw-tab-inactive border-transparent hover:opacity-95 hover:bg-fw-hover/24'
             )}
           >
             {tab.label}
