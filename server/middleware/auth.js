@@ -13,8 +13,9 @@
  * SECURITY: All dev bypasses REMOVED. No backdoors. No fallbacks.
  */
 
-import { verifySessionJWT } from '../services/auth.service.js';
+import { verifySessionJWT, hashToken } from '../services/auth.service.js';
 import { isSessionValid } from '../services/session.service.js';
+import { getOverride } from '../services/accountSwitchService.js';
 import { AuditLogger } from '../services/auditLogger.js';
 
 /**
@@ -58,6 +59,14 @@ export async function requireAuth(req, res, next) {
   // Attach user claims to request
   req.user = result.claims;
   req.token = token;
+
+  // Apply active-account override if user switched accounts this session
+  const tokenHash = hashToken(token);
+  const override = getOverride(tokenHash);
+  if (override) {
+    req.user = { ...req.user, accountId: override.accountId };
+  }
+
   next();
 }
 

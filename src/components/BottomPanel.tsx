@@ -20,7 +20,7 @@ type TradeFilter = 'today' | 'week' | 'month';
 
 export function BottomPanel() {
   const { bottomTab, setBottomTab } = useAppStore();
-  const { positions, orders, trades, setPositions, setOrders, setTrades } = useTradingStore();
+  const { positions, orders, trades, setPositions, setOrders, setTrades, account } = useTradingStore();
   const { showToast } = useToast();
   const [orderFilter, setOrderFilter] = useState<OrderFilter>('all');
   const [tradeFilter, setTradeFilter] = useState<TradeFilter>('today');
@@ -44,11 +44,12 @@ export function BottomPanel() {
     }
   };
 
+  // Refresh when account changes (account switch) or tradeFilter changes
   useEffect(() => {
     refreshData();
     const interval = setInterval(refreshData, 5000);
     return () => clearInterval(interval);
-  }, [tradeFilter]);
+  }, [tradeFilter, account?.id]);
 
   const filteredOrders = orders.filter((o) => {
     if (orderFilter === 'all') return true;

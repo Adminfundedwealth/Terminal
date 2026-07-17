@@ -20,6 +20,7 @@ import { ToastProvider } from '@/components/ToastProvider';
 import { MobileLayout } from '@/components/MobileLayout';
 import { useHotkeys } from '@/hooks/useHotkeys';
 import { useAuth } from '@/hooks/useAuth';
+import { useAccountSwitcher } from '@/hooks/useAccountSwitcher';
 import { useWatchlistSync } from '@/hooks/useWatchlistSync';
 import { useAppStore } from '@/store/appStore';
 import { useThemeStore } from '@/store/themeStore';
@@ -109,6 +110,9 @@ function HDivider({ onDrag }: { onDrag: (dy: number) => void }) {
 export default function App() {
   const { theme, showOptionChain, panels, activeWorkspace } = useAppStore();
   const { isAuthenticated, isLoading, error } = useAuth();
+
+  // Multi-account: load all accounts, handle URL param + localStorage auto-select
+  useAccountSwitcher();
 
   // Sync watchlists with backend
   useWatchlistSync();

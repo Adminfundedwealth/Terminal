@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { requireAuth, requirePermission } from '../middleware/auth.js';
 import { validateBody, schemas } from '../middleware/validate.js';
+import { supabase } from '../db/client.js';
 
 import { TradingViewDatafeed } from '../realtime/tradingview.datafeed.js';
 
@@ -285,33 +286,74 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
     }
   });
 
-  // Multiple accounts for a user
+  // Multiple accounts for a user — returns all active accounts with challenge data
   router.get('/accounts', requireAuth, async (req, res) => {
     try {
-      const { AccountRepository } = await import('../repositories/account.repository.js');
-      const rows = await new AccountRepository().findByUserId(req.user.userId);
-      if (!rows || !rows.length) return res.json([]);
-      // Map snake_case DB rows to camelCase AccountInfo shape (same as getAccount)
-      const accounts = rows.map(row => ({
-        id: row.id,
-        accountCode: row.account_code,
-        clientId: row.broker_client_id || row.account_code,
-        userId: row.trader_id,
-        brokerProvider: row.broker_provider,
-        balance: parseFloat(row.balance) || 0,
-        peakBalance: parseFloat(row.peak_balance) || parseFloat(row.balance) || 0,
-        availableMargin: parseFloat(row.available_margin) || 0,
-        usedMargin: parseFloat(row.used_margin) || 0,
-        status: row.status,
-        lockedReason: row.locked_reason || null,
-        challenge: null, // Challenge data not fetched in list view for performance
-      }));
+      if (!supabase) return res.json([]);
+
+      // Fetch all active accounts for this trader with challenge data
+      const { data: rows, error } = await supabase
+        .from('trading_accounts')
+        .select('*, challenge_accounts(id, type, plan, initial_balance, peak_balance, profit_target_pct, daily_loss_limit_pct, max_drawdown_pct, status, started_at, expires_at)')
+        .eq('trader_id', req.user.userId)
+        .in('status', ['active'])
+        .order('created_at', { ascending: false });
+
+      if (error || !rows) return res.json([]);
+
+      const accounts = rows.map(row => {
+        const ch = row.challenge_accounts;
+        return {
+          id: row.id,
+          accountCode: row.account_code,
+          clientId: row.broker_client_id || row.account_code,
+          userId: row.trader_id,
+          brokerProvider: row.broker_provider,
+          balance: parseFloat(row.balance) || 0,
+          peakBalance: parseFloat(ch?.peak_balance ?? row.peak_balance) || parseFloat(row.balance) || 0,
+          availableMargin: parseFloat(row.available_margin) || 0,
+          usedMargin: parseFloat(row.used_margin) || 0,
+          status: row.status,
+          lockedReason: row.locked_reason || null,
+          challenge: ch ? {
+            id: ch.id,
+            type: ch.type,
+            plan: ch.plan,
+            initialBalance: parseFloat(ch.initial_balance) || 0,
+            status: ch.status,
+            startedAt: ch.started_at,
+            expiresAt: ch.expires_at,
+            profitTargetPct: parseFloat(ch.profit_target_pct) || 10,
+            dailyLossLimitPct: parseFloat(ch.daily_loss_limit_pct) || 5,
+            maxDrawdownPct: parseFloat(ch.max_drawdown_pct) || 10,
+          } : null,
+        };
+      });
+
       res.json(accounts);
     } catch (err) {
-      if (err.message && err.message.includes('schema cache')) {
-        return res.json([]);
-      }
+      if (err.message && err.message.includes('schema cache')) return res.json([]);
       res.json([]);
+    }
+  });
+
+  // Switch active account — validates ownership, sets server-side override
+  router.post('/account/switch', requireAuth, async (req, res) => {
+    const { accountId } = req.body;
+    if (!accountId || typeof accountId !== 'string') {
+      return res.status(400).json({ success: false, message: 'accountId is required.' });
+    }
+    try {
+      const { switchAccount } = await import('../services/accountSwitchService.js');
+      const result = await switchAccount(req.token, req.user.userId, accountId);
+      if (!result.success) {
+        return res.status(403).json({ success: false, message: result.error });
+      }
+      // Return full account info for the new account
+      const account = await accountService.getAccount(result.accountId);
+      res.json({ success: true, account });
+    } catch (err) {
+      res.status(500).json({ success: false, message: err.message });
     }
   });
 

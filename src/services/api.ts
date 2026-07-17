@@ -40,6 +40,13 @@ export const getAccount = (signal?: AbortSignal) => request<AccountInfo>('/accou
 export const getAccounts = () => request<AccountInfo[]>('/accounts');
 export const getAccountById = (id: string) => request<AccountInfo>(`/accounts/${id}`);
 
+// Switch active account (server-side override — no re-auth required)
+export const switchAccount = (accountId: string) =>
+  request<{ success: boolean; account: AccountInfo }>('/account/switch', {
+    method: 'POST',
+    body: JSON.stringify({ accountId }),
+  });
+
 // Margin
 export const getMarginInfo = () => request<{ balance: number; usedMargin: number; availableMargin: number }>('/account/margin');
 
