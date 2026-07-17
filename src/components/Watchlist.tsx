@@ -4,6 +4,7 @@ import { useAppStore } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
 import { useTradingStore } from '@/store/tradingStore';
 import { cn, formatPrice, getChangeColor } from '@/utils/helpers';
+import { searchInstruments } from '@/services/api';
 import type { WatchlistItem } from '@/types';
 
 export function Watchlist() {
@@ -14,6 +15,8 @@ export function Watchlist() {
   const [filter, setFilter] = useState('');
   const [showImport, setShowImport] = useState(false);
   const [importText, setImportText] = useState('');
+  const [importStatus, setImportStatus] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
 
   const currentWlId = activeWatchlistTab || activeWorkspace;
   const activeWatchlist = watchlists.find((wl) => wl.id === currentWlId);
@@ -49,19 +52,53 @@ export function Watchlist() {
     });
   };
 
-  const handleImport = () => {
+  const handleImport = async () => {
     if (!importText.trim() || !activeWatchlist) return;
     const symbols = importText.split(/[,\n;]+/).map((s) => s.trim().toUpperCase()).filter((s) => s.length > 0);
     const existingSymbols = new Set(activeWatchlist.items.map((i) => i.symbol));
-    const newItems: WatchlistItem[] = symbols
-      .filter((s) => !existingSymbols.has(s))
-      .map((s) => ({ token: s + '_IMP_' + Date.now(), symbol: s, segment: 'NSE' as const }));
+    const toResolve = symbols.filter((s) => !existingSymbols.has(s));
+
+    if (toResolve.length === 0) {
+      setImportStatus('All symbols already in watchlist.');
+      return;
+    }
+
+    setImporting(true);
+    setImportStatus(`Resolving ${toResolve.length} symbol(s)...`);
+
+    const added: string[] = [];
+    const notFound: string[] = [];
+    const newItems: WatchlistItem[] = [];
+
+    for (const sym of toResolve) {
+      try {
+        const results = await searchInstruments(sym);
+        // Find exact match first, then prefix match
+        const match = results.find((r) => r.symbol === sym) || results.find((r) => r.symbol.startsWith(sym));
+        if (match) {
+          newItems.push({ token: match.token, symbol: match.symbol, segment: match.segment });
+          added.push(match.symbol);
+        } else {
+          notFound.push(sym);
+        }
+      } catch {
+        notFound.push(sym);
+      }
+    }
+
     if (newItems.length > 0) {
-      const updated = watchlists.map((wl) => wl.id === currentWlId ? { ...wl, items: [...wl.items, ...newItems] } : wl);
+      const updated = watchlists.map((wl) =>
+        wl.id === currentWlId ? { ...wl, items: [...wl.items, ...newItems] } : wl
+      );
       setWatchlists(updated);
     }
+
+    const parts: string[] = [];
+    if (added.length > 0) parts.push(`${added.length} added`);
+    if (notFound.length > 0) parts.push(`${notFound.length} not found: ${notFound.join(', ')}`);
+    setImportStatus(parts.join(' · '));
+    setImporting(false);
     setImportText('');
-    setShowImport(false);
   };
 
   return (

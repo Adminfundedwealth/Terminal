@@ -106,6 +106,8 @@ export const schemas = {
     qty: z.number().int().min(1).max(100000),
     price: z.number().min(0).optional(),
     triggerPrice: z.number().min(0).optional(),
+    validity: z.enum(['DAY', 'IOC', 'GTC']).optional().default('DAY'),
+    isAmo: z.boolean().optional().default(false),
   }),
 
   // Order Modification

@@ -115,7 +115,7 @@ export class OrderExecutionService {
           message: 'Paper mode — simulated fill',
           avgPrice: ltp,
         };
-        console.log(`[OrderExecution] PAPER MODE: Simulated ${orderParams.orderType} ${orderParams.side} ${orderParams.qty}x${orderParams.symbol} @ ${ltp}`);
+        console.log(`[OrderExecution] PAPER MODE: Simulated ${orderParams.orderType} ${orderParams.side} ${orderParams.qty}x${orderParams.symbol} @ ${ltp} [validity=${orderParams.validity||'DAY'}${orderParams.isAmo?' AMO':''}]`);
       } else {
         try {
           const adapter = await BrokerFactory.create(brokerProvider);

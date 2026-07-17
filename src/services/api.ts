@@ -105,6 +105,8 @@ export interface PlaceOrderParams {
   qty: number;
   price?: number;
   triggerPrice?: number;
+  validity?: 'DAY' | 'IOC' | 'GTC';
+  isAmo?: boolean;
 }
 
 export const placeOrder = (params: PlaceOrderParams) =>

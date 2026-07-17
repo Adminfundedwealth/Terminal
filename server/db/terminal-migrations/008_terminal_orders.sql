@@ -21,6 +21,8 @@ CREATE TABLE IF NOT EXISTS terminal_orders (
     avg_price NUMERIC(12,2),
     status TEXT NOT NULL CHECK (status IN ('PENDING', 'OPEN', 'FILLED', 'CANCELLED', 'REJECTED')),
     reject_reason TEXT,
+    validity TEXT DEFAULT 'DAY' CHECK (validity IN ('DAY', 'IOC', 'GTC')),
+    is_amo BOOLEAN DEFAULT FALSE,
     placed_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );

@@ -242,6 +242,8 @@ function PositionsTable({ positions, onExit, onPartialClose, onReverse }: {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [slInput, setSlInput] = useState<{ id: string; price: string } | null>(null);
   const [tpInput, setTpInput] = useState<{ id: string; price: string } | null>(null);
+  const { setBottomTab } = useAppStore();
+  const setOrderForm = useTradingStore((s) => s.setOrderForm);
 
   const handleBreakEven = async (id: string) => {
     try { await breakEvenPosition(id); } catch {}
@@ -346,16 +348,38 @@ function PositionsTable({ positions, onExit, onPartialClose, onReverse }: {
                   {/* Stop Loss */}
                   <button onClick={() => setSlInput(slInput?.id === pos.id ? null : { id: pos.id, price: '' })} className={cn('px-1.5 py-0.5 rounded text-[9px] font-bold bg-fw-bg border border-fw-border text-fw-text-secondary hover:text-red hover:border-red transition-colors', slInput?.id === pos.id && 'border-red text-red')} title="Stop Loss">SL</button>
 
-                  {/* Trailing Stop Loss — not implemented yet, keep as visual placeholder */}
-                  <PosActionBtn label="TSL" title="Trailing Stop Loss (coming soon)" className="opacity-40 cursor-not-allowed" />
+                  {/* Trailing Stop Loss — not yet implemented */}
+                  <PosActionBtn label="TSL" title="Trailing Stop Loss — coming soon" className="opacity-40 cursor-not-allowed" />
 
-                  {/* Modify */}
-                  <button className="p-1 rounded hover:bg-fw-hover text-fw-text-secondary hover:text-fw-text transition-colors" title="Modify SL/Target">
+                  {/* Modify — opens SL/TP inputs pre-filled with current avg price */}
+                  <button
+                    onClick={() => {
+                      // Toggle SL input pre-filled with current avg price as a starting point
+                      setSlInput(slInput?.id === pos.id ? null : { id: pos.id, price: String(pos.avgPrice) });
+                      setTpInput(null);
+                    }}
+                    className="p-1 rounded hover:bg-fw-hover text-fw-text-secondary hover:text-fw-accent transition-colors"
+                    title="Modify SL/Target (pre-fills at avg price)"
+                  >
                     <Edit size={12} />
                   </button>
 
-                  {/* Add */}
-                  <button className="p-1 rounded hover:bg-fw-hover text-fw-text-secondary hover:text-fw-text transition-colors" title="Add to position">
+                  {/* Add — pre-fills order panel with same symbol + side to add to position */}
+                  <button
+                    onClick={() => {
+                      setOrderForm({
+                        symbol: pos.symbol,
+                        token: pos.token,
+                        side: pos.qty > 0 ? 'BUY' : 'SELL',
+                        orderType: 'MARKET',
+                        productType: pos.productType as any,
+                        qty: Math.abs(pos.qty),
+                      });
+                      setBottomTab('positions'); // keep panel focused
+                    }}
+                    className="p-1 rounded hover:bg-fw-hover text-fw-text-secondary hover:text-green transition-colors"
+                    title="Add to position (pre-fills order panel)"
+                  >
                     <Plus size={12} />
                   </button>
 

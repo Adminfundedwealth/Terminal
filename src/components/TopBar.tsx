@@ -1,4 +1,4 @@
-import { Search, Moon, Palette, Shield, Zap, TrendingUp, TrendingDown, Activity, Target, AlertTriangle } from 'lucide-react';
+import { Search, Moon, Palette, Shield, Zap, TrendingUp, TrendingDown, Activity, Target, AlertTriangle, Bell } from 'lucide-react';
 import { useAppStore } from '@/store/appStore';
 import { useTradingStore } from '@/store/tradingStore';
 import { useMarketStore } from '@/store/marketStore';
@@ -24,7 +24,7 @@ const PULSE_TOKENS = [
 ];
 
 export function TopBar() {
-  const { theme, setTheme, setSearchOpen, showOptionChain, setShowOptionChain, panels, togglePanel } = useAppStore();
+  const { theme, setTheme, setSearchOpen, showOptionChain, setShowOptionChain, panels, togglePanel, setBottomTab } = useAppStore();
   const account = useTradingStore((s) => s.account);
   const positions = useTradingStore((s) => s.positions);
   const marketStatus = useMarketStore((s) => s.marketStatus);
@@ -146,6 +146,9 @@ export function TopBar() {
               <button key={t.value} onClick={() => setTheme(t.value)} className={cn('px-1.5 py-0.5 rounded text-[9px] font-bold', theme === t.value ? 'bg-fw-accent text-white' : 'text-fw-text-muted hover:text-fw-text')}>{t.label}</button>
             ))}
           </div>
+          <button onClick={() => setBottomTab('alerts')} className="p-1 rounded hover:bg-fw-hover text-fw-text-secondary hover:text-fw-text transition-colors" title="Alerts">
+            <Bell size={13} />
+          </button>
           <button onClick={() => setSearchOpen(true)} className="p-1 rounded hover:bg-fw-hover text-fw-text-secondary hover:text-fw-text" title="Search (Ctrl+K)">
             <Search size={13} />
           </button>

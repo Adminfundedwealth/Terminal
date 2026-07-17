@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useTradingStore } from '@/store/tradingStore';
 import { useAppStore } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
-import { placeOrder } from '@/services/api';
+import { placeOrder, exitPosition } from '@/services/api';
 import { cn, formatPrice } from '@/utils/helpers';
 import { ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
 import type { OrderSide, OrderType, ProductType } from '@/types';
@@ -36,6 +36,11 @@ export function OrderPanel() {
   const symbol = orderForm.symbol || activeSymbol?.symbol || '';
   const token = orderForm.token || activeSymbol?.token || '';
 
+  // Find open position for the current symbol (for EXIT button)
+  const openPosition = useTradingStore.getState().positions.find(
+    (p) => p.symbol === symbol && p.qty !== 0
+  );
+
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 2500); };
 
   // Client-side validation before order submission
@@ -65,7 +70,7 @@ export function OrderPanel() {
     if (!symbol || !token) return;
     setIsSubmitting(true);
     try {
-      await placeOrder({ symbol, token, segment: activeSymbol?.segment || 'NSE', side, orderType: orderForm.orderType, productType: orderForm.productType, qty: orderForm.qty, price: orderForm.orderType === 'LIMIT' || orderForm.orderType === 'SL' ? orderForm.price : undefined, triggerPrice: orderForm.orderType === 'SL' || orderForm.orderType === 'SL-M' ? orderForm.triggerPrice : undefined });
+      await placeOrder({ symbol, token, segment: activeSymbol?.segment || 'NSE', side, orderType: orderForm.orderType, productType: orderForm.productType, qty: orderForm.qty, price: orderForm.orderType === 'LIMIT' || orderForm.orderType === 'SL' ? orderForm.price : undefined, triggerPrice: orderForm.orderType === 'SL' || orderForm.orderType === 'SL-M' ? orderForm.triggerPrice : undefined, validity: orderForm.validity === 'GTD' ? 'GTC' : orderForm.validity, isAmo: orderForm.isAmo });
       showToast(`${side} ${orderForm.qty}×${symbol} placed (paper)`);
     } catch (err: any) { showToast(err.message || 'Order failed — check risk rules'); }
     finally { setIsSubmitting(false); }
@@ -347,7 +352,16 @@ export function OrderPanel() {
             setOrderForm({ validity: orderForm.validity === 'IOC' ? 'DAY' : 'IOC' });
             showToast(orderForm.validity === 'IOC' ? 'Validity: DAY' : 'IOC — Immediate or Cancel');
           }} className={orderForm.validity === 'IOC' ? 'bg-fw-accent/20 text-fw-accent border-fw-accent/30' : ''} />
-          <ActionBtn label="EXIT" onClick={() => showToast('Use position panel to exit')} className="hover:text-red hover:border-red-800/40" />
+          <ActionBtn label="EXIT" onClick={async () => {
+            const pos = useTradingStore.getState().positions.find((p) => p.symbol === symbol && p.qty !== 0);
+            if (!pos) { showToast('No open position to exit'); return; }
+            setIsSubmitting(true);
+            try {
+              await exitPosition(pos.id);
+              showToast(`Exited ${pos.qty > 0 ? 'LONG' : 'SHORT'} ${Math.abs(pos.qty)}×${symbol}`);
+            } catch (err: any) { showToast(err.message || 'Exit failed'); }
+            finally { setIsSubmitting(false); }
+          }} className={cn('hover:text-red hover:border-red-800/40', !openPosition && 'opacity-40 cursor-not-allowed')} />
         </div>
       </div>
 
