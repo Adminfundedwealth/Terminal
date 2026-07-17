@@ -11,16 +11,18 @@ export interface SymbolIconMeta {
 }
 
 const REGISTRY: Record<string, { kind: SymbolIconKind; accent: string; logoSrc?: string }> = {
-  RELIANCE: { kind: 'logo', accent: '#f97316', logoSrc: 'https://logo.clearbit.com/reliance.com' },
-  TCS: { kind: 'logo', accent: '#2563eb', logoSrc: 'https://logo.clearbit.com/tcs.com' },
-  ITC: { kind: 'logo', accent: '#16a34a', logoSrc: 'https://logo.clearbit.com/itcportal.com' },
-  HDFCBANK: { kind: 'logo', accent: '#0ea5e9', logoSrc: 'https://logo.clearbit.com/hdfcbank.com' },
-  ICICIBANK: { kind: 'logo', accent: '#7c3aed', logoSrc: 'https://logo.clearbit.com/icicibank.com' },
-  SBIN: { kind: 'logo', accent: '#dc2626', logoSrc: 'https://logo.clearbit.com/sbi.co.in' },
-  LT: { kind: 'logo', accent: '#0f766e', logoSrc: 'https://logo.clearbit.com/larsentoubro.com' },
-  AXISBANK: { kind: 'logo', accent: '#ef4444', logoSrc: 'https://logo.clearbit.com/axisbank.com' },
-  INFY: { kind: 'logo', accent: '#2563eb', logoSrc: 'https://logo.clearbit.com/infosys.com' },
-  HDFC: { kind: 'logo', accent: '#0078d4', logoSrc: 'https://logo.clearbit.com/hdfc.com' },
+  // Local logo assets served from `/logos/<SYMBOL>.svg` in the `public` directory.
+  // Place high-quality SVG/PNG files at `public/logos/RELIANCE.svg`, etc.
+  RELIANCE: { kind: 'logo', accent: '#f97316', logoSrc: '/logos/RELIANCE.svg' },
+  TCS: { kind: 'logo', accent: '#2563eb', logoSrc: '/logos/TCS.svg' },
+  ITC: { kind: 'logo', accent: '#16a34a', logoSrc: '/logos/ITC.svg' },
+  HDFCBANK: { kind: 'logo', accent: '#0ea5e9', logoSrc: '/logos/HDFCBANK.svg' },
+  ICICIBANK: { kind: 'logo', accent: '#7c3aed', logoSrc: '/logos/ICICIBANK.svg' },
+  SBIN: { kind: 'logo', accent: '#dc2626', logoSrc: '/logos/SBIN.svg' },
+  LT: { kind: 'logo', accent: '#0f766e', logoSrc: '/logos/LT.svg' },
+  AXISBANK: { kind: 'logo', accent: '#ef4444', logoSrc: '/logos/AXISBANK.svg' },
+  INFY: { kind: 'logo', accent: '#2563eb', logoSrc: '/logos/INFY.svg' },
+  HDFC: { kind: 'logo', accent: '#0078d4', logoSrc: '/logos/HDFC.svg' },
   KOTAKBANK: { kind: 'logo', accent: '#f59e0b', logoSrc: 'https://logo.clearbit.com/kotak.com' },
   BAJFINANCE: { kind: 'logo', accent: '#fb923c', logoSrc: 'https://logo.clearbit.com/bajajfinserv.in' },
   MANDM: { kind: 'logo', accent: '#1d4ed8', logoSrc: 'https://logo.clearbit.com/mahindra.com' },
@@ -32,7 +34,7 @@ const REGISTRY: Record<string, { kind: SymbolIconKind; accent: string; logoSrc?:
   ASIANPAINT: { kind: 'logo', accent: '#f43f5e', logoSrc: 'https://logo.clearbit.com/asianpaints.com' },
   HCLTECH: { kind: 'logo', accent: '#0ea5e9', logoSrc: 'https://logo.clearbit.com/hcltech.com' },
   ULTRACEMCO: { kind: 'logo', accent: '#a16207', logoSrc: 'https://logo.clearbit.com/ultratechcement.com' },
-  WIPRO: { kind: 'logo', accent: '#2563eb', logoSrc: 'https://logo.clearbit.com/wipro.com' },
+  WIPRO: { kind: 'logo', accent: '#2563eb', logoSrc: '/logos/WIPRO.svg' },
   CIPLA: { kind: 'logo', accent: '#16a34a', logoSrc: 'https://logo.clearbit.com/cipla.com' },
   TECHM: { kind: 'logo', accent: '#0f766e', logoSrc: 'https://logo.clearbit.com/techmahindra.com' },
   BHARTIARTL: { kind: 'logo', accent: '#8b5cf6', logoSrc: 'https://logo.clearbit.com/bhartiairtel.in' },

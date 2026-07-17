@@ -71,8 +71,8 @@ export function SymbolIcon({ symbol, size = 20, className = '', title }: SymbolI
         src={logoSrc}
         alt={meta.symbol}
         title={title || meta.symbol}
-        className={`rounded-full object-contain ${className}`}
-        style={{ width: size, height: size, minWidth: size, minHeight: size, imageRendering: 'crisp-edges' }}
+        className={`object-contain ${className}`}
+        style={{ width: size, height: size, minWidth: size, minHeight: size, padding: 2, imageRendering: 'crisp-edges' }}
         onError={() => {
           setLogoFailed(true);
           if (logoSrc) setCachedLogo(meta.cacheKey, '');
