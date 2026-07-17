@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 import { apiService } from '@/services/api';
 
@@ -142,12 +142,12 @@ export function CalendarAnalytics() {
                 <div className={`font-bold ${isToday ? 'text-fw-accent' : 'text-fw-text'}`}>{day}</div>
                 {hasTrades && (
                   <>
-                    <div className={`font-mono text-[10px] font-bold mt-0.5 ${isProfit ? 'text-green' : 'text-red'}`}>
+                    <div className={`font-mono text-[14px] font-bold mt-0.5 ${isProfit ? 'text-green' : 'text-red'}`}>
                       {isProfit ? '+' : ''}₹{Math.abs(metric.pnl) >= 1000
                         ? (metric.pnl / 1000).toFixed(1) + 'k'
                         : metric.pnl.toFixed(0)}
                     </div>
-                    <div className="text-fw-text-muted text-[10px]">{metric.trades}T</div>
+                    <div className="text-fw-text-muted text-[14px]">{metric.trades}T</div>
                   </>
                 )}
               </div>

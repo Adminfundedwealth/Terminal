@@ -43,8 +43,8 @@ export function RiskOverlay() {
         {/* Reason */}
         {account.lockedReason && (
           <div className={`rounded-lg px-4 py-3 mb-6 text-left ${isBreached ? 'bg-red-500/10 border border-red-500/30' : 'bg-yellow-500/10 border border-yellow-500/30'}`}>
-            <p className="text-[11px] font-medium text-white/60 mb-1">Reason</p>
-            <p className="text-[12px] text-white/90">{account.lockedReason}</p>
+            <p className="text-[13px] font-medium text-white/60 mb-1">Reason</p>
+            <p className="text-[14px] text-white/90">{account.lockedReason}</p>
           </div>
         )}
 
@@ -63,7 +63,7 @@ export function RiskOverlay() {
           ) : (
             <>
               <div className="px-4 py-3 rounded-lg bg-white/5 border border-white/10">
-                <p className="text-[11px] text-white/50 mb-1">Trading resumes</p>
+                <p className="text-[13px] text-white/50 mb-1">Trading resumes</p>
                 <p className="text-sm text-white/90 font-medium">Next trading day at 9:15 AM IST</p>
               </div>
               <a href="https://fundedwealth.com/dashboard" className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-white/5 border border-white/10 text-white/70 hover:bg-white/10 transition-colors text-sm">

@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
+﻿import { useState, useMemo, useRef, useEffect } from 'react';
 import { Plus, X, Search, Star, Upload } from 'lucide-react';
 import { useAppStore } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
@@ -106,8 +106,8 @@ export function Watchlist() {
       {/* Header — Professional */}
       <div className="px-3 py-2.5 border-b border-fw-border flex items-center justify-between flex-shrink-0 bg-gradient-to-r from-[#10121a] to-[#0e1018]">
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-black text-fw-text uppercase tracking-wider">Watchlist</span>
-          <span className="text-[9px] text-fw-text-muted font-mono">{filteredItems.length}</span>
+          <span className="text-[13px] font-black text-fw-text uppercase tracking-wider">Watchlist</span>
+          <span className="text-[13px] text-fw-text-muted font-mono">{filteredItems.length}</span>
         </div>
         <div className="flex items-center gap-1">
           <button onClick={() => setShowImport(!showImport)} className="p-1.5 text-fw-text-secondary hover:text-fw-text rounded hover:bg-fw-hover transition-colors" title="Import">
@@ -126,7 +126,7 @@ export function Watchlist() {
             key={wl.id}
             onClick={() => setActiveWatchlistTab(wl.id)}
             className={cn(
-              'px-3 py-1.5 text-[9px] font-black whitespace-nowrap border-b-2 transition-all flex-shrink-0 uppercase tracking-wider',
+              'px-3 py-1.5 text-[13px] font-black whitespace-nowrap border-b-2 transition-all flex-shrink-0 uppercase tracking-wider',
               currentWlId === wl.id
                 ? 'text-fw-text border-current bg-white/[0.02]'
                 : 'text-fw-text-muted border-transparent hover:text-fw-text-secondary hover:bg-fw-hover/20'
@@ -147,7 +147,7 @@ export function Watchlist() {
             placeholder="Filter..."
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            className="w-full bg-[#141720] border border-fw-border/50 rounded-md text-[11px] text-fw-text pl-7 pr-2 py-1.5 outline-none focus:border-fw-accent/60 placeholder:text-fw-text-muted"
+            className="w-full bg-[#141720] border border-fw-border/50 rounded-md text-[13px] text-fw-text pl-7 pr-2 py-1.5 outline-none focus:border-fw-accent/60 placeholder:text-fw-text-muted"
           />
         </div>
       </div>
@@ -158,13 +158,32 @@ export function Watchlist() {
           <textarea
             placeholder="RELIANCE, TCS, INFY..."
             value={importText}
-            onChange={(e) => setImportText(e.target.value)}
+            onChange={(e) => { setImportText(e.target.value); setImportStatus(null); }}
             rows={2}
-            className="w-full bg-[#141720] border border-fw-border rounded-md text-[11px] px-2 py-1.5 text-fw-text outline-none focus:border-fw-accent resize-none"
+            className="w-full bg-[#141720] border border-fw-border rounded-md text-[13px] px-2 py-1.5 text-fw-text outline-none focus:border-fw-accent resize-none"
           />
+          {importStatus && (
+            <p className={cn(
+              'text-[14px] font-medium leading-tight',
+              importStatus.includes('not found') ? 'text-orange-400' : 'text-emerald-400'
+            )}>
+              {importStatus}
+            </p>
+          )}
           <div className="flex gap-1">
-            <button onClick={handleImport} className="px-2.5 py-1 text-[10px] bg-fw-accent text-white rounded-md font-semibold">Import</button>
-            <button onClick={() => setShowImport(false)} className="px-2.5 py-1 text-[10px] text-fw-text-secondary border border-fw-border rounded-md">Cancel</button>
+            <button
+              onClick={handleImport}
+              disabled={importing || !importText.trim()}
+              className="px-2.5 py-1 text-[14px] bg-fw-accent text-white rounded-md font-semibold disabled:opacity-50"
+            >
+              {importing ? 'Resolving…' : 'Import'}
+            </button>
+            <button
+              onClick={() => { setShowImport(false); setImportStatus(null); }}
+              className="px-2.5 py-1 text-[14px] text-fw-text-secondary border border-fw-border rounded-md"
+            >
+              Cancel
+            </button>
           </div>
         </div>
       )}
@@ -180,8 +199,8 @@ export function Watchlist() {
       <div className="flex-1 overflow-y-auto min-h-0 scrollbar-none">
         {filteredItems.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-20 text-fw-text-muted">
-            <p className="text-[11px]">No symbols</p>
-            <button onClick={() => setSearchOpen(true)} className="mt-1 text-[10px] text-fw-accent hover:underline">+ Add Symbol</button>
+            <p className="text-[13px]">No symbols</p>
+            <button onClick={() => setSearchOpen(true)} className="mt-1 text-[14px] text-fw-accent hover:underline">+ Add Symbol</button>
           </div>
         ) : (
           filteredItems.map((item) => (
@@ -202,7 +221,7 @@ export function Watchlist() {
       <div className="px-2 py-1.5 border-t border-fw-border flex-shrink-0">
         <button
           onClick={() => setSearchOpen(true)}
-          className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[10px] text-fw-text-muted hover:text-fw-accent rounded-md hover:bg-fw-hover/50 transition-colors font-medium"
+          className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[14px] text-fw-text-muted hover:text-fw-accent rounded-md hover:bg-fw-hover/50 transition-colors font-medium"
         >
           <Plus size={11} /> Add Symbol
         </button>
@@ -253,7 +272,7 @@ function WatchlistRow({ item, isSelected, isPinned, onSelect, onRemove, onPin }:
       <div className="flex items-center gap-1.5 min-w-0">
         {isPinned && <Star size={8} className="text-fw-accent flex-shrink-0 fill-fw-accent" />}
         <div className="flex flex-col min-w-0">
-          <span className={cn('text-[11px] font-bold truncate leading-tight', isSelected ? 'text-fw-text' : 'text-fw-text/90')}>
+          <span className={cn('text-[13px] font-bold truncate leading-tight', isSelected ? 'text-fw-text' : 'text-fw-text/90')}>
             {item.symbol}
           </span>
           <span className="text-[8px] text-fw-text-muted/50 uppercase leading-tight">{item.segment}</span>
@@ -262,7 +281,7 @@ function WatchlistRow({ item, isSelected, isPinned, onSelect, onRemove, onPin }:
 
       {/* LTP */}
       <span className={cn(
-        'text-[12px] font-mono tabular-nums text-right font-bold transition-colors duration-300',
+        'text-[14px] font-mono tabular-nums text-right font-bold transition-colors duration-300',
         quote ? getChangeColor(quote.changePercent) : 'text-fw-text-secondary',
         flash === 'green' && 'animate-[priceFlashGreen_0.6s_ease-out]',
         flash === 'red' && 'animate-[priceFlashRed_0.6s_ease-out]'
@@ -274,13 +293,13 @@ function WatchlistRow({ item, isSelected, isPinned, onSelect, onRemove, onPin }:
       <div className="text-right">
         {quote ? (
           <span className={cn(
-            'text-[9px] font-mono tabular-nums px-1.5 py-[3px] rounded font-bold inline-block min-w-[44px] text-center',
+            'text-[13px] font-mono tabular-nums px-1.5 py-[3px] rounded font-bold inline-block min-w-[44px] text-center',
             (quote.changePercent || 0) >= 0 ? 'text-green bg-green/[0.08]' : 'text-red bg-red/[0.08]'
           )}>
             {(quote.changePercent || 0) >= 0 ? '+' : ''}{(quote.changePercent || 0).toFixed(2)}%
           </span>
         ) : (
-          <span className="text-[9px] text-fw-text-muted/40">—</span>
+          <span className="text-[13px] text-fw-text-muted/40">—</span>
         )}
       </div>
 

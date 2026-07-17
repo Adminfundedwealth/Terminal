@@ -1,4 +1,4 @@
-/**
+﻿/**
  * HOLIDAY BANNER
  * 
  * Shows a banner when market is closed due to holiday or weekend.
@@ -49,14 +49,14 @@ export function HolidayBanner() {
   return (
     <div className="bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/10 border-b border-amber-500/30 px-4 py-2 flex items-center justify-center gap-3 relative">
       <Calendar size={14} className="text-amber-400 flex-shrink-0" />
-      <span className="text-[12px] font-medium text-amber-200">
+      <span className="text-[14px] font-medium text-amber-200">
         {holidayInfo.holidayName
           ? `Market closed — ${holidayInfo.holidayName}`
           : holidayInfo.reason || 'Market is closed'
         }
       </span>
       {holidayInfo.holidayName && (
-        <span className="text-[10px] text-amber-400/70 ml-2">Trading resumes next business day</span>
+        <span className="text-[14px] text-amber-400/70 ml-2">Trading resumes next business day</span>
       )}
       <button
         onClick={() => setDismissed(true)}

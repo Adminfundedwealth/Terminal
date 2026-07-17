@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import { Search, Filter, TrendingUp, TrendingDown, Zap, BarChart3 } from 'lucide-react';
 import { apiService } from '@/services/api';
 import { useAppStore } from '@/store/appStore';
@@ -127,7 +127,7 @@ export function ScannerPanel() {
             <button
               key={s}
               onClick={() => setSegment(s)}
-              className={`text-[10px] px-2 py-0.5 rounded ${segment === s ? 'bg-fw-accent text-white' : 'text-fw-text-secondary hover:bg-fw-hover'}`}
+              className={`text-[14px] px-2 py-0.5 rounded ${segment === s ? 'bg-fw-accent text-white' : 'text-fw-text-secondary hover:bg-fw-hover'}`}
             >
               {s}
             </button>
@@ -143,7 +143,7 @@ export function ScannerPanel() {
             <button
               key={scan.id}
               onClick={() => setActiveScan(scan.id)}
-              className={`flex items-center gap-1 text-[10px] px-2 py-1 rounded border transition-all
+              className={`flex items-center gap-1 text-[14px] px-2 py-1 rounded border transition-all
                 ${activeScan === scan.id
                   ? 'border-fw-accent bg-fw-accent/10 text-fw-accent'
                   : 'border-fw-border text-fw-text-secondary hover:border-fw-text-muted'}`}
@@ -198,7 +198,7 @@ export function ScannerPanel() {
       </div>
 
       {/* Footer */}
-      <div className="px-3 py-1 border-t border-fw-border text-[10px] text-fw-text-muted flex items-center justify-between">
+      <div className="px-3 py-1 border-t border-fw-border text-[14px] text-fw-text-muted flex items-center justify-between">
         <span>{results.length} results</span>
         <button onClick={runScan} className="hover:text-fw-accent">↻ Refresh</button>
       </div>

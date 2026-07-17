@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+﻿import { useEffect, useRef, useState } from 'react';
 import { Activity } from 'lucide-react';
 import { useAppStore } from '@/store/appStore';
 import { wsService } from '@/services/websocket';
@@ -70,13 +70,13 @@ export function TimeAndSales() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setPaused(p => !p)}
-            className={`text-[10px] px-2 py-0.5 rounded border ${paused ? 'border-fw-accent text-fw-accent' : 'border-fw-border text-fw-text-secondary'}`}
+            className={`text-[14px] px-2 py-0.5 rounded border ${paused ? 'border-fw-accent text-fw-accent' : 'border-fw-border text-fw-text-secondary'}`}
           >
             {paused ? '▶ Resume' : '⏸ Pause'}
           </button>
           <button
             onClick={() => setTicks([])}
-            className="text-[10px] px-2 py-0.5 rounded border border-fw-border text-fw-text-secondary hover:border-fw-text-secondary"
+            className="text-[14px] px-2 py-0.5 rounded border border-fw-border text-fw-text-secondary hover:border-fw-text-secondary"
           >
             Clear
           </button>
@@ -84,7 +84,7 @@ export function TimeAndSales() {
       </div>
 
       {/* Column Headers */}
-      <div className="grid grid-cols-4 px-3 py-1 border-b border-fw-border text-[10px] text-fw-text-muted font-bold uppercase">
+      <div className="grid grid-cols-4 px-3 py-1 border-b border-fw-border text-[14px] text-fw-text-muted font-bold uppercase">
         <span>Time</span>
         <span className="text-right">Price</span>
         <span className="text-right">Change</span>
@@ -119,7 +119,7 @@ export function TimeAndSales() {
       </div>
 
       {/* Footer */}
-      <div className="px-3 py-1 border-t border-fw-border text-[10px] text-fw-text-muted">
+      <div className="px-3 py-1 border-t border-fw-border text-[14px] text-fw-text-muted">
         {ticks.length} ticks{paused ? ' (paused)' : ''}
       </div>
     </div>

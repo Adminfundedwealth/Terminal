@@ -1,4 +1,4 @@
-import { useTradingStore } from '@/store/tradingStore';
+﻿import { useTradingStore } from '@/store/tradingStore';
 import { useJournalStore } from '@/store/journalStore';
 import { cn } from '@/utils/helpers';
 import { ShieldAlert, TrendingDown, Target, AlertTriangle, BarChart3, Activity } from 'lucide-react';
@@ -88,12 +88,12 @@ export function RiskPanel() {
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <ShieldAlert size={16} className={riskColor} />
-          <span className="text-[12px] font-bold text-fw-text">Risk Management Dashboard</span>
+          <span className="text-[14px] font-bold text-fw-text">Risk Management Dashboard</span>
         </div>
         <div className={cn('flex items-center gap-2 px-3 py-1 rounded-md', riskBg)}>
-          <span className="text-[10px] text-fw-text-secondary">Risk Score:</span>
+          <span className="text-[14px] text-fw-text-secondary">Risk Score:</span>
           <span className={cn('text-[16px] font-bold font-mono', riskColor)}>{riskScore}</span>
-          <span className={cn('text-[10px] font-semibold', riskColor)}>{riskLevel}</span>
+          <span className={cn('text-[14px] font-semibold', riskColor)}>{riskLevel}</span>
         </div>
       </div>
 
@@ -156,27 +156,27 @@ export function RiskPanel() {
       {/* Streak & Performance */}
       <div className="grid grid-cols-3 gap-2">
         <div className="bg-fw-bg border border-fw-border rounded px-3 py-2">
-          <div className="text-[9px] text-fw-text-secondary uppercase mb-1">Current Streak</div>
+          <div className="text-[13px] text-fw-text-secondary uppercase mb-1">Current Streak</div>
           <div className={cn('text-[14px] font-bold font-mono', streakData.type === 'win' ? 'text-green' : streakData.type === 'loss' ? 'text-red' : 'text-fw-text-secondary')}>
             {streakData.count > 0 ? `${streakData.count} ${streakData.type === 'win' ? 'Wins' : 'Losses'}` : 'No data'}
           </div>
         </div>
         <div className="bg-fw-bg border border-fw-border rounded px-3 py-2">
-          <div className="text-[9px] text-fw-text-secondary uppercase mb-1">Recent (Last 20)</div>
+          <div className="text-[13px] text-fw-text-secondary uppercase mb-1">Recent (Last 20)</div>
           <div className="flex items-center gap-2">
-            <span className="text-[12px] font-mono text-green">{recentWins}W</span>
-            <span className="text-[10px] text-fw-text-secondary">/</span>
-            <span className="text-[12px] font-mono text-red">{recentLosses}L</span>
+            <span className="text-[14px] font-mono text-green">{recentWins}W</span>
+            <span className="text-[14px] text-fw-text-secondary">/</span>
+            <span className="text-[14px] font-mono text-red">{recentLosses}L</span>
           </div>
         </div>
         <div className="bg-fw-bg border border-fw-border rounded px-3 py-2">
-          <div className="text-[9px] text-fw-text-secondary uppercase mb-1">Risk Alerts</div>
+          <div className="text-[13px] text-fw-text-secondary uppercase mb-1">Risk Alerts</div>
           <div className="space-y-0.5">
-            {dailyLossPct >= 80 && <div className="text-[10px] text-red font-medium">⚠ Near daily limit</div>}
-            {drawdownPct >= 80 && <div className="text-[10px] text-red font-medium">⚠ Near max DD</div>}
-            {marginUtilization >= 80 && <div className="text-[10px] text-orange-400 font-medium">⚠ High margin use</div>}
+            {dailyLossPct >= 80 && <div className="text-[14px] text-red font-medium">⚠ Near daily limit</div>}
+            {drawdownPct >= 80 && <div className="text-[14px] text-red font-medium">⚠ Near max DD</div>}
+            {marginUtilization >= 80 && <div className="text-[14px] text-orange-400 font-medium">⚠ High margin use</div>}
             {dailyLossPct < 80 && drawdownPct < 80 && marginUtilization < 80 && (
-              <div className="text-[10px] text-green font-medium">✓ All within limits</div>
+              <div className="text-[14px] text-green font-medium">✓ All within limits</div>
             )}
           </div>
         </div>
@@ -203,9 +203,9 @@ function RiskProgressBar({ label, current, limit, pct, color, icon, formatVal }:
       <div className="flex items-center justify-between mb-1">
         <div className="flex items-center gap-1.5 text-fw-text-secondary">
           {icon}
-          <span className="text-[11px] font-medium">{label}</span>
+          <span className="text-[13px] font-medium">{label}</span>
         </div>
-        <span className={cn('text-[11px] font-mono font-semibold', textColor)}>
+        <span className={cn('text-[13px] font-mono font-semibold', textColor)}>
           {formatVal(current)} / {formatVal(limit)} ({safePct.toFixed(1)}%)
         </span>
       </div>
@@ -223,8 +223,8 @@ function MetricCard({ label, value, color }: { label: string; value: string; col
   const textColor = color === 'green' ? 'text-green' : color === 'red' ? 'text-red' : color === 'orange' ? 'text-orange-400' : 'text-fw-text';
   return (
     <div className="bg-fw-bg border border-fw-border rounded px-2 py-1.5">
-      <div className="text-[9px] text-fw-text-secondary uppercase">{label}</div>
-      <div className={cn('text-[12px] font-bold font-mono truncate', textColor)}>{value}</div>
+      <div className="text-[13px] text-fw-text-secondary uppercase">{label}</div>
+      <div className={cn('text-[14px] font-bold font-mono truncate', textColor)}>{value}</div>
     </div>
   );
 }

@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+﻿import { useState } from 'react';
 import { useTradingStore } from '@/store/tradingStore';
 import { useAppStore } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
-import { placeOrder, exitPosition, getTerminalStatus } from '@/services/api';
+import { placeOrder, exitPosition } from '@/services/api';
 import { cn, formatPrice } from '@/utils/helpers';
 import { orderSuccessMessage, exitSuccessMessage } from '@/utils/orderMessages';
 import { ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
@@ -33,14 +33,6 @@ export function OrderPanel() {
   const [slPrice, setSlPrice] = useState<number>(0);
   const [tpPrice, setTpPrice] = useState<number>(0);
   const [confirmOrder, setConfirmOrder] = useState<{ side: OrderSide } | null>(null);
-  // Track whether the backend is running in paper execution mode
-  const [isPaperMode, setIsPaperMode] = useState(false);
-
-  useEffect(() => {
-    getTerminalStatus()
-      .then((s) => setIsPaperMode(s.executionMode?.isPaper ?? false))
-      .catch(() => {/* non-critical — defaults to false (live) */});
-  }, []);
 
   const symbol = orderForm.symbol || activeSymbol?.symbol || '';
   const token = orderForm.token || activeSymbol?.token || '';
@@ -80,7 +72,7 @@ export function OrderPanel() {
     setIsSubmitting(true);
     try {
       await placeOrder({ symbol, token, segment: activeSymbol?.segment || 'NSE', side, orderType: orderForm.orderType, productType: orderForm.productType, qty: orderForm.qty, price: orderForm.orderType === 'LIMIT' || orderForm.orderType === 'SL' ? orderForm.price : undefined, triggerPrice: orderForm.orderType === 'SL' || orderForm.orderType === 'SL-M' ? orderForm.triggerPrice : undefined, validity: orderForm.validity === 'GTD' ? 'GTC' : orderForm.validity, isAmo: orderForm.isAmo });
-      showToast(orderSuccessMessage({ side, qty: orderForm.qty, symbol, isPaperMode, account }));
+      showToast(orderSuccessMessage({ side, qty: orderForm.qty, symbol }));
     } catch (err: any) { showToast(err.message || 'Order failed — check risk rules'); }
     finally { setIsSubmitting(false); }
   };
@@ -88,8 +80,8 @@ export function OrderPanel() {
   if (!symbol && !activeSymbol) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-2 px-3 py-4 bg-[#0f1118]">
-        <p className="text-[12px] text-fw-text-secondary">Select a symbol</p>
-        <p className="text-[10px] text-fw-text-muted">Ctrl+K to search</p>
+        <p className="text-[14px] text-fw-text-secondary">Select a symbol</p>
+        <p className="text-[14px] text-fw-text-muted">Ctrl+K to search</p>
       </div>
     );
   }
@@ -106,7 +98,7 @@ export function OrderPanel() {
               <AlertTriangle size={16} className={confirmOrder.side === 'BUY' ? 'text-green' : 'text-red'} />
               <span className="text-[13px] font-black text-fw-text">Confirm Order</span>
             </div>
-            <div className="text-[12px] text-fw-text-secondary leading-relaxed">
+            <div className="text-[14px] text-fw-text-secondary leading-relaxed">
               <span className={cn('font-black', confirmOrder.side === 'BUY' ? 'text-green' : 'text-red')}>{confirmOrder.side}</span>
               {' '}{orderForm.qty} × <span className="font-bold text-fw-text">{symbol}</span>
               <br />
@@ -118,14 +110,14 @@ export function OrderPanel() {
             <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={() => setConfirmOrder(null)}
-                className="py-2 rounded-md text-[12px] font-bold bg-fw-bg border border-fw-border text-fw-text-secondary hover:text-fw-text transition-colors"
+                className="py-2 rounded-md text-[14px] font-bold bg-fw-bg border border-fw-border text-fw-text-secondary hover:text-fw-text transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleConfirmSubmit}
                 className={cn(
-                  'py-2 rounded-md text-[12px] font-black text-white transition-all active:scale-[0.98]',
+                  'py-2 rounded-md text-[14px] font-black text-white transition-all active:scale-[0.98]',
                   confirmOrder.side === 'BUY' ? 'bg-[var(--fw-green)]' : 'bg-[var(--fw-red)]'
                 )}
               >
@@ -151,7 +143,7 @@ export function OrderPanel() {
             <span className={cn('text-[16px] font-mono font-black tabular-nums', (quote.changePercent || 0) >= 0 ? 'text-green' : 'text-red')}>
               {formatPrice(quote.ltp)}
             </span>
-            <span className={cn('text-[9px] font-mono tabular-nums px-1 py-0.5 rounded font-bold', (quote.changePercent || 0) >= 0 ? 'text-green bg-green-dim' : 'text-red bg-red-dim')}>
+            <span className={cn('text-[13px] font-mono tabular-nums px-1 py-0.5 rounded font-bold', (quote.changePercent || 0) >= 0 ? 'text-green bg-green-dim' : 'text-red bg-red-dim')}>
               {(quote.changePercent || 0) >= 0 ? '+' : ''}{(quote.changePercent || 0).toFixed(2)}%
             </span>
           </div>
@@ -162,15 +154,15 @@ export function OrderPanel() {
       {selectedContract && activeSymbol?.segment === 'NFO' && (
         <div className="px-3 py-1.5 border-b border-fw-accent/20 bg-fw-accent/[0.03] flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-2">
-            <span className="text-[9px] font-bold text-fw-accent uppercase">Option</span>
-            <span className="text-[11px] font-bold text-fw-text">{selectedContract.underlying}</span>
-            <span className="text-[11px] font-mono font-bold text-fw-text">{selectedContract.strike}</span>
-            <span className={cn('text-[9px] font-black px-1.5 py-0.5 rounded', selectedContract.optionType === 'CE' ? 'bg-green-900/20 text-green' : 'bg-red-900/20 text-red')}>
+            <span className="text-[13px] font-bold text-fw-accent uppercase">Option</span>
+            <span className="text-[13px] font-bold text-fw-text">{selectedContract.underlying}</span>
+            <span className="text-[13px] font-mono font-bold text-fw-text">{selectedContract.strike}</span>
+            <span className={cn('text-[13px] font-black px-1.5 py-0.5 rounded', selectedContract.optionType === 'CE' ? 'bg-green-900/20 text-green' : 'bg-red-900/20 text-red')}>
               {selectedContract.optionType}
             </span>
-            <span className="text-[9px] text-fw-text-muted font-mono">{selectedContract.expiry}</span>
+            <span className="text-[13px] text-fw-text-muted font-mono">{selectedContract.expiry}</span>
           </div>
-          <span className="text-[9px] text-fw-text-muted">Lot: {selectedContract.lotSize}</span>
+          <span className="text-[13px] text-fw-text-muted">Lot: {selectedContract.lotSize}</span>
         </div>
       )}
 
@@ -210,7 +202,7 @@ export function OrderPanel() {
               key={ot.value}
               onClick={() => setOrderForm({ orderType: ot.value })}
               className={cn(
-                'flex-1 py-1.5 text-[11px] font-bold rounded-md transition-all',
+                'flex-1 py-1.5 text-[13px] font-bold rounded-md transition-all',
                 orderForm.orderType === ot.value
                   ? 'bg-fw-accent text-white shadow-sm'
                   : 'bg-[#141720] text-fw-text-secondary border border-fw-border/60 hover:text-fw-text hover:border-fw-text-muted'
@@ -230,7 +222,7 @@ export function OrderPanel() {
               key={pt.value}
               onClick={() => setOrderForm({ productType: pt.value })}
               className={cn(
-                'flex-1 py-1.5 text-[11px] font-bold rounded-md transition-all',
+                'flex-1 py-1.5 text-[13px] font-bold rounded-md transition-all',
                 orderForm.productType === pt.value
                   ? 'bg-fw-surface-2 text-fw-text border border-fw-accent/40'
                   : 'bg-[#141720] text-fw-text-muted border border-fw-border/40 hover:text-fw-text-secondary'
@@ -244,7 +236,7 @@ export function OrderPanel() {
 
       {/* Quantity — Larger, more prominent */}
       <div className="px-3 pb-2 flex-shrink-0">
-        <label className="text-[10px] text-fw-text-muted uppercase font-semibold tracking-wider mb-1 block">
+        <label className="text-[14px] text-fw-text-muted uppercase font-semibold tracking-wider mb-1 block">
           Qty {lotSize > 1 && <span className="text-fw-accent">× {lotSize} lot</span>}
         </label>
         <div className="flex items-center gap-1">
@@ -274,7 +266,7 @@ export function OrderPanel() {
               key={q}
               onClick={() => setOrderForm({ qty: q * (lotSize > 1 ? lotSize : 1) })}
               className={cn(
-                'py-1 text-[10px] rounded-md font-bold tabular-nums transition-colors',
+                'py-1 text-[14px] rounded-md font-bold tabular-nums transition-colors',
                 orderForm.qty === q * (lotSize > 1 ? lotSize : 1)
                   ? 'bg-fw-accent/20 text-fw-accent border border-fw-accent/30'
                   : 'bg-[#141720] border border-fw-border/40 text-fw-text-muted hover:text-fw-text'
@@ -289,7 +281,7 @@ export function OrderPanel() {
       {/* Price fields — only when needed */}
       {(orderForm.orderType === 'LIMIT' || orderForm.orderType === 'SL') && (
         <div className="px-3 pb-2 flex-shrink-0">
-          <label className="text-[10px] text-fw-text-muted uppercase font-semibold tracking-wider mb-1 block">Price</label>
+          <label className="text-[14px] text-fw-text-muted uppercase font-semibold tracking-wider mb-1 block">Price</label>
           <input
             type="number"
             value={orderForm.price || ''}
@@ -301,7 +293,7 @@ export function OrderPanel() {
       )}
       {(orderForm.orderType === 'SL' || orderForm.orderType === 'SL-M') && (
         <div className="px-3 pb-2 flex-shrink-0">
-          <label className="text-[10px] text-fw-text-muted uppercase font-semibold tracking-wider mb-1 block">Trigger Price</label>
+          <label className="text-[14px] text-fw-text-muted uppercase font-semibold tracking-wider mb-1 block">Trigger Price</label>
           <input
             type="number"
             value={orderForm.triggerPrice || ''}
@@ -315,7 +307,7 @@ export function OrderPanel() {
       <div className="px-3 pb-2 flex-shrink-0">
         <button
           onClick={() => setShowAdvanced(!showAdvanced)}
-          className="flex items-center gap-1 text-[10px] text-fw-text-muted hover:text-fw-text-secondary transition-colors"
+          className="flex items-center gap-1 text-[14px] text-fw-text-muted hover:text-fw-text-secondary transition-colors"
         >
           {showAdvanced ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
           <span className="font-semibold uppercase tracking-wider">SL / Target</span>
@@ -323,23 +315,23 @@ export function OrderPanel() {
         {showAdvanced && (
           <div className="grid grid-cols-2 gap-2 mt-1.5">
             <div>
-              <label className="text-[9px] text-red font-bold uppercase">Stop Loss</label>
+              <label className="text-[13px] text-red font-bold uppercase">Stop Loss</label>
               <input
                 type="number"
                 value={slPrice || ''}
                 onChange={(e) => setSlPrice(parseFloat(e.target.value) || 0)}
                 placeholder="0.00"
-                className="w-full h-8 bg-[#141720] border border-red-900/30 rounded-md font-mono text-[12px] text-fw-text px-2 outline-none focus:border-red tabular-nums mt-0.5"
+                className="w-full h-8 bg-[#141720] border border-red-900/30 rounded-md font-mono text-[14px] text-fw-text px-2 outline-none focus:border-red tabular-nums mt-0.5"
               />
             </div>
             <div>
-              <label className="text-[9px] text-green font-bold uppercase">Target</label>
+              <label className="text-[13px] text-green font-bold uppercase">Target</label>
               <input
                 type="number"
                 value={tpPrice || ''}
                 onChange={(e) => setTpPrice(parseFloat(e.target.value) || 0)}
                 placeholder="0.00"
-                className="w-full h-8 bg-[#141720] border border-green-900/30 rounded-md font-mono text-[12px] text-fw-text px-2 outline-none focus:border-green tabular-nums mt-0.5"
+                className="w-full h-8 bg-[#141720] border border-green-900/30 rounded-md font-mono text-[14px] text-fw-text px-2 outline-none focus:border-green tabular-nums mt-0.5"
               />
             </div>
           </div>
@@ -367,7 +359,7 @@ export function OrderPanel() {
             setIsSubmitting(true);
             try {
               await exitPosition(pos.id);
-              showToast(exitSuccessMessage({ side: pos.qty > 0 ? 'LONG' : 'SHORT', qty: Math.abs(pos.qty), symbol, isPaperMode, account }));
+              showToast(exitSuccessMessage({ side: pos.qty > 0 ? 'LONG' : 'SHORT', qty: Math.abs(pos.qty), symbol }));
             } catch (err: any) { showToast(err.message || 'Exit failed'); }
             finally { setIsSubmitting(false); }
           }} className={cn('hover:text-red hover:border-red-800/40', !openPosition && 'opacity-40 cursor-not-allowed')} />
@@ -379,14 +371,14 @@ export function OrderPanel() {
 
       {/* Toast */}
       {toast && (
-        <div className="mx-3 mb-2 px-3 py-1.5 rounded-md text-[11px] font-medium bg-orange-900/20 text-orange-300 border border-orange-800/30 animate-slide-up">
+        <div className="mx-3 mb-2 px-3 py-1.5 rounded-md text-[13px] font-medium bg-orange-900/20 text-orange-300 border border-orange-800/30 animate-slide-up">
           {toast}
         </div>
       )}
 
       {/* Margin / Risk Context */}
       <div className="px-3 py-2 border-t border-fw-border/30 bg-[#090b10] flex-shrink-0">
-        <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[9px]">
+        <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[13px]">
           <div className="flex items-center justify-between">
             <span className="text-fw-text-muted">Est. Margin</span>
             <span className="font-mono text-fw-text-secondary tabular-nums">₹{quote ? formatPrice(quote.ltp * orderForm.qty * 0.15) : '—'}</span>
@@ -426,8 +418,8 @@ export function OrderPanel() {
         </div>
         {/* Keyboard hint */}
         <div className="flex items-center justify-center gap-3 mt-1.5">
-          <span className="text-[9px] text-fw-text-muted"><kbd className="px-1 py-0.5 bg-fw-bg border border-fw-border rounded text-[8px] font-mono">B</kbd> Buy</span>
-          <span className="text-[9px] text-fw-text-muted"><kbd className="px-1 py-0.5 bg-fw-bg border border-fw-border rounded text-[8px] font-mono">S</kbd> Sell</span>
+          <span className="text-[13px] text-fw-text-muted"><kbd className="px-1 py-0.5 bg-fw-bg border border-fw-border rounded text-[8px] font-mono">B</kbd> Buy</span>
+          <span className="text-[13px] text-fw-text-muted"><kbd className="px-1 py-0.5 bg-fw-bg border border-fw-border rounded text-[8px] font-mono">S</kbd> Sell</span>
         </div>
       </div>
     </div>
@@ -439,7 +431,7 @@ function ActionBtn({ label, onClick, className }: { label: string; onClick: () =
     <button
       onClick={onClick}
       className={cn(
-        'py-1.5 rounded-md text-[10px] font-bold bg-[#141720] border border-fw-border/50 text-fw-text-secondary hover:text-fw-text transition-colors cursor-pointer',
+        'py-1.5 rounded-md text-[14px] font-bold bg-[#141720] border border-fw-border/50 text-fw-text-secondary hover:text-fw-text transition-colors cursor-pointer',
         className
       )}
     >

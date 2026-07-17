@@ -95,7 +95,7 @@ body,
   color: var(--fw-text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.4;
 }
 
@@ -179,7 +179,7 @@ header [data-brand] {
 .fw-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .fw-table th {
@@ -187,7 +187,7 @@ header [data-brand] {
   padding: 6px 10px;
   color: var(--fw-text-secondary);
   font-weight: 700;
-  font-size: 10px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   border-bottom: 1px solid var(--fw-border);
@@ -200,7 +200,7 @@ header [data-brand] {
 
 .fw-table td {
   padding: 5px 10px;
-  font-size: 12px;
+  font-size: 14px;
   border-bottom: 1px solid rgba(38, 42, 54, 0.3);
   white-space: nowrap;
   font-feature-settings: "tnum";
@@ -395,7 +395,7 @@ header [data-brand] {
   .fw-table th,
   .fw-table td {
     padding: 6px 8px;
-    font-size: 11px;
+    font-size: 13px;
   }
 }
 
@@ -570,7 +570,7 @@ button, [role="button"] {
   gap: 4px;
   padding: 3px 8px;
   border-radius: 4px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.02em;
   line-height: 1;
@@ -616,7 +616,7 @@ button, [role="button"] {
   padding: 1px 5px;
   border-radius: 3px;
   font-family: 'Roboto Mono', ui-monospace, monospace;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }

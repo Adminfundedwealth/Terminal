@@ -38,7 +38,7 @@ export function AccessDenied({ error }: AccessDeniedProps) {
           <span className="text-[16px] font-extrabold tracking-wide bg-gradient-to-r from-[#00D4FF] via-[#4F46E5] to-[#7C3AED] bg-clip-text text-transparent">
             FUNDEDWEALTH
           </span>
-          <span className="text-[11px] font-bold tracking-[0.25em] text-fw-accent/70">
+          <span className="text-[13px] font-bold tracking-[0.25em] text-fw-accent/70">
             TERMINAL
           </span>
         </div>
@@ -69,7 +69,7 @@ export function AccessDenied({ error }: AccessDeniedProps) {
         </a>
 
         {/* Info */}
-        <p className="text-[11px] text-fw-text-muted/60">
+        <p className="text-[13px] text-fw-text-muted/60">
           You can access the Terminal by clicking "Launch Terminal" from your Dashboard after logging in.
         </p>
       </div>

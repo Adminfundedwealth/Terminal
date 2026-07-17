@@ -110,9 +110,9 @@ const SYSTEM_THEMES: ThemeConfig[] = [DARK_PRO, MIDNIGHT_BLUE, LIGHT_PRO, HIGH_C
 // ─── Density Spacing ──────────────────────────────────────────────────────────
 
 const DENSITY_VARS: Record<DensityMode, Record<string, string>> = {
-  compact: { '--fw-spacing-xs': '2px', '--fw-spacing-sm': '4px', '--fw-spacing-md': '6px', '--fw-spacing-lg': '8px', '--fw-spacing-xl': '12px', '--fw-font-size-base': '11px', '--fw-line-height': '1.3' },
-  normal: { '--fw-spacing-xs': '4px', '--fw-spacing-sm': '6px', '--fw-spacing-md': '8px', '--fw-spacing-lg': '12px', '--fw-spacing-xl': '16px', '--fw-font-size-base': '13px', '--fw-line-height': '1.4' },
-  comfortable: { '--fw-spacing-xs': '6px', '--fw-spacing-sm': '8px', '--fw-spacing-md': '12px', '--fw-spacing-lg': '16px', '--fw-spacing-xl': '24px', '--fw-font-size-base': '14px', '--fw-line-height': '1.5' },
+  compact: { '--fw-spacing-xs': '2px', '--fw-spacing-sm': '4px', '--fw-spacing-md': '6px', '--fw-spacing-lg': '8px', '--fw-spacing-xl': '12px', '--fw-font-size-base': '13px', '--fw-line-height': '1.3' },
+  normal: { '--fw-spacing-xs': '4px', '--fw-spacing-sm': '6px', '--fw-spacing-md': '8px', '--fw-spacing-lg': '12px', '--fw-spacing-xl': '16px', '--fw-font-size-base': '14px', '--fw-line-height': '1.4' },
+  comfortable: { '--fw-spacing-xs': '6px', '--fw-spacing-sm': '8px', '--fw-spacing-md': '12px', '--fw-spacing-lg': '16px', '--fw-spacing-xl': '24px', '--fw-font-size-base': '15px', '--fw-line-height': '1.5' },
 };
 
 // ─── Trading Profile Presets ──────────────────────────────────────────────────
@@ -238,7 +238,7 @@ export const useThemeStore = create<ThemeState>()(
       },
 
       setFontSize: (size) => {
-        const sizeMap: Record<FontSize, string> = { xs: '11px', sm: '12px', md: '13px', lg: '14px' };
+        const sizeMap: Record<FontSize, string> = { xs: '13px', sm: '14px', md: '14px', lg: '15px' };
         document.documentElement.style.setProperty('--fw-font-size-base', sizeMap[size]);
         set({ fontSize: size });
       },

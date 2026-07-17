@@ -1,4 +1,4 @@
-import { useAppStore } from '@/store/appStore';
+﻿import { useAppStore } from '@/store/appStore';
 import { useDepth } from '@/hooks/useMarketData';
 import { useMarketStore } from '@/store/marketStore';
 import { useTradingStore } from '@/store/tradingStore';
@@ -39,8 +39,8 @@ export function MarketDepthPanel() {
       <div className="flex items-center justify-between px-3 py-2 border-b border-fw-border bg-gradient-to-r from-[#10121a] to-[#0e1018] flex-shrink-0">
         <div className="flex items-center gap-1.5">
           <Layers size={12} className="text-fw-accent" />
-          <span className="text-[10px] font-black text-fw-text uppercase tracking-wider">Depth</span>
-          {activeSymbol && <span className="text-[9px] text-fw-text-muted font-mono ml-1">{activeSymbol.symbol}</span>}
+          <span className="text-[14px] font-black text-fw-text uppercase tracking-wider">Depth</span>
+          {activeSymbol && <span className="text-[13px] text-fw-text-muted font-mono ml-1">{activeSymbol.symbol}</span>}
         </div>
         {quote && (
           <span className={cn('text-[13px] font-mono font-black tabular-nums', (quote.changePercent || 0) >= 0 ? 'text-green' : 'text-red')}>
@@ -53,13 +53,13 @@ export function MarketDepthPanel() {
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-fw-border/30 bg-[#0b0d12] flex-shrink-0">
         <div className="flex items-center gap-1">
           <ArrowUpDown size={9} className="text-fw-text-muted" />
-          <span className="text-[9px] text-fw-text-muted">Spread:</span>
-          <span className="text-[10px] font-mono font-bold text-fw-text tabular-nums">{spread > 0 ? formatPrice(spread) : '—'}</span>
+          <span className="text-[13px] text-fw-text-muted">Spread:</span>
+          <span className="text-[14px] font-mono font-bold text-fw-text tabular-nums">{spread > 0 ? formatPrice(spread) : '—'}</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-[9px] font-mono text-green tabular-nums font-bold">{fmtQty(totalBid)}</span>
+          <span className="text-[13px] font-mono text-green tabular-nums font-bold">{fmtQty(totalBid)}</span>
           <span className="text-[8px] text-fw-text-muted">vs</span>
-          <span className="text-[9px] font-mono text-red tabular-nums font-bold">{fmtQty(totalAsk)}</span>
+          <span className="text-[13px] font-mono text-red tabular-nums font-bold">{fmtQty(totalAsk)}</span>
         </div>
       </div>
 
@@ -76,8 +76,8 @@ export function MarketDepthPanel() {
         {!hasData ? (
           <div className="flex flex-col items-center justify-center h-full gap-2 py-4">
             <Layers size={20} className="text-fw-text-muted/20" />
-            <span className="text-[10px] text-fw-text-muted">Waiting for depth data</span>
-            <span className="text-[9px] text-fw-text-muted/60">Click price to set order</span>
+            <span className="text-[14px] text-fw-text-muted">Waiting for depth data</span>
+            <span className="text-[13px] text-fw-text-muted/60">Click price to set order</span>
           </div>
         ) : (
           [0, 1, 2, 3, 4].map((i) => {
@@ -98,19 +98,19 @@ export function MarketDepthPanel() {
                 </div>
 
                 {/* Bid Qty */}
-                <div className="relative text-right pr-2 text-[11px] font-mono tabular-nums text-green/80 font-bold cursor-pointer hover:text-green transition-colors" onClick={() => bid && setOrderForm({ price: bid.price, side: 'BUY', orderType: 'LIMIT' })}>
+                <div className="relative text-right pr-2 text-[13px] font-mono tabular-nums text-green/80 font-bold cursor-pointer hover:text-green transition-colors" onClick={() => bid && setOrderForm({ price: bid.price, side: 'BUY', orderType: 'LIMIT' })}>
                   {bid ? fmtQty(bid.qty) : <span className="text-fw-text-muted/30">—</span>}
                 </div>
                 {/* Bid Price */}
-                <div className={cn('relative text-center text-[11px] font-mono tabular-nums font-bold cursor-pointer hover:text-green transition-colors', i === 0 ? 'text-green' : 'text-fw-text/80')} onClick={() => bid && setOrderForm({ price: bid.price, side: 'BUY', orderType: 'LIMIT' })}>
+                <div className={cn('relative text-center text-[13px] font-mono tabular-nums font-bold cursor-pointer hover:text-green transition-colors', i === 0 ? 'text-green' : 'text-fw-text/80')} onClick={() => bid && setOrderForm({ price: bid.price, side: 'BUY', orderType: 'LIMIT' })}>
                   {bid ? formatPrice(bid.price) : <span className="text-fw-text-muted/30">—</span>}
                 </div>
                 {/* Ask Price */}
-                <div className={cn('relative text-center text-[11px] font-mono tabular-nums font-bold cursor-pointer hover:text-red transition-colors', i === 0 ? 'text-red' : 'text-fw-text/80')} onClick={() => ask && setOrderForm({ price: ask.price, side: 'SELL', orderType: 'LIMIT' })}>
+                <div className={cn('relative text-center text-[13px] font-mono tabular-nums font-bold cursor-pointer hover:text-red transition-colors', i === 0 ? 'text-red' : 'text-fw-text/80')} onClick={() => ask && setOrderForm({ price: ask.price, side: 'SELL', orderType: 'LIMIT' })}>
                   {ask ? formatPrice(ask.price) : <span className="text-fw-text-muted/30">—</span>}
                 </div>
                 {/* Ask Qty */}
-                <div className="relative text-left pl-2 text-[11px] font-mono tabular-nums text-red/80 font-bold cursor-pointer hover:text-red transition-colors" onClick={() => ask && setOrderForm({ price: ask.price, side: 'SELL', orderType: 'LIMIT' })}>
+                <div className="relative text-left pl-2 text-[13px] font-mono tabular-nums text-red/80 font-bold cursor-pointer hover:text-red transition-colors" onClick={() => ask && setOrderForm({ price: ask.price, side: 'SELL', orderType: 'LIMIT' })}>
                   {ask ? fmtQty(ask.qty) : <span className="text-fw-text-muted/30">—</span>}
                 </div>
               </div>
@@ -121,7 +121,7 @@ export function MarketDepthPanel() {
 
       {/* Pressure Bar — Full Width */}
       <div className="border-t border-fw-border bg-[#0b0d14] px-3 py-2 flex-shrink-0">
-        <div className="flex items-center justify-between text-[9px] mb-1">
+        <div className="flex items-center justify-between text-[13px] mb-1">
           <span className="font-mono text-green font-bold">{bidPct.toFixed(0)}% Buy</span>
           <span className="font-mono text-red font-bold">{(100 - bidPct).toFixed(0)}% Sell</span>
         </div>

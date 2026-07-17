@@ -34,7 +34,7 @@ export default {
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
       },
       fontSize: {
-        'xxs': '10px',
+        'xxs': '11px',
       },
       animation: {
         'fade-in': 'fadeIn 0.15s ease-out',

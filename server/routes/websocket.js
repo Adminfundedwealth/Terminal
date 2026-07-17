@@ -17,7 +17,7 @@ import { AuditLogger } from '../services/auditLogger.js';
 const WS_MAX_MESSAGES_PER_SECOND = 30;
 const WS_MAX_SUBSCRIPTIONS = 200;
 
-export function setupWebSocket(wss, marketDataEngine) {
+export function setupWebSocket(wss, marketDataEngine, angelFeed = null) {
   console.log('[WebSocket] Server initialized (production mode — auth enforced)');
 
   wss.on('connection', (ws, request) => {
@@ -60,7 +60,7 @@ export function setupWebSocket(wss, marketDataEngine) {
 
       try {
         const data = JSON.parse(message.toString());
-        handleMessage(ws, data, subscriptions, depthSubscriptions, marketDataEngine);
+        handleMessage(ws, data, subscriptions, depthSubscriptions, marketDataEngine, angelFeed);
       } catch (err) {
         // Don't log parse errors to console in production (DoS via log spam)
       }
@@ -95,7 +95,7 @@ export function setupWebSocket(wss, marketDataEngine) {
   }, 30000);
 }
 
-function handleMessage(ws, data, subscriptions, depthSubscriptions, marketDataEngine) {
+function handleMessage(ws, data, subscriptions, depthSubscriptions, marketDataEngine, angelFeed = null) {
   switch (data.type) {
     case 'subscribe': {
       const tokens = data.tokens || [];
@@ -138,6 +138,7 @@ function handleMessage(ws, data, subscriptions, depthSubscriptions, marketDataEn
         ws.send(JSON.stringify({ type: 'error', message: `Max ${WS_MAX_SUBSCRIPTIONS} depth subscriptions.` }));
         return;
       }
+      const newDepthTokens = []; // collect for mode 3 upgrade
       tokens.forEach((token) => {
         if (depthSubscriptions.has(token)) return;
         if (!token || typeof token !== 'string' || token.length > 30 || !/^[A-Za-z0-9_]{1,30}$/.test(token)) return;
@@ -149,7 +150,25 @@ function handleMessage(ws, data, subscriptions, depthSubscriptions, marketDataEn
         };
         depthSubscriptions.set(token, callback);
         marketDataEngine.subscribeDepth(token, callback);
+        newDepthTokens.push(token);
       });
+
+      // Upgrade these tokens to mode 3 (SnapQuote) on the Angel One feed
+      // so the broker actually streams bid/ask depth ticks for them.
+      // Indices (token starts with '999') have no order book — skip them.
+      if (angelFeed && newDepthTokens.length > 0) {
+        const depthEligible = newDepthTokens
+          .filter(t => !t.startsWith('999'))
+          .map(t => {
+            const quote = marketDataEngine.getQuote(t);
+            return { token: t, exchange: quote?.exchange || 'NSE' };
+          });
+        if (depthEligible.length > 0) {
+          try { angelFeed.upgradeSubscription(depthEligible, 3); } catch (e) {
+            console.warn('[WebSocket] mode-3 upgrade failed:', e.message);
+          }
+        }
+      }
       break;
     }
 

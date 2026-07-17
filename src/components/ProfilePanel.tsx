@@ -1,4 +1,4 @@
-/**
+﻿/**
  * PROFILE PANEL
  * 
  * Displays user info, account details, and challenge status.
@@ -79,11 +79,11 @@ export function ProfilePanel({ onClose }: ProfilePanelProps) {
             <span className="text-[15px] font-black text-fw-text truncate">
               {account?.name || account?.displayName || 'Trader'}
             </span>
-            <span className="text-[11px] text-fw-text-muted truncate">
+            <span className="text-[13px] text-fw-text-muted truncate">
               {account?.email || 'terminal@fundedwealth.com'}
             </span>
           </div>
-          <div className={cn('ml-auto flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[11px] font-black', phaseColor)}>
+          <div className={cn('ml-auto flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[13px] font-black', phaseColor)}>
             <Shield size={11} />
             {phase}
           </div>
@@ -91,12 +91,12 @@ export function ProfilePanel({ onClose }: ProfilePanelProps) {
 
         {/* Account Details */}
         <div className="px-5 py-4 flex flex-col gap-3 border-b border-fw-border/30">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-fw-text-muted">Account Details</p>
+          <p className="text-[14px] font-bold uppercase tracking-wider text-fw-text-muted">Account Details</p>
 
           <div className="grid grid-cols-2 gap-3">
             <InfoRow label="Account Code">
               <div className="flex items-center gap-1.5">
-                <span className="font-mono font-bold text-fw-text text-[12px]">
+                <span className="font-mono font-bold text-fw-text text-[14px]">
                   {account?.accountCode || '—'}
                 </span>
                 {account?.accountCode && (
@@ -112,20 +112,20 @@ export function ProfilePanel({ onClose }: ProfilePanelProps) {
             </InfoRow>
 
             <InfoRow label="Broker">
-              <span className="text-[12px] font-bold text-fw-text">
+              <span className="text-[14px] font-bold text-fw-text">
                 FundedWealth
               </span>
             </InfoRow>
 
             <InfoRow label="Balance">
-              <span className="text-[12px] font-mono font-bold text-fw-text">
+              <span className="text-[14px] font-mono font-bold text-fw-text">
                 ₹{account?.balance ? formatCompact(account.balance) : '—'}
               </span>
             </InfoRow>
 
             <InfoRow label="Status">
               <span className={cn(
-                'text-[11px] font-bold capitalize',
+                'text-[13px] font-bold capitalize',
                 account?.status === 'active' ? 'text-emerald-400' : 'text-red-400'
               )}>
                 {account?.status || 'Active'}
@@ -137,7 +137,7 @@ export function ProfilePanel({ onClose }: ProfilePanelProps) {
         {/* Challenge Limits */}
         {account?.challenge && (
           <div className="px-5 py-4 border-b border-fw-border/30">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-fw-text-muted mb-3">
+            <p className="text-[14px] font-bold uppercase tracking-wider text-fw-text-muted mb-3">
               Challenge Rules
             </p>
             <div className="grid grid-cols-3 gap-3">
@@ -165,7 +165,7 @@ export function ProfilePanel({ onClose }: ProfilePanelProps) {
           <button
             onClick={handleLogout}
             disabled={loggingOut}
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-red-800/40 bg-red-900/10 text-red-400 hover:bg-red-900/20 hover:border-red-700/60 text-[12px] font-bold transition-all disabled:opacity-50"
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-red-800/40 bg-red-900/10 text-red-400 hover:bg-red-900/20 hover:border-red-700/60 text-[14px] font-bold transition-all disabled:opacity-50"
           >
             <LogOut size={14} />
             {loggingOut ? 'Logging out...' : 'Logout'}
@@ -179,7 +179,7 @@ export function ProfilePanel({ onClose }: ProfilePanelProps) {
 function InfoRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="text-[10px] text-fw-text-muted font-semibold">{label}</span>
+      <span className="text-[14px] text-fw-text-muted font-semibold">{label}</span>
       {children}
     </div>
   );
@@ -189,7 +189,7 @@ function ChallengeMetric({ label, value, color }: { label: string; value: string
   return (
     <div className="flex flex-col items-center gap-1 bg-[#0e1018] rounded-lg px-3 py-2.5 border border-fw-border/30">
       <span className={cn('text-[15px] font-black font-mono tabular-nums', color)}>{value}</span>
-      <span className="text-[9px] text-fw-text-muted text-center leading-tight">{label}</span>
+      <span className="text-[13px] text-fw-text-muted text-center leading-tight">{label}</span>
     </div>
   );
 }

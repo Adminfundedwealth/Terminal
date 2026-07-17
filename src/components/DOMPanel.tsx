@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useAppStore } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
 import { useTradingStore } from '@/store/tradingStore';
@@ -63,7 +63,7 @@ export function DOMPanel() {
     <div className="h-full flex flex-col bg-[#0a0c12] select-none">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-fw-border bg-[#10121a] flex-shrink-0">
-        <span className="text-[11px] font-bold text-fw-text-secondary uppercase tracking-wider">20-Level DOM</span>
+        <span className="text-[13px] font-bold text-fw-text-secondary uppercase tracking-wider">20-Level DOM</span>
         {quote && (
           <span className={cn('font-mono font-black text-[14px] tabular-nums', (quote.changePercent || 0) >= 0 ? 'text-green' : 'text-red')}>
             {formatPrice(quote.ltp)}
@@ -100,7 +100,7 @@ export function DOMPanel() {
 
               {/* Bid Qty */}
               <div
-                className="relative text-right pr-2 text-[11px] font-mono tabular-nums text-green/70 font-semibold cursor-pointer hover:text-green"
+                className="relative text-right pr-2 text-[13px] font-mono tabular-nums text-green/70 font-semibold cursor-pointer hover:text-green"
                 onClick={() => bid && setOrderForm({ price: bid.price, side: 'BUY' })}
               >
                 {bid ? fmtQty(bid.qty) : '—'}
@@ -109,7 +109,7 @@ export function DOMPanel() {
 
               {/* Bid Price */}
               <div
-                className={cn('relative text-center text-[11px] font-mono tabular-nums font-bold cursor-pointer hover:text-green', i === 0 ? 'text-green' : 'text-fw-text/80')}
+                className={cn('relative text-center text-[13px] font-mono tabular-nums font-bold cursor-pointer hover:text-green', i === 0 ? 'text-green' : 'text-fw-text/80')}
                 onClick={() => bid && setOrderForm({ price: bid.price, side: 'BUY' })}
               >
                 {bid ? formatPrice(bid.price) : '—'}
@@ -117,7 +117,7 @@ export function DOMPanel() {
 
               {/* Ask Price */}
               <div
-                className={cn('relative text-center text-[11px] font-mono tabular-nums font-bold cursor-pointer hover:text-red', i === 0 ? 'text-red' : 'text-fw-text/80')}
+                className={cn('relative text-center text-[13px] font-mono tabular-nums font-bold cursor-pointer hover:text-red', i === 0 ? 'text-red' : 'text-fw-text/80')}
                 onClick={() => ask && setOrderForm({ price: ask.price, side: 'SELL' })}
               >
                 {ask ? formatPrice(ask.price) : '—'}
@@ -125,7 +125,7 @@ export function DOMPanel() {
 
               {/* Ask Qty */}
               <div
-                className="relative text-left pl-2 text-[11px] font-mono tabular-nums text-red/70 font-semibold cursor-pointer hover:text-red"
+                className="relative text-left pl-2 text-[13px] font-mono tabular-nums text-red/70 font-semibold cursor-pointer hover:text-red"
                 onClick={() => ask && setOrderForm({ price: ask.price, side: 'SELL' })}
               >
                 {ask ? fmtQty(ask.qty) : '—'}
@@ -138,9 +138,9 @@ export function DOMPanel() {
 
       {/* Totals + Pressure Bar */}
       <div className="border-t border-fw-border bg-[#10121a] px-3 py-2 flex-shrink-0">
-        <div className="flex justify-between text-[10px] mb-1">
+        <div className="flex justify-between text-[14px] mb-1">
           <span className="font-mono text-green font-bold tabular-nums">{fmtQty(totalBid)}</span>
-          <span className="text-[9px] text-fw-text-muted">{bidPct.toFixed(0)}% / {(100 - bidPct).toFixed(0)}%</span>
+          <span className="text-[13px] text-fw-text-muted">{bidPct.toFixed(0)}% / {(100 - bidPct).toFixed(0)}%</span>
           <span className="font-mono text-red font-bold tabular-nums">{fmtQty(totalAsk)}</span>
         </div>
         <div className="h-[5px] rounded-full overflow-hidden bg-fw-border/30 flex">

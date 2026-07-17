@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+﻿import { useEffect, useRef, useState, useCallback } from 'react';
 import { Sidebar } from '@/components/Sidebar';
 import { TopBar } from '@/components/TopBar';
 import { Watchlist } from '@/components/Watchlist';
@@ -187,11 +187,11 @@ export default function App() {
             <span className="text-[14px] font-extrabold tracking-wide bg-gradient-to-r from-[#00D4FF] via-[#4F46E5] to-[#7C3AED] bg-clip-text text-transparent">
               FUNDEDWEALTH
             </span>
-            <span className="text-[10px] font-bold tracking-[0.25em] text-fw-accent/70">
+            <span className="text-[14px] font-bold tracking-[0.25em] text-fw-accent/70">
               TERMINAL
             </span>
           </div>
-          <div className="flex items-center gap-2 text-fw-text-muted text-[11px]">
+          <div className="flex items-center gap-2 text-fw-text-muted text-[13px]">
             <div className="w-3 h-3 border-2 border-fw-accent border-t-transparent rounded-full animate-spin" />
             Connecting...
           </div>

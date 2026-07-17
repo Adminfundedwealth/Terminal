@@ -1,4 +1,4 @@
-/**
+﻿/**
  * MOBILE LAYOUT
  * 
  * Tabbed interface for screens < 768px.
@@ -37,23 +37,23 @@ export function MobileLayout() {
       {/* Mobile Top Bar */}
       <header className="h-[44px] min-h-[44px] bg-[#12141c] border-b border-fw-border flex items-center px-3 gap-2">
         <div className="flex flex-col leading-none">
-          <span className="text-[10px] font-extrabold tracking-wide bg-gradient-to-r from-[#00D4FF] to-[#7C3AED] bg-clip-text text-transparent">FW</span>
+          <span className="text-[14px] font-extrabold tracking-wide bg-gradient-to-r from-[#00D4FF] to-[#7C3AED] bg-clip-text text-transparent">FW</span>
         </div>
         <div className="flex-1 min-w-0 flex items-center gap-2">
           {activeSymbol && quote && (
             <>
-              <span className="text-[11px] font-bold text-fw-text truncate">{activeSymbol.symbol}</span>
-              <span className={cn('text-[11px] font-mono font-bold', (quote.changePercent || 0) >= 0 ? 'text-green' : 'text-red')}>
+              <span className="text-[13px] font-bold text-fw-text truncate">{activeSymbol.symbol}</span>
+              <span className={cn('text-[13px] font-mono font-bold', (quote.changePercent || 0) >= 0 ? 'text-green' : 'text-red')}>
                 {formatPrice(quote.ltp)}
               </span>
-              <span className={cn('text-[9px] font-mono', (quote.changePercent || 0) >= 0 ? 'text-green' : 'text-red')}>
+              <span className={cn('text-[13px] font-mono', (quote.changePercent || 0) >= 0 ? 'text-green' : 'text-red')}>
                 {(quote.changePercent || 0) >= 0 ? '+' : ''}{quote.changePercent?.toFixed(2)}%
               </span>
             </>
           )}
         </div>
         {account && (
-          <span className="text-[9px] font-mono text-fw-text-secondary">₹{((account.balance || 0) / 100000).toFixed(1)}L</span>
+          <span className="text-[13px] font-mono text-fw-text-secondary">₹{((account.balance || 0) / 100000).toFixed(1)}L</span>
         )}
       </header>
 
@@ -99,7 +99,7 @@ export function MobileLayout() {
             )}
           >
             {tab.icon}
-            <span className="text-[9px] font-medium">{tab.label}</span>
+            <span className="text-[13px] font-medium">{tab.label}</span>
           </button>
         ))}
       </nav>

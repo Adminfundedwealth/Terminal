@@ -16,7 +16,7 @@
   --fw-spacing-xl: 16px;
   
   /* Font size token (overridden by themeStore) */
-  --fw-font-size-base: 13px;
+  --fw-font-size-base: 14px;
   --fw-line-height: 1.4;
 }
 
@@ -27,7 +27,7 @@
   --fw-spacing-md: 6px;
   --fw-spacing-lg: 8px;
   --fw-spacing-xl: 12px;
-  --fw-font-size-base: 11px;
+  --fw-font-size-base: 13px;
   --fw-line-height: 1.3;
 }
 
@@ -37,7 +37,7 @@
   --fw-spacing-md: 8px;
   --fw-spacing-lg: 12px;
   --fw-spacing-xl: 16px;
-  --fw-font-size-base: 13px;
+  --fw-font-size-base: 14px;
   --fw-line-height: 1.4;
 }
 
@@ -47,7 +47,7 @@
   --fw-spacing-md: 12px;
   --fw-spacing-lg: 16px;
   --fw-spacing-xl: 24px;
-  --fw-font-size-base: 14px;
+  --fw-font-size-base: 15px;
   --fw-line-height: 1.5;
 }
 

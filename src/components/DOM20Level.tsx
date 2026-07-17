@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { Layers } from 'lucide-react';
 import { useAppStore } from '@/store/appStore';
 import { wsService } from '@/services/websocket';
@@ -96,7 +96,7 @@ export function DOM20Level() {
             <button
               key={l}
               onClick={() => setLevels(l)}
-              className={`text-[10px] px-1.5 py-0.5 rounded ${levels === l ? 'bg-fw-accent text-white' : 'text-fw-text-secondary hover:bg-fw-hover'}`}
+              className={`text-[14px] px-1.5 py-0.5 rounded ${levels === l ? 'bg-fw-accent text-white' : 'text-fw-text-secondary hover:bg-fw-hover'}`}
             >
               {l}L
             </button>
@@ -106,7 +106,7 @@ export function DOM20Level() {
 
       {/* Pressure Bar */}
       <div className="px-3 py-1.5 border-b border-fw-border">
-        <div className="flex items-center justify-between text-[10px] mb-0.5">
+        <div className="flex items-center justify-between text-[14px] mb-0.5">
           <span className="text-green font-mono">{dom.totalBuyQty.toLocaleString('en-IN')} Buy</span>
           <span className="text-fw-text-muted">Spread: {dom.spread.toFixed(2)}</span>
           <span className="text-red font-mono">{dom.totalSellQty.toLocaleString('en-IN')} Sell</span>
@@ -118,7 +118,7 @@ export function DOM20Level() {
       </div>
 
       {/* Column Headers */}
-      <div className="grid grid-cols-6 px-2 py-1 border-b border-fw-border text-[9px] text-fw-text-muted font-bold uppercase">
+      <div className="grid grid-cols-6 px-2 py-1 border-b border-fw-border text-[13px] text-fw-text-muted font-bold uppercase">
         <span>Orders</span>
         <span className="text-right">Qty</span>
         <span className="text-right text-green">Bid</span>
@@ -180,7 +180,7 @@ export function DOM20Level() {
       {/* LTP */}
       {dom.ltp > 0 && (
         <div className="px-3 py-1.5 border-t border-fw-border text-center">
-          <span className="text-fw-text-muted text-[10px]">LTP: </span>
+          <span className="text-fw-text-muted text-[14px]">LTP: </span>
           <span className="font-mono font-bold text-fw-accent">{dom.ltp.toFixed(2)}</span>
         </div>
       )}

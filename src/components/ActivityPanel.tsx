@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { apiService } from '@/services/api';
 import { cn } from '@/utils/helpers';
 import { Activity, Shield, AlertTriangle, CheckCircle, XCircle, Clock, RefreshCw } from 'lucide-react';
@@ -49,10 +49,10 @@ export function ActivityPanel() {
       {/* Sub-header */}
       <div className="flex items-center gap-2 px-3 py-1.5 border-b border-fw-border/30 flex-shrink-0">
         <div className="flex items-center gap-1">
-          <button onClick={() => setActiveView('risk')} className={cn('px-2 py-0.5 text-[10px] font-bold rounded', activeView === 'risk' ? 'bg-fw-accent/15 text-fw-accent' : 'text-fw-text-muted hover:text-fw-text')}>
+          <button onClick={() => setActiveView('risk')} className={cn('px-2 py-0.5 text-[14px] font-bold rounded', activeView === 'risk' ? 'bg-fw-accent/15 text-fw-accent' : 'text-fw-text-muted hover:text-fw-text')}>
             Risk Events
           </button>
-          <button onClick={() => setActiveView('audit')} className={cn('px-2 py-0.5 text-[10px] font-bold rounded', activeView === 'audit' ? 'bg-fw-accent/15 text-fw-accent' : 'text-fw-text-muted hover:text-fw-text')}>
+          <button onClick={() => setActiveView('audit')} className={cn('px-2 py-0.5 text-[14px] font-bold rounded', activeView === 'audit' ? 'bg-fw-accent/15 text-fw-accent' : 'text-fw-text-muted hover:text-fw-text')}>
             Execution Audit
           </button>
         </div>
@@ -68,8 +68,8 @@ export function ActivityPanel() {
           riskEvents.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full gap-2 text-fw-text-muted">
               <Shield size={24} className="opacity-20" />
-              <span className="text-[11px]">No risk events recorded</span>
-              <span className="text-[9px] text-fw-text-muted/60">Events appear when risk thresholds are triggered</span>
+              <span className="text-[13px]">No risk events recorded</span>
+              <span className="text-[13px] text-fw-text-muted/60">Events appear when risk thresholds are triggered</span>
             </div>
           ) : (
             <table className="fw-table">
@@ -85,15 +85,15 @@ export function ActivityPanel() {
               <tbody>
                 {riskEvents.map(ev => (
                   <tr key={ev.id}>
-                    <td className="font-mono text-[11px] text-fw-text-muted tabular-nums">{new Date(ev.created_at).toLocaleTimeString()}</td>
-                    <td className="text-fw-text text-[12px]">{ev.event_type.replace(/_/g, ' ')}</td>
+                    <td className="font-mono text-[13px] text-fw-text-muted tabular-nums">{new Date(ev.created_at).toLocaleTimeString()}</td>
+                    <td className="text-fw-text text-[14px]">{ev.event_type.replace(/_/g, ' ')}</td>
                     <td>
-                      <span className={cn('px-1.5 py-0.5 text-[9px] font-bold rounded', ev.severity === 'critical' ? 'bg-red-900/20 text-red-400' : ev.severity === 'warning' ? 'bg-yellow-900/20 text-yellow-400' : 'bg-blue-900/20 text-blue-400')}>
+                      <span className={cn('px-1.5 py-0.5 text-[13px] font-bold rounded', ev.severity === 'critical' ? 'bg-red-900/20 text-red-400' : ev.severity === 'warning' ? 'bg-yellow-900/20 text-yellow-400' : 'bg-blue-900/20 text-blue-400')}>
                         {ev.severity.toUpperCase()}
                       </span>
                     </td>
-                    <td className="text-fw-text-secondary text-[11px]">{ev.rule_type || '—'}</td>
-                    <td className="text-fw-text-muted text-[10px] max-w-[200px] truncate">{ev.metadata?.symbol || ev.metadata?.message || '—'}</td>
+                    <td className="text-fw-text-secondary text-[13px]">{ev.rule_type || '—'}</td>
+                    <td className="text-fw-text-muted text-[14px] max-w-[200px] truncate">{ev.metadata?.symbol || ev.metadata?.message || '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -103,8 +103,8 @@ export function ActivityPanel() {
           audits.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full gap-2 text-fw-text-muted">
               <Activity size={24} className="opacity-20" />
-              <span className="text-[11px]">No audit entries</span>
-              <span className="text-[9px] text-fw-text-muted/60">Audit trail populates as orders flow through the system</span>
+              <span className="text-[13px]">No audit entries</span>
+              <span className="text-[13px] text-fw-text-muted/60">Audit trail populates as orders flow through the system</span>
             </div>
           ) : (
             <table className="fw-table">
@@ -120,17 +120,17 @@ export function ActivityPanel() {
               <tbody>
                 {audits.map(au => (
                   <tr key={au.id}>
-                    <td className="font-mono text-[11px] text-fw-text-muted tabular-nums">{new Date(au.created_at).toLocaleTimeString()}</td>
-                    <td className="text-fw-text text-[12px]">{au.audit_type.replace(/_/g, ' ')}</td>
+                    <td className="font-mono text-[13px] text-fw-text-muted tabular-nums">{new Date(au.created_at).toLocaleTimeString()}</td>
+                    <td className="text-fw-text text-[14px]">{au.audit_type.replace(/_/g, ' ')}</td>
                     <td>
                       {au.all_passed ? (
-                        <span className="flex items-center gap-1 text-[10px] text-green"><CheckCircle size={10} /> Pass</span>
+                        <span className="flex items-center gap-1 text-[14px] text-green"><CheckCircle size={10} /> Pass</span>
                       ) : (
-                        <span className="flex items-center gap-1 text-[10px] text-red"><XCircle size={10} /> Fail</span>
+                        <span className="flex items-center gap-1 text-[14px] text-red"><XCircle size={10} /> Fail</span>
                       )}
                     </td>
-                    <td className="text-fw-text-secondary text-[10px]">{(au.checks_run || []).join(', ')}</td>
-                    <td className="text-red-400/70 text-[10px] max-w-[180px] truncate">{au.rejection_reason || '—'}</td>
+                    <td className="text-fw-text-secondary text-[14px]">{(au.checks_run || []).join(', ')}</td>
+                    <td className="text-red-400/70 text-[14px] max-w-[180px] truncate">{au.rejection_reason || '—'}</td>
                   </tr>
                 ))}
               </tbody>

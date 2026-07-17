@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { Users, Plus, Trash2, Power, Copy, Settings, RefreshCw, AlertCircle, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { useFounderStore, type CopyMode, type SlaveAccount, type AccountExposure } from '@/store/founderStore';
 import { cn } from '@/utils/helpers';
@@ -47,18 +47,18 @@ export function AccountManager() {
       <div className="flex items-center justify-between px-3 py-2 border-b border-fw-border bg-[#10121a] flex-shrink-0">
         <div className="flex items-center gap-2">
           <Users size={16} className="text-fw-cyan" />
-          <span className="text-[12px] font-bold text-fw-text">Account Manager</span>
+          <span className="text-[14px] font-bold text-fw-text">Account Manager</span>
         </div>
         <div className="flex items-center gap-1">
           <button
             onClick={() => setActiveView('config')}
-            className={cn('text-[10px] px-2 py-1 rounded', activeView === 'config' ? 'bg-fw-accent text-white' : 'text-fw-text-secondary hover:bg-fw-hover')}
+            className={cn('text-[14px] px-2 py-1 rounded', activeView === 'config' ? 'bg-fw-accent text-white' : 'text-fw-text-secondary hover:bg-fw-hover')}
           >
             Config
           </button>
           <button
             onClick={() => { setActiveView('exposure'); refreshExposures(); }}
-            className={cn('text-[10px] px-2 py-1 rounded', activeView === 'exposure' ? 'bg-fw-accent text-white' : 'text-fw-text-secondary hover:bg-fw-hover')}
+            className={cn('text-[14px] px-2 py-1 rounded', activeView === 'exposure' ? 'bg-fw-accent text-white' : 'text-fw-text-secondary hover:bg-fw-hover')}
           >
             Exposure
           </button>
@@ -89,7 +89,7 @@ export function AccountManager() {
 
       {/* No backend warning */}
       <div className="px-3 py-1.5 border-t border-fw-border flex-shrink-0 bg-fw-cyan/5">
-        <span className="text-[9px] text-fw-cyan">
+        <span className="text-[13px] text-fw-cyan">
           ℹ Config stored locally. No /api/founder endpoint — replication dispatches to /api/orders per slave.
         </span>
       </div>
@@ -127,8 +127,8 @@ function ConfigView({
         <div className="flex items-center gap-2">
           <Power size={14} className={config.isActive ? 'text-green' : 'text-fw-text-muted'} />
           <div>
-            <div className="text-[11px] font-bold text-fw-text">Copy Trading</div>
-            <div className="text-[10px] text-fw-text-muted">{config.isActive ? 'Active — orders will replicate' : 'Inactive — no replication'}</div>
+            <div className="text-[13px] font-bold text-fw-text">Copy Trading</div>
+            <div className="text-[14px] text-fw-text-muted">{config.isActive ? 'Active — orders will replicate' : 'Inactive — no replication'}</div>
           </div>
         </div>
         <button
@@ -141,11 +141,11 @@ function ConfigView({
 
       {/* Master Account */}
       <div className="p-3 bg-fw-bg border border-fw-border rounded">
-        <div className="text-[10px] text-fw-text-muted uppercase font-bold mb-2">Master Account</div>
+        <div className="text-[14px] text-fw-text-muted uppercase font-bold mb-2">Master Account</div>
         {config.masterAccountId ? (
           <div className="flex items-center justify-between">
-            <span className="text-[12px] font-mono font-bold text-fw-text">{config.masterAccountId}</span>
-            <button onClick={onClearMaster} className="text-[10px] text-red-400 hover:text-red">Remove</button>
+            <span className="text-[14px] font-mono font-bold text-fw-text">{config.masterAccountId}</span>
+            <button onClick={onClearMaster} className="text-[14px] text-red-400 hover:text-red">Remove</button>
           </div>
         ) : (
           <div className="flex gap-2">
@@ -153,11 +153,11 @@ function ConfigView({
               value={masterInput}
               onChange={e => setMasterInput(e.target.value)}
               placeholder="Account ID"
-              className="flex-1 bg-fw-surface border border-fw-border rounded text-[11px] px-2 py-1.5 text-fw-text outline-none focus:border-fw-accent"
+              className="flex-1 bg-fw-surface border border-fw-border rounded text-[13px] px-2 py-1.5 text-fw-text outline-none focus:border-fw-accent"
             />
             <button
               onClick={() => { if (masterInput.trim()) { onSetMaster(masterInput.trim()); setMasterInput(''); } }}
-              className="px-3 py-1.5 text-[10px] bg-fw-accent text-white rounded font-bold"
+              className="px-3 py-1.5 text-[14px] bg-fw-accent text-white rounded font-bold"
             >
               Set
             </button>
@@ -167,14 +167,14 @@ function ConfigView({
 
       {/* Copy Mode */}
       <div className="p-3 bg-fw-bg border border-fw-border rounded">
-        <div className="text-[10px] text-fw-text-muted uppercase font-bold mb-2">Copy Mode</div>
+        <div className="text-[14px] text-fw-text-muted uppercase font-bold mb-2">Copy Mode</div>
         <div className="flex gap-1">
           {(['mirror', 'proportional', 'fixed-lot'] as CopyMode[]).map(mode => (
             <button
               key={mode}
               onClick={() => onSetCopyMode(mode)}
               className={cn(
-                'flex-1 py-1.5 text-[10px] rounded capitalize font-medium border transition-all',
+                'flex-1 py-1.5 text-[14px] rounded capitalize font-medium border transition-all',
                 config.copyMode === mode ? 'border-fw-accent bg-fw-accent/10 text-fw-accent' : 'border-fw-border text-fw-text-secondary hover:border-fw-text-muted'
               )}
             >
@@ -182,7 +182,7 @@ function ConfigView({
             </button>
           ))}
         </div>
-        <div className="text-[9px] text-fw-text-muted mt-1.5">
+        <div className="text-[13px] text-fw-text-muted mt-1.5">
           {config.copyMode === 'mirror' && 'Same qty as master'}
           {config.copyMode === 'proportional' && 'Master qty × copy ratio (rounded down to lot size)'}
           {config.copyMode === 'fixed-lot' && 'Fixed qty per slave regardless of master size'}
@@ -192,8 +192,8 @@ function ConfigView({
       {/* Slave Accounts */}
       <div className="p-3 bg-fw-bg border border-fw-border rounded">
         <div className="flex items-center justify-between mb-2">
-          <div className="text-[10px] text-fw-text-muted uppercase font-bold">Slave Accounts ({config.slaves.length})</div>
-          <button onClick={() => setShowAddSlave(!showAddSlave)} className="flex items-center gap-1 text-[10px] text-fw-accent hover:text-fw-accent-hover">
+          <div className="text-[14px] text-fw-text-muted uppercase font-bold">Slave Accounts ({config.slaves.length})</div>
+          <button onClick={() => setShowAddSlave(!showAddSlave)} className="flex items-center gap-1 text-[14px] text-fw-accent hover:text-fw-accent-hover">
             <Plus size={10} /> Add
           </button>
         </div>
@@ -202,26 +202,26 @@ function ConfigView({
         {showAddSlave && (
           <div className="mb-3 p-2 border border-fw-border rounded bg-fw-surface space-y-2">
             <div className="grid grid-cols-2 gap-2">
-              <input value={newSlave.accountId} onChange={e => setNewSlave({ ...newSlave, accountId: e.target.value })} placeholder="Account ID" className="bg-fw-bg border border-fw-border rounded text-[10px] px-2 py-1.5 text-fw-text outline-none" />
-              <input value={newSlave.name} onChange={e => setNewSlave({ ...newSlave, name: e.target.value })} placeholder="Name" className="bg-fw-bg border border-fw-border rounded text-[10px] px-2 py-1.5 text-fw-text outline-none" />
+              <input value={newSlave.accountId} onChange={e => setNewSlave({ ...newSlave, accountId: e.target.value })} placeholder="Account ID" className="bg-fw-bg border border-fw-border rounded text-[14px] px-2 py-1.5 text-fw-text outline-none" />
+              <input value={newSlave.name} onChange={e => setNewSlave({ ...newSlave, name: e.target.value })} placeholder="Name" className="bg-fw-bg border border-fw-border rounded text-[14px] px-2 py-1.5 text-fw-text outline-none" />
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="text-[9px] text-fw-text-muted">Copy Ratio</label>
-                <input type="number" step="0.1" min="0.1" value={newSlave.copyRatio} onChange={e => setNewSlave({ ...newSlave, copyRatio: parseFloat(e.target.value) || 1 })} className="w-full bg-fw-bg border border-fw-border rounded text-[10px] px-2 py-1.5 text-fw-text font-mono outline-none" />
+                <label className="text-[13px] text-fw-text-muted">Copy Ratio</label>
+                <input type="number" step="0.1" min="0.1" value={newSlave.copyRatio} onChange={e => setNewSlave({ ...newSlave, copyRatio: parseFloat(e.target.value) || 1 })} className="w-full bg-fw-bg border border-fw-border rounded text-[14px] px-2 py-1.5 text-fw-text font-mono outline-none" />
               </div>
               <div>
-                <label className="text-[9px] text-fw-text-muted">Fixed Lots</label>
-                <input type="number" min="1" value={newSlave.fixedLots} onChange={e => setNewSlave({ ...newSlave, fixedLots: parseInt(e.target.value) || 1 })} className="w-full bg-fw-bg border border-fw-border rounded text-[10px] px-2 py-1.5 text-fw-text font-mono outline-none" />
+                <label className="text-[13px] text-fw-text-muted">Fixed Lots</label>
+                <input type="number" min="1" value={newSlave.fixedLots} onChange={e => setNewSlave({ ...newSlave, fixedLots: parseInt(e.target.value) || 1 })} className="w-full bg-fw-bg border border-fw-border rounded text-[14px] px-2 py-1.5 text-fw-text font-mono outline-none" />
               </div>
             </div>
-            <button onClick={onAddSlave} className="w-full py-1.5 text-[10px] bg-fw-accent text-white rounded font-bold">Add Slave Account</button>
+            <button onClick={onAddSlave} className="w-full py-1.5 text-[14px] bg-fw-accent text-white rounded font-bold">Add Slave Account</button>
           </div>
         )}
 
         {/* Slave List */}
         {config.slaves.length === 0 ? (
-          <div className="text-[11px] text-fw-text-muted text-center py-4">No slave accounts configured</div>
+          <div className="text-[13px] text-fw-text-muted text-center py-4">No slave accounts configured</div>
         ) : (
           <div className="space-y-1.5">
             {config.slaves.map(slave => (
@@ -229,12 +229,12 @@ function ConfigView({
                 <div className="flex items-center gap-2">
                   <StatusDot status={slave.lastSyncStatus} />
                   <div>
-                    <div className="text-[11px] font-semibold text-fw-text">{slave.name}</div>
-                    <div className="text-[9px] text-fw-text-muted font-mono">{slave.accountId}</div>
+                    <div className="text-[13px] font-semibold text-fw-text">{slave.name}</div>
+                    <div className="text-[13px] text-fw-text-muted font-mono">{slave.accountId}</div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-fw-text-secondary font-mono">
+                  <span className="text-[14px] text-fw-text-secondary font-mono">
                     {config.copyMode === 'proportional' ? `${slave.copyRatio}x` : config.copyMode === 'fixed-lot' ? `${slave.fixedLots} lots` : 'mirror'}
                   </span>
                   <button onClick={() => onToggleSlaveEnabled(slave.accountId)} className={cn('w-7 h-4 rounded-full transition-colors relative', slave.enabled ? 'bg-green' : 'bg-fw-border')}>
@@ -257,21 +257,21 @@ function ExposureView({ exposures, loading, onRefresh }: { exposures: AccountExp
   return (
     <div className="p-3 space-y-3">
       <div className="flex items-center justify-between">
-        <div className="text-[11px] font-bold text-fw-text">Portfolio Exposure</div>
+        <div className="text-[13px] font-bold text-fw-text">Portfolio Exposure</div>
         <button onClick={onRefresh} className={cn('p-1 rounded hover:bg-fw-hover text-fw-text-secondary', loading && 'animate-spin')}>
           <RefreshCw size={12} />
         </button>
       </div>
 
       {loading && (
-        <div className="flex items-center justify-center h-20 text-fw-text-muted text-[11px]">Loading exposures...</div>
+        <div className="flex items-center justify-center h-20 text-fw-text-muted text-[13px]">Loading exposures...</div>
       )}
 
       {!loading && exposures.length === 0 && (
         <div className="flex flex-col items-center justify-center h-32 gap-2 text-center">
           <AlertCircle size={24} className="text-fw-text-muted/40" />
-          <div className="text-[11px] text-fw-text-muted">No exposure data available.</div>
-          <div className="text-[10px] text-fw-text-muted">
+          <div className="text-[13px] text-fw-text-muted">No exposure data available.</div>
+          <div className="text-[14px] text-fw-text-muted">
             Backend endpoint /api/founder/exposures not configured. Exposure aggregation requires server-side implementation.
           </div>
         </div>
@@ -282,12 +282,12 @@ function ExposureView({ exposures, loading, onRefresh }: { exposures: AccountExp
           {exposures.map(exp => (
             <div key={exp.accountId} className="p-2 bg-fw-bg border border-fw-border rounded">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-[11px] font-bold text-fw-text">{exp.accountName}</span>
-                <span className={cn('text-[11px] font-mono', exp.totalMtm >= 0 ? 'text-green' : 'text-red')}>
+                <span className="text-[13px] font-bold text-fw-text">{exp.accountName}</span>
+                <span className={cn('text-[13px] font-mono', exp.totalMtm >= 0 ? 'text-green' : 'text-red')}>
                   ₹{exp.totalMtm.toLocaleString('en-IN')}
                 </span>
               </div>
-              <div className="flex items-center gap-3 text-[10px] text-fw-text-muted">
+              <div className="flex items-center gap-3 text-[14px] text-fw-text-muted">
                 <span>Positions: {exp.totalPositions}</span>
                 <span>Exposure: ₹{exp.netExposure.toLocaleString('en-IN')}</span>
                 <span>Margin: ₹{exp.marginUsed.toLocaleString('en-IN')}</span>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { BarChart3 } from 'lucide-react';
 import { apiService } from '@/services/api';
 
@@ -64,15 +64,15 @@ export function OIAnalyticsPanel() {
               <button
                 key={s}
                 onClick={() => setSymbol(s)}
-                className={`text-[10px] px-2 py-0.5 rounded ${symbol === s ? 'bg-fw-accent text-white' : 'text-fw-text-secondary hover:bg-fw-hover'}`}
+                className={`text-[14px] px-2 py-0.5 rounded ${symbol === s ? 'bg-fw-accent text-white' : 'text-fw-text-secondary hover:bg-fw-hover'}`}
               >
                 {s}
               </button>
             ))}
           </div>
           <div className="flex gap-0.5 border border-fw-border rounded">
-            <button onClick={() => setViewMode('chart')} className={`text-[10px] px-2 py-0.5 ${viewMode === 'chart' ? 'bg-fw-accent text-white rounded' : 'text-fw-text-secondary'}`}>Chart</button>
-            <button onClick={() => setViewMode('table')} className={`text-[10px] px-2 py-0.5 ${viewMode === 'table' ? 'bg-fw-accent text-white rounded' : 'text-fw-text-secondary'}`}>Table</button>
+            <button onClick={() => setViewMode('chart')} className={`text-[14px] px-2 py-0.5 ${viewMode === 'chart' ? 'bg-fw-accent text-white rounded' : 'text-fw-text-secondary'}`}>Chart</button>
+            <button onClick={() => setViewMode('table')} className={`text-[14px] px-2 py-0.5 ${viewMode === 'table' ? 'bg-fw-accent text-white rounded' : 'text-fw-text-secondary'}`}>Table</button>
           </div>
         </div>
       </div>
@@ -81,19 +81,19 @@ export function OIAnalyticsPanel() {
       {summary && (
         <div className="grid grid-cols-4 gap-2 px-3 py-2 border-b border-fw-border">
           <div className="kpi-card !p-2">
-            <div className="text-[9px] text-fw-text-muted uppercase">PCR</div>
+            <div className="text-[13px] text-fw-text-muted uppercase">PCR</div>
             <div className={`text-sm font-mono font-bold ${summary.pcr > 1 ? 'text-green' : 'text-red'}`}>{summary.pcr.toFixed(2)}</div>
           </div>
           <div className="kpi-card !p-2">
-            <div className="text-[9px] text-fw-text-muted uppercase">Max Pain</div>
+            <div className="text-[13px] text-fw-text-muted uppercase">Max Pain</div>
             <div className="text-sm font-mono font-bold text-fw-text">{summary.maxPainStrike}</div>
           </div>
           <div className="kpi-card !p-2">
-            <div className="text-[9px] text-fw-text-muted uppercase">Highest Call OI</div>
+            <div className="text-[13px] text-fw-text-muted uppercase">Highest Call OI</div>
             <div className="text-sm font-mono font-bold text-red">{summary.highestCallOiStrike}</div>
           </div>
           <div className="kpi-card !p-2">
-            <div className="text-[9px] text-fw-text-muted uppercase">Highest Put OI</div>
+            <div className="text-[13px] text-fw-text-muted uppercase">Highest Put OI</div>
             <div className="text-sm font-mono font-bold text-green">{summary.highestPutOiStrike}</div>
           </div>
         </div>
@@ -110,7 +110,7 @@ export function OIAnalyticsPanel() {
                 <div className="flex-1 flex justify-end">
                   <div className="h-4 bg-red-500/40 rounded-l transition-all" style={{ width: `${(d.callOi / maxOi) * 100}%` }} />
                 </div>
-                <div className="w-14 text-center text-[10px] font-mono font-bold text-fw-text flex-shrink-0">{d.strike}</div>
+                <div className="w-14 text-center text-[14px] font-mono font-bold text-fw-text flex-shrink-0">{d.strike}</div>
                 <div className="flex-1">
                   <div className="h-4 bg-green-500/40 rounded-r transition-all" style={{ width: `${(d.putOi / maxOi) * 100}%` }} />
                 </div>

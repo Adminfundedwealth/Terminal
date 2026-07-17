@@ -1,4 +1,4 @@
-import { Search, Moon, Palette, Shield, Zap, TrendingUp, TrendingDown, Activity, Target, AlertTriangle, Bell } from 'lucide-react';
+﻿import { Search, Moon, Palette, Shield, Zap, TrendingUp, TrendingDown, Activity, Target, AlertTriangle, Bell } from 'lucide-react';
 import { useAppStore } from '@/store/appStore';
 import { useTradingStore } from '@/store/tradingStore';
 import { useMarketStore } from '@/store/marketStore';
@@ -78,7 +78,7 @@ export function TopBar() {
           </div>
           <div className="flex flex-col leading-none items-center">
             <span className="text-[13px] font-extrabold tracking-wide bg-gradient-to-r from-[#00D4FF] via-[#4F46E5] to-[#7C3AED] bg-clip-text text-transparent">FUNDEDWEALTH</span>
-            <span className="text-[9px] font-bold tracking-[0.2em] text-fw-accent/80 drop-shadow-[0_0_6px_rgba(59,130,246,0.5)]">TERMINAL</span>
+            <span className="text-[13px] font-bold tracking-[0.2em] text-fw-accent/80 drop-shadow-[0_0_6px_rgba(59,130,246,0.5)]">TERMINAL</span>
           </div>
         </div>
 
@@ -109,10 +109,10 @@ export function TopBar() {
             const up = (q?.changePercent || 0) >= 0;
             return (
               <div key={token} className="flex items-center gap-1.5">
-                <span className="text-[11px] font-semibold text-fw-text-muted tracking-wide">{symbol}</span>
+                <span className="text-[13px] font-semibold text-fw-text-muted tracking-wide">{symbol}</span>
                 {q ? (
                   <>
-                    <span className={cn('ticker-price text-[12px]', up ? 'text-green' : 'text-red')}>
+                    <span className={cn('ticker-price text-[14px]', up ? 'text-green' : 'text-red')}>
                       {formatPrice(q.ltp)}
                     </span>
                     <span className={cn('ticker-change', up ? 'ticker-change-up' : 'ticker-change-down')}>
@@ -120,7 +120,7 @@ export function TopBar() {
                     </span>
                   </>
                 ) : (
-                  <span className="text-[11px] text-fw-text-muted/50 font-mono">—</span>
+                  <span className="text-[13px] text-fw-text-muted/50 font-mono">—</span>
                 )}
               </div>
             );
@@ -143,7 +143,7 @@ export function TopBar() {
           <AccountSelector />
           <div className="flex items-center bg-fw-bg rounded border border-fw-border p-0.5">
             {([{ value: 'dark' as Theme, label: 'D' }, { value: 'fw-blue' as Theme, label: 'B' }]).map((t) => (
-              <button key={t.value} onClick={() => setTheme(t.value)} className={cn('px-1.5 py-0.5 rounded text-[9px] font-bold', theme === t.value ? 'bg-fw-accent text-white' : 'text-fw-text-muted hover:text-fw-text')}>{t.label}</button>
+              <button key={t.value} onClick={() => setTheme(t.value)} className={cn('px-1.5 py-0.5 rounded text-[13px] font-bold', theme === t.value ? 'bg-fw-accent text-white' : 'text-fw-text-muted hover:text-fw-text')}>{t.label}</button>
             ))}
           </div>
           <button onClick={() => setBottomTab('alerts')} className="p-1 rounded hover:bg-fw-hover text-fw-text-secondary hover:text-fw-text transition-colors" title="Alerts">
@@ -158,7 +158,7 @@ export function TopBar() {
       {/* Row 2: Account Metrics + Challenge Context Strip */}
       <div className="flex items-center px-3 h-[26px] border-t border-fw-border/20 bg-[#090b10]">
         {/* Account Metrics */}
-        <div className="flex items-center gap-4 text-[12px] mr-4 pr-4 border-r border-fw-border/20">
+        <div className="flex items-center gap-4 text-[14px] mr-4 pr-4 border-r border-fw-border/20">
           <MetricInline label="Balance" value={`₹${formatCompact(balance)}`} />
           <MetricInline label="Equity" value={`₹${formatCompact(equity)}`} className={equity >= balance ? 'text-emerald-400' : 'text-red-400'} />
           <MetricInline label="Margin" value={`₹${formatCompact(marginInfo?.usedMargin || 0)}`} className="text-orange-400" />
@@ -173,7 +173,7 @@ export function TopBar() {
         </div>
 
         {/* Challenge Risk Context */}
-        <div className="flex items-center gap-4 text-[12px]">
+        <div className="flex items-center gap-4 text-[14px]">
           <div className="flex items-center gap-1">
             <AlertTriangle size={9} className="text-red-400/70" />
             <span className="text-fw-text-muted">Daily Left:</span>
@@ -195,7 +195,7 @@ export function TopBar() {
         </div>
 
         <div className="flex-1" />
-        <span className="text-[9px] text-fw-text-muted/50 font-mono">{new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+        <span className="text-[13px] text-fw-text-muted/50 font-mono">{new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
       </div>
     </header>
   );

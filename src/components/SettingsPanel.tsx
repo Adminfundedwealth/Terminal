@@ -1,4 +1,4 @@
-/**
+﻿/**
  * SETTINGS PANEL
  * 
  * Terminal preferences: theme, default order config, hotkeys, notifications.
@@ -53,7 +53,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
         <div className="flex items-center justify-between px-5 py-4 border-b border-fw-border/60 flex-shrink-0">
           <div>
             <h2 className="text-[14px] font-black text-fw-text">Settings</h2>
-            <p className="text-[11px] text-fw-text-muted mt-0.5">Terminal preferences</p>
+            <p className="text-[13px] text-fw-text-muted mt-0.5">Terminal preferences</p>
           </div>
           <button
             onClick={onClose}
@@ -70,7 +70,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={cn(
-                'flex items-center gap-1.5 px-3 py-2 text-[11px] font-bold rounded-t-md transition-all border-b-2 -mb-px',
+                'flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold rounded-t-md transition-all border-b-2 -mb-px',
                 activeTab === tab.id
                   ? 'text-fw-accent border-fw-accent bg-fw-accent/5'
                   : 'text-fw-text-muted border-transparent hover:text-fw-text-secondary'
@@ -94,7 +94,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
                       key={t.value}
                       onClick={() => setTheme(t.value)}
                       className={cn(
-                        'flex items-center gap-2 px-4 py-2.5 rounded-lg border text-[12px] font-bold transition-all',
+                        'flex items-center gap-2 px-4 py-2.5 rounded-lg border text-[14px] font-bold transition-all',
                         theme === t.value
                           ? 'border-fw-accent bg-fw-accent/10 text-fw-accent'
                           : 'border-fw-border text-fw-text-muted hover:border-fw-text-muted hover:text-fw-text'
@@ -108,7 +108,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
               </SettingSection>
 
               <SettingSection title="Panel Defaults" description="Which panels are visible on startup">
-                <div className="text-[11px] text-fw-text-muted bg-fw-bg/60 rounded-lg px-3 py-2 border border-fw-border/40">
+                <div className="text-[13px] text-fw-text-muted bg-fw-bg/60 rounded-lg px-3 py-2 border border-fw-border/40">
                   Panel visibility is saved automatically when you toggle panels from the top bar.
                 </div>
               </SettingSection>
@@ -135,7 +135,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
                       key={p}
                       onClick={() => setDefaultProduct(p)}
                       className={cn(
-                        'px-4 py-2 rounded-lg border text-[11px] font-bold transition-all',
+                        'px-4 py-2 rounded-lg border text-[13px] font-bold transition-all',
                         defaultProduct === p
                           ? 'border-fw-accent bg-fw-accent/10 text-fw-accent'
                           : 'border-fw-border text-fw-text-muted hover:text-fw-text'
@@ -160,24 +160,24 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
           {/* Hotkeys */}
           {activeTab === 'hotkeys' && (
             <div className="flex flex-col gap-3">
-              <p className="text-[11px] text-fw-text-muted">Default keyboard shortcuts</p>
+              <p className="text-[13px] text-fw-text-muted">Default keyboard shortcuts</p>
               <div className="rounded-lg border border-fw-border/40 overflow-hidden">
                 {HOTKEYS.map((hk, i) => (
                   <div
                     key={hk.key}
                     className={cn(
-                      'flex items-center justify-between px-4 py-3 text-[12px]',
+                      'flex items-center justify-between px-4 py-3 text-[14px]',
                       i > 0 && 'border-t border-fw-border/30'
                     )}
                   >
                     <span className="text-fw-text-secondary">{hk.action}</span>
-                    <kbd className="px-2 py-1 bg-[#0e1018] border border-fw-border rounded text-[10px] font-mono font-bold text-fw-text-secondary">
+                    <kbd className="px-2 py-1 bg-[#0e1018] border border-fw-border rounded text-[14px] font-mono font-bold text-fw-text-secondary">
                       {hk.key}
                     </kbd>
                   </div>
                 ))}
               </div>
-              <p className="text-[10px] text-fw-text-muted">Custom hotkey remapping coming soon.</p>
+              <p className="text-[14px] text-fw-text-muted">Custom hotkey remapping coming soon.</p>
             </div>
           )}
 
@@ -207,7 +207,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
         <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-fw-border/40 flex-shrink-0">
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-lg text-[12px] font-bold bg-fw-bg border border-fw-border text-fw-text-secondary hover:text-fw-text transition-colors"
+            className="px-4 py-2 rounded-lg text-[14px] font-bold bg-fw-bg border border-fw-border text-fw-text-secondary hover:text-fw-text transition-colors"
           >
             Close
           </button>
@@ -221,8 +221,8 @@ function SettingSection({ title, description, children }: { title: string; descr
   return (
     <div className="flex flex-col gap-2">
       <div>
-        <p className="text-[12px] font-bold text-fw-text">{title}</p>
-        {description && <p className="text-[11px] text-fw-text-muted mt-0.5">{description}</p>}
+        <p className="text-[14px] font-bold text-fw-text">{title}</p>
+        {description && <p className="text-[13px] text-fw-text-muted mt-0.5">{description}</p>}
       </div>
       {children}
     </div>
@@ -232,7 +232,7 @@ function SettingSection({ title, description, children }: { title: string; descr
 function ToggleRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <label className="flex items-center justify-between gap-4 cursor-pointer group">
-      <span className="text-[12px] text-fw-text-secondary group-hover:text-fw-text transition-colors">{label}</span>
+      <span className="text-[14px] text-fw-text-secondary group-hover:text-fw-text transition-colors">{label}</span>
       <button
         role="switch"
         aria-checked={checked}

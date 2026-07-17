@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { getTerminalStatus, type TerminalStatus } from '@/services/api';
 import { useTradingStore } from '@/store/tradingStore';
 import { cn } from '@/utils/helpers';
@@ -31,7 +31,7 @@ export function TerminalReadiness() {
 
   // Overall readiness
   const isReady = brokerOk && feedOk && tradingAllowed && !isLocked;
-  const readinessLabel = isLocked ? 'BLOCKED' : !brokerOk ? 'NO FEED' : !tradingAllowed ? 'RESTRICTED' : isReady ? 'READY' : 'DEGRADED';
+  const readinessLabel = isLocked ? 'BLOCKED' : !brokerOk ? 'BROKER OFFLINE' : !tradingAllowed ? 'RESTRICTED' : isReady ? 'READY' : 'DEGRADED';
   const readinessColor = isLocked ? 'text-red' : !brokerOk ? 'text-orange-400' : isReady ? 'text-emerald-400' : 'text-yellow-400';
   const readinessBadge = isLocked ? 'fw-badge-red' : !brokerOk ? 'fw-badge-orange' : isReady ? 'fw-badge-green' : 'fw-badge-yellow';
 
@@ -47,10 +47,10 @@ export function TerminalReadiness() {
         </div>
         <div className="flex items-center gap-1.5">
           {/* Broker */}
-          <div className="flex items-center gap-1" title={brokerOk ? 'Broker connected' : 'Broker disconnected'}>
+          <div className="flex items-center gap-1" title={brokerOk ? 'Broker data feed connected' : 'Broker data feed offline — market data unavailable'}>
             {brokerOk ? <Wifi size={9} className="text-emerald-400" /> : <WifiOff size={9} className="text-red-400" />}
-            <span className={cn('text-[9px] font-medium', brokerOk ? 'text-emerald-400' : 'text-red-400')}>
-              {brokerOk ? 'Feed' : 'No Feed'}
+            <span className={cn('text-[13px] font-medium', brokerOk ? 'text-emerald-400' : 'text-red-400')}>
+              {brokerOk ? 'Feed Live' : 'Feed Offline'}
             </span>
           </div>
           {/* Quotes */}
@@ -62,7 +62,7 @@ export function TerminalReadiness() {
 
       {/* Status Details Row */}
       {isLocked && (
-        <div className="flex items-center gap-3 text-[9px]">
+        <div className="flex items-center gap-3 text-[13px]">
           <span className="text-red/80 font-semibold">⚠ Account {accountStatus} — trading disabled</span>
         </div>
       )}

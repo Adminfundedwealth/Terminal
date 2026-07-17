@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+﻿import { useEffect, useRef, useState, useCallback } from 'react';
 import { createChart, type IChartApi, type ISeriesApi, ColorType, CrosshairMode } from 'lightweight-charts';
 import { useAppStore } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
@@ -7,8 +7,8 @@ import { cn, timeframeToLabel, formatPrice } from '@/utils/helpers';
 import type { ChartType, Timeframe, OHLC } from '@/types';
 import { Maximize2 } from 'lucide-react';
 import { IndicatorPanel, DEFAULT_INDICATORS, type IndicatorConfig, type IndicatorType } from './IndicatorPanel';
-import { DrawingTools, type DrawingMode } from './DrawingTools';
-import { ChartDrawingToolbar } from './ChartDrawingToolbar';
+import { type DrawingMode } from './DrawingTools';
+import { ChartDrawingToolbar, DrawingToolbarToggle } from './ChartDrawingToolbar';
 import { DrawingLayersPanel } from './DrawingLayersPanel';
 import { EmojiMarkerPicker } from './EmojiMarkerPicker';
 import {
@@ -77,6 +77,7 @@ export function ChartPanel() {
   const [lockActive, setLockActive] = useState(false);
   const [eyeHidden, setEyeHidden] = useState(false);
   const [layersOpen, setLayersOpen] = useState(false);
+  const [toolbarCollapsed, setToolbarCollapsed] = useState(false);
 
   // Brush / Measure SVG overlay state
   const [brushPaths, setBrushPaths] = useState<{ id: number; points: string; color: string; hidden?: boolean }[]>([]);
@@ -100,8 +101,8 @@ export function ChartPanel() {
   useEffect(() => { activeSymbolRef.current = activeSymbol; }, [activeSymbol]);
 
   const setDrawingModeSync = (mode: DrawingMode) => {
-    // Lock mode: allow switching to 'none' (pointer) but block entering any drawing mode
-    if (lockActive && mode !== 'none') return;
+    // Lock mode: allow switching to 'none' (pointer) or 'crosshair' (view-only) but block drawing modes
+    if (lockActive && mode !== 'none' && mode !== 'crosshair') return;
     drawingModeRef.current = mode;
     drawClicksRef.current = [];
     setDrawingMode(mode);
@@ -162,7 +163,7 @@ export function ChartPanel() {
 
     // Drawing click handler — uses refs so it always reads current mode/drawings
     chart.subscribeClick((param) => {
-      if (drawingModeRef.current === 'none' || !param.point || !param.time) return;
+      if (drawingModeRef.current === 'none' || drawingModeRef.current === 'crosshair' || !param.point || !param.time) return;
       const price = seriesRef.current ? (seriesRef.current as any).coordinateToPrice(param.point.y) : 0;
       if (price == null || price === 0) return;
 
@@ -201,7 +202,10 @@ export function ChartPanel() {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       switch (e.key.toLowerCase()) {
         case 'escape': setDrawingModeSync('none'); break;
+        case 'c': setDrawingModeSync('crosshair'); break;
         case 't': setDrawingModeSync('trendline'); break;
+        case 'a': setDrawingModeSync('arrow'); break;
+        case 'y': setDrawingModeSync('ray'); break;
         case 'h': setDrawingModeSync('hline'); break;
         case 'v': setDrawingModeSync('vline'); break;
         case 'f': setDrawingModeSync('fibonacci'); break;
@@ -277,7 +281,7 @@ export function ChartPanel() {
       }
       setDrawingModeSync('none');
 
-    } else if (mode === 'trendline' || mode === 'fibonacci' || mode === 'rectangle') {
+    } else if (mode === 'trendline' || mode === 'fibonacci' || mode === 'rectangle' || mode === 'arrow' || mode === 'ray') {
       clicks.push(point);
       if (clicks.length === 2) {
         const newDrawing = { type: mode, points: [...clicks], id: Date.now() };
@@ -472,6 +476,49 @@ export function ChartPanel() {
         { time: sorted[0].time as any, value: sorted[0].price },
         { time: sorted[1].time as any, value: sorted[1].price },
       ]);
+      trendlineSeriesRef.current.set(String(d.id), series);
+    });
+
+    // Arrow — rendered like a trendline but with a distinct colour (orange)
+    drawingsList.filter(d => d.type === 'arrow').forEach(d => {
+      if (!chartRef.current) return;
+      const [p1, p2] = d.points;
+      const sorted = [p1, p2].sort((a: any, b: any) => a.time - b.time);
+      const series = chartRef.current.addLineSeries({
+        color: '#f97316',
+        lineWidth: 2 as any,
+        lineStyle: 0,
+        lastValueVisible: true,
+        priceLineVisible: false,
+        crosshairMarkerVisible: true,
+      });
+      series.setData([
+        { time: sorted[0].time as any, value: sorted[0].price },
+        { time: sorted[1].time as any, value: sorted[1].price },
+      ]);
+      trendlineSeriesRef.current.set(String(d.id), series);
+    });
+
+    // Ray — extends the line from p1 through p2 to the last visible bar
+    drawingsList.filter(d => d.type === 'ray').forEach(d => {
+      if (!chartRef.current) return;
+      const [p1, p2] = d.points;
+      const raw = rawDataRef.current;
+      if (raw.length < 2) return;
+      const lastTime = raw[raw.length - 1].time;
+      // Extrapolate: slope = (p2.price - p1.price) / (p2.time - p1.time)
+      const slope = p1.time !== p2.time ? (p2.price - p1.price) / (p2.time - p1.time) : 0;
+      const extPrice = p2.price + slope * (lastTime - p2.time);
+      const sorted = [p1, p2, { time: lastTime, price: extPrice }].sort((a: any, b: any) => a.time - b.time);
+      const series = chartRef.current.addLineSeries({
+        color: '#a78bfa',
+        lineWidth: 1 as any,
+        lineStyle: 1, // dashed
+        lastValueVisible: false,
+        priceLineVisible: false,
+        crosshairMarkerVisible: false,
+      });
+      series.setData(sorted.map((pt: any) => ({ time: pt.time as any, value: pt.price })));
       trendlineSeriesRef.current.set(String(d.id), series);
     });
 
@@ -1043,30 +1090,30 @@ export function ChartPanel() {
     <div className={cn('h-full flex flex-col bg-[#0d0f15]', isFullscreen && 'fixed inset-0 z-50')}>
       {/* Symbol Context Bar — Enhanced */}
       {activeSymbol && (
-        <div className="h-[30px] min-h-[30px] flex items-center px-3 gap-4 border-b border-fw-border/40 bg-[#10121a] text-[11px]">
+        <div className="h-[30px] min-h-[30px] flex items-center px-3 gap-4 border-b border-fw-border/40 bg-[#10121a] text-[13px]">
           <div className="flex items-center gap-2">
             <span className="font-bold text-fw-text text-[13px]">{activeSymbol.symbol}</span>
-            <span className="text-[9px] text-fw-text-muted bg-[#141720] px-1.5 py-0.5 rounded font-medium">{activeSymbol.exchange}</span>
+            <span className="text-[13px] text-fw-text-muted bg-[#141720] px-1.5 py-0.5 rounded font-medium">{activeSymbol.exchange}</span>
           </div>
           {quote && (
             <>
               <span className={cn('font-mono font-black text-[14px] tabular-nums', quote.changePercent >= 0 ? 'text-green' : 'text-red')}>{formatPrice(quote.ltp)}</span>
-              <span className={cn('text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded tabular-nums', quote.changePercent >= 0 ? 'text-green bg-green-dim' : 'text-red bg-red-dim')}>
+              <span className={cn('text-[14px] font-mono font-semibold px-1.5 py-0.5 rounded tabular-nums', quote.changePercent >= 0 ? 'text-green bg-green-dim' : 'text-red bg-red-dim')}>
                 {quote.changePercent >= 0 ? '+' : ''}{quote.changePercent?.toFixed(2)}%
               </span>
               <div className="w-px h-3.5 bg-fw-border/30" />
-              <div className="flex items-center gap-2.5 text-[10px]">
+              <div className="flex items-center gap-2.5 text-[14px]">
                 <span className="text-fw-text-muted">O <span className="font-mono tabular-nums text-fw-text-secondary font-medium">{formatPrice(quote.open || quote.ltp)}</span></span>
                 <span className="text-fw-text-muted">H <span className="font-mono tabular-nums text-green font-medium">{formatPrice(quote.high || quote.ltp)}</span></span>
                 <span className="text-fw-text-muted">L <span className="font-mono tabular-nums text-red font-medium">{formatPrice(quote.low || quote.ltp)}</span></span>
                 <span className="text-fw-text-muted">C <span className="font-mono tabular-nums text-fw-text-secondary font-medium">{formatPrice(quote.close || quote.ltp)}</span></span>
               </div>
               <div className="w-px h-3.5 bg-fw-border/30" />
-              <span className="text-fw-text-muted text-[10px]">Vol <span className="font-mono tabular-nums text-fw-text-secondary font-medium">{quote.volume ? (quote.volume / 100000).toFixed(2) + 'L' : '—'}</span></span>
+              <span className="text-fw-text-muted text-[14px]">Vol <span className="font-mono tabular-nums text-fw-text-secondary font-medium">{quote.volume ? (quote.volume / 100000).toFixed(2) + 'L' : '—'}</span></span>
               {spread > 0 && (
                 <>
                   <div className="w-px h-3.5 bg-fw-border/30" />
-                  <span className="text-fw-text-muted text-[10px]">Spread <span className="font-mono tabular-nums text-fw-text-secondary font-medium">{formatPrice(spread)}</span></span>
+                  <span className="text-fw-text-muted text-[14px]">Spread <span className="font-mono tabular-nums text-fw-text-secondary font-medium">{formatPrice(spread)}</span></span>
                 </>
               )}
             </>
@@ -1078,22 +1125,20 @@ export function ChartPanel() {
       <div className="h-[32px] min-h-[32px] flex items-center px-2 gap-0.5 border-b border-fw-border/40 bg-[#10121a]">
         {TIMEFRAMES.map((tf) => (
           <button key={tf} onClick={() => setTimeframe(tf)}
-            className={cn('px-1.5 py-0.5 text-[10px] rounded font-medium transition-all', timeframe === tf ? 'bg-fw-accent text-white' : 'text-fw-text-muted hover:text-fw-text hover:bg-fw-hover')}>
+            className={cn('px-1.5 py-0.5 text-[14px] rounded font-medium transition-all', timeframe === tf ? 'bg-fw-accent text-white' : 'text-fw-text-muted hover:text-fw-text hover:bg-fw-hover')}>
             {timeframeToLabel(tf)}
           </button>
         ))}
         <div className="w-px h-4 bg-fw-border/40 mx-1" />
         {CHART_TYPES.map((ct) => (
           <button key={ct.value} onClick={() => setChartType(ct.value as ChartType)} title={ct.label}
-            className={cn('px-1.5 py-0.5 text-[9px] rounded font-medium transition-all', chartType === ct.value ? 'bg-fw-hover text-fw-text' : 'text-fw-text-muted hover:text-fw-text')}>
+            className={cn('px-1.5 py-0.5 text-[13px] rounded font-medium transition-all', chartType === ct.value ? 'bg-fw-hover text-fw-text' : 'text-fw-text-muted hover:text-fw-text')}>
             {ct.label}
           </button>
         ))}
         <div className="w-px h-4 bg-fw-border/40 mx-1" />
         {/* Indicators Dropdown */}
         <IndicatorPanel indicators={indicators} onToggle={handleToggleIndicator} onUpdatePeriod={handleUpdatePeriod} />
-        {/* Drawing Tools Dropdown (also accessible from left sidebar) */}
-        <DrawingTools activeMode={drawingMode} onModeChange={setDrawingModeSync} onClearAll={clearAllDrawings} drawingCount={drawings.length} />
         <div className="flex-1" />
         <button onClick={() => setIsFullscreen(!isFullscreen)} className="p-1 rounded text-fw-text-muted hover:text-fw-text hover:bg-fw-hover transition-colors" title="Fullscreen">
           <Maximize2 size={12} />
@@ -1101,7 +1146,7 @@ export function ChartPanel() {
       </div>
 
       {/* Chart Area */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden relative">
         {/* Left Drawing Toolbar — TradingView style */}
         <ChartDrawingToolbar
           activeMode={drawingMode}
@@ -1116,6 +1161,12 @@ export function ChartPanel() {
           onToggleLock={() => setLockActive(v => !v)}
           onToggleEye={() => setEyeHidden(v => !v)}
           onOpenLayers={() => setLayersOpen(v => !v)}
+          collapsed={toolbarCollapsed}
+        />
+        {/* Collapse toggle tab */}
+        <DrawingToolbarToggle
+          collapsed={toolbarCollapsed}
+          onToggle={() => setToolbarCollapsed(v => !v)}
         />
 
         {/* Chart + sub-panes */}
@@ -1129,8 +1180,8 @@ export function ChartPanel() {
             {!activeSymbol && (
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="text-center">
-                  <p className="text-[12px] text-fw-text-secondary">Select a symbol</p>
-                  <p className="text-[10px] text-fw-text-muted mt-1">Ctrl+K to search</p>
+                  <p className="text-[14px] text-fw-text-secondary">Select a symbol</p>
+                  <p className="text-[14px] text-fw-text-muted mt-1">Ctrl+K to search</p>
                 </div>
               </div>
             )}
@@ -1138,11 +1189,11 @@ export function ChartPanel() {
               <div className="absolute inset-0 flex items-center justify-center z-10">
                 <div className="text-center flex flex-col items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-fw-hover flex items-center justify-center text-fw-text-muted text-lg">📡</div>
-                  <p className="text-[12px] text-fw-text-secondary font-medium">Chart data unavailable</p>
-                  <p className="text-[10px] text-fw-text-muted">Market feed reconnecting…</p>
+                  <p className="text-[14px] text-fw-text-secondary font-medium">Chart data unavailable</p>
+                  <p className="text-[14px] text-fw-text-muted">Market feed reconnecting…</p>
                   <button
                     onClick={loadChartData}
-                    className="mt-1 px-3 py-1 rounded text-[10px] bg-fw-accent/20 hover:bg-fw-accent/40 text-fw-accent border border-fw-accent/30 transition-colors"
+                    className="mt-1 px-3 py-1 rounded text-[14px] bg-fw-accent/20 hover:bg-fw-accent/40 text-fw-accent border border-fw-accent/30 transition-colors"
                   >
                     Retry
                   </button>
@@ -1156,6 +1207,7 @@ export function ChartPanel() {
                 'absolute inset-0 w-full h-full z-[15]',
                 (drawingMode === 'brush' || drawingMode === 'zoom') ? 'cursor-crosshair' : 'pointer-events-none',
               )}
+              style={drawingMode === 'crosshair' ? { pointerEvents: 'none', cursor: 'crosshair' } : undefined}
               onMouseDown={overlayMouseDown}
               onMouseMove={overlayMouseMove}
               onMouseUp={overlayMouseUp}
@@ -1208,8 +1260,8 @@ export function ChartPanel() {
             </svg>
 
             {/* Status hint bar */}
-            {drawingMode !== 'none' && (
-              <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 px-3 py-1 rounded-full bg-fw-accent/90 text-white text-[10px] font-medium pointer-events-none">
+            {drawingMode !== 'none' && drawingMode !== 'crosshair' && (
+              <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 px-3 py-1 rounded-full bg-fw-accent/90 text-white text-[14px] font-medium pointer-events-none">
                 {drawingMode === 'hline'      && 'Click to place horizontal line'}
                 {drawingMode === 'vline'      && 'Click to place vertical line'}
                 {drawingMode === 'text'       && 'Click to place text note'}
@@ -1217,6 +1269,8 @@ export function ChartPanel() {
                 {drawingMode === 'brush'      && 'Click & drag to draw freehand'}
                 {drawingMode === 'zoom'       && 'Drag to zoom into range'}
                 {drawingMode === 'measure'    && `Click point ${drawClicksRef.current.length + 1} of 2`}
+                {drawingMode === 'arrow'      && `Click point ${drawClicksRef.current.length + 1} of 2`}
+                {drawingMode === 'ray'        && `Click point ${drawClicksRef.current.length + 1} of 2`}
                 {(drawingMode === 'trendline' || drawingMode === 'fibonacci' || drawingMode === 'rectangle') && `Click point ${drawClicksRef.current.length + 1} of 2`}
               </div>
             )}

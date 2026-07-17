@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useRef, useState } from 'react';
+﻿import { useMemo, useEffect, useRef, useState } from 'react';
 import { useAppStore } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
 import { cn } from '@/utils/helpers';
@@ -130,14 +130,14 @@ export function GreeksPanel() {
     <div className="h-full flex flex-col bg-[#0c0e14] overflow-y-auto">
       <div className="px-3 py-2 border-b border-fw-border bg-[#10121a] flex-shrink-0">
         <div className="flex items-center justify-between">
-          <span className="text-[12px] font-bold text-fw-text">Option Greeks</span>
-          <span className="text-[10px] text-fw-text-muted">{activeSymbol?.symbol || 'NIFTY'} {strikePrice} {isCall ? 'CE' : 'PE'}</span>
+          <span className="text-[14px] font-bold text-fw-text">Option Greeks</span>
+          <span className="text-[14px] text-fw-text-muted">{activeSymbol?.symbol || 'NIFTY'} {strikePrice} {isCall ? 'CE' : 'PE'}</span>
         </div>
       </div>
 
       {/* Parameters */}
       <div className="px-3 py-2 border-b border-fw-border/30 flex-shrink-0">
-        <div className="grid grid-cols-4 gap-2 text-[10px]">
+        <div className="grid grid-cols-4 gap-2 text-[14px]">
           <div>
             <span className="text-fw-text-muted block">Spot</span>
             <span className="text-fw-text font-mono font-bold">₹{spotPrice.toLocaleString()}</span>
@@ -168,7 +168,7 @@ export function GreeksPanel() {
         {/* Theoretical Price */}
         <div className="mt-4 p-3 bg-fw-bg border border-fw-border rounded">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] text-fw-text-secondary">Theoretical Price (B-S)</span>
+            <span className="text-[13px] text-fw-text-secondary">Theoretical Price (B-S)</span>
             <span className="text-[16px] font-mono font-bold text-fw-accent">₹{greeks.theoreticalPrice.toFixed(2)}</span>
           </div>
         </div>
@@ -187,10 +187,10 @@ function GreekRow({ label, value, format, description, color, max }: {
     <div>
       <div className="flex items-center justify-between mb-0.5">
         <div>
-          <span className="text-[11px] font-bold text-fw-text">{label}</span>
-          <span className="text-[9px] text-fw-text-muted ml-1.5">{description}</span>
+          <span className="text-[13px] font-bold text-fw-text">{label}</span>
+          <span className="text-[13px] text-fw-text-muted ml-1.5">{description}</span>
         </div>
-        <span className="text-[12px] font-mono font-bold text-fw-text tabular-nums">{format(value)}</span>
+        <span className="text-[14px] font-mono font-bold text-fw-text tabular-nums">{format(value)}</span>
       </div>
       <div className="h-1.5 bg-fw-border/20 rounded-full overflow-hidden">
         <div className={cn('h-full rounded-full transition-all', barColor)} style={{ width: `${pct}%` }} />

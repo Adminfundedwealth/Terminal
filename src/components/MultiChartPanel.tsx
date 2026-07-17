@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useAppStore } from '@/store/appStore';
 import { ChartPanel } from '@/components/ChartPanel';
 import { cn } from '@/utils/helpers';
@@ -32,7 +32,7 @@ export function MultiChartPanel() {
             key={l.value}
             onClick={() => setChartLayout(l.value)}
             className={cn(
-              'px-2 py-1 text-[10px] font-bold rounded transition-colors',
+              'px-2 py-1 text-[14px] font-bold rounded transition-colors',
               chartLayout === l.value ? 'bg-fw-accent text-white' : 'text-fw-text-muted hover:text-fw-text bg-fw-bg border border-fw-border'
             )}
           >

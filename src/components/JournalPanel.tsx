@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { Plus, Trash2, Edit2, Save, X, Image, Tag, AlertCircle, BookOpen } from 'lucide-react';
 import { useJournalStore, type JournalEntry } from '@/store/journalStore';
 import { cn } from '@/utils/helpers';
@@ -13,7 +13,7 @@ const PHASES: { value: JournalEntry['tradePhase']; label: string }[] = [
 const COMMON_TAGS = ['momentum', 'breakout', 'scalp', 'swing', 'reversal', 'trend', 'gap', 'news', 'overtraded', 'revenge'];
 
 export function JournalPanel() {
-  const { entries, addEntry, updateEntry, deleteEntry } = useJournalStore();
+  const { entries, addEntry, updateEntry, deleteEntry, backendAvailable } = useJournalStore();
   const [isAdding, setIsAdding] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [filterPhase, setFilterPhase] = useState<'all' | JournalEntry['tradePhase']>('all');
@@ -94,14 +94,14 @@ export function JournalPanel() {
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-fw-border">
         <div className="flex items-center gap-3">
-          <span className="text-[12px] font-bold text-fw-text">Trade Journal ({filteredEntries.length})</span>
+          <span className="text-[14px] font-bold text-fw-text">Trade Journal ({filteredEntries.length})</span>
           {/* Phase Filter */}
           <div className="flex items-center gap-0.5">
             {[{ value: 'all', label: 'All' }, ...PHASES].map((p) => (
               <button
                 key={p.value}
                 onClick={() => setFilterPhase(p.value as any)}
-                className={cn('px-2 py-0.5 text-[10px] rounded', filterPhase === p.value ? 'bg-fw-accent text-white' : 'text-fw-text-secondary hover:bg-fw-hover')}
+                className={cn('px-2 py-0.5 text-[14px] rounded', filterPhase === p.value ? 'bg-fw-accent text-white' : 'text-fw-text-secondary hover:bg-fw-hover')}
               >
                 {p.label}
               </button>
@@ -112,67 +112,77 @@ export function JournalPanel() {
             <select
               value={filterTag}
               onChange={(e) => setFilterTag(e.target.value)}
-              className="bg-fw-bg border border-fw-border rounded text-[10px] px-1.5 py-0.5 text-fw-text"
+              className="bg-fw-bg border border-fw-border rounded text-[14px] px-1.5 py-0.5 text-fw-text"
             >
               <option value="">All Tags</option>
               {allTags.map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
           )}
         </div>
-        <button onClick={() => { setIsAdding(!isAdding); setEditId(null); resetForm(); }} className="flex items-center gap-1 px-2 py-1 text-[11px] bg-fw-accent text-white rounded hover:brightness-110">
+        <button onClick={() => { setIsAdding(!isAdding); setEditId(null); resetForm(); }} className="flex items-center gap-1 px-2 py-1 text-[13px] bg-fw-accent text-white rounded hover:brightness-110">
           <Plus size={12} /> New Entry
         </button>
       </div>
+
+      {/* Device-only warning — shown until at least one successful backend sync */}
+      {!backendAvailable && (
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-yellow-900/15 border-b border-yellow-800/30 flex-shrink-0">
+          <AlertCircle size={10} className="text-yellow-500 flex-shrink-0" />
+          <span className="text-[14px] text-yellow-400/80">
+            Entries are saved to this device only — not backed up to your account yet.
+          </span>
+        </div>
+      )}
 
       {/* Add/Edit Form */}
       {isAdding && (
         <div className="px-3 py-2 border-b border-fw-border bg-fw-bg/50 space-y-2 max-h-[300px] overflow-y-auto">
           {/* Row 1: Symbol, Side, P&L, Phase */}
           <div className="grid grid-cols-4 gap-2">
-            <input placeholder="Symbol" value={form.symbol} onChange={(e) => setForm({ ...form, symbol: e.target.value.toUpperCase() })} className="bg-fw-bg border border-fw-border rounded text-[11px] px-2 py-1.5 text-fw-text outline-none focus:border-fw-accent" />
-            <select value={form.side} onChange={(e) => setForm({ ...form, side: e.target.value as any })} className="bg-fw-bg border border-fw-border rounded text-[11px] px-2 py-1.5 text-fw-text">
+            <input placeholder="Symbol" value={form.symbol} onChange={(e) => setForm({ ...form, symbol: e.target.value.toUpperCase() })} className="bg-fw-bg border border-fw-border rounded text-[13px] px-2 py-1.5 text-fw-text outline-none focus:border-fw-accent" />
+            <select value={form.side} onChange={(e) => setForm({ ...form, side: e.target.value as any })} className="bg-fw-bg border border-fw-border rounded text-[13px] px-2 py-1.5 text-fw-text">
               <option value="BUY">BUY</option><option value="SELL">SELL</option>
             </select>
-            <input type="number" placeholder="P&L" value={form.pnl || ''} onChange={(e) => setForm({ ...form, pnl: parseFloat(e.target.value) || 0 })} className="bg-fw-bg border border-fw-border rounded text-[11px] px-2 py-1.5 text-fw-text font-mono outline-none focus:border-fw-accent" />
-            <select value={form.tradePhase} onChange={(e) => setForm({ ...form, tradePhase: e.target.value as any })} className="bg-fw-bg border border-fw-border rounded text-[11px] px-2 py-1.5 text-fw-text">
+            <input type="number" placeholder="P&L" value={form.pnl || ''} onChange={(e) => setForm({ ...form, pnl: parseFloat(e.target.value) || 0 })} className="bg-fw-bg border border-fw-border rounded text-[13px] px-2 py-1.5 text-fw-text font-mono outline-none focus:border-fw-accent" />
+            <select value={form.tradePhase} onChange={(e) => setForm({ ...form, tradePhase: e.target.value as any })} className="bg-fw-bg border border-fw-border rounded text-[13px] px-2 py-1.5 text-fw-text">
               {PHASES.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
             </select>
           </div>
 
           {/* Notes */}
-          <textarea placeholder="Trade notes / rationale..." value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} className="w-full bg-fw-bg border border-fw-border rounded text-[11px] px-2 py-1.5 text-fw-text outline-none focus:border-fw-accent resize-none" />
+          <textarea placeholder="Trade notes / rationale..." value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} className="w-full bg-fw-bg border border-fw-border rounded text-[13px] px-2 py-1.5 text-fw-text outline-none focus:border-fw-accent resize-none" />
 
           {/* Mistakes */}
           <div className="relative">
             <AlertCircle size={10} className="absolute left-2 top-2.5 text-red-400" />
-            <input placeholder="Mistakes made..." value={form.mistakes} onChange={(e) => setForm({ ...form, mistakes: e.target.value })} className="w-full bg-fw-bg border border-fw-border rounded text-[11px] pl-6 pr-2 py-1.5 text-fw-text outline-none focus:border-fw-accent" />
+            <input placeholder="Mistakes made..." value={form.mistakes} onChange={(e) => setForm({ ...form, mistakes: e.target.value })} className="w-full bg-fw-bg border border-fw-border rounded text-[13px] pl-6 pr-2 py-1.5 text-fw-text outline-none focus:border-fw-accent" />
           </div>
 
           {/* Lessons */}
           <div className="relative">
             <BookOpen size={10} className="absolute left-2 top-2.5 text-fw-accent" />
-            <input placeholder="Lessons learned..." value={form.lessons} onChange={(e) => setForm({ ...form, lessons: e.target.value })} className="w-full bg-fw-bg border border-fw-border rounded text-[11px] pl-6 pr-2 py-1.5 text-fw-text outline-none focus:border-fw-accent" />
+            <input placeholder="Lessons learned..." value={form.lessons} onChange={(e) => setForm({ ...form, lessons: e.target.value })} className="w-full bg-fw-bg border border-fw-border rounded text-[13px] pl-6 pr-2 py-1.5 text-fw-text outline-none focus:border-fw-accent" />
           </div>
 
           {/* Screenshot URL */}
           <div className="relative">
             <Image size={10} className="absolute left-2 top-2.5 text-fw-text-secondary" />
-            <input placeholder="Screenshot URL (paste link)..." value={form.screenshotUrl} onChange={(e) => setForm({ ...form, screenshotUrl: e.target.value })} className="w-full bg-fw-bg border border-fw-border rounded text-[11px] pl-6 pr-2 py-1.5 text-fw-text outline-none focus:border-fw-accent" />
+            <input placeholder="Screenshot URL (paste link)..." value={form.screenshotUrl} onChange={(e) => setForm({ ...form, screenshotUrl: e.target.value })} className="w-full bg-fw-bg border border-fw-border rounded text-[13px] pl-6 pr-2 py-1.5 text-fw-text outline-none focus:border-fw-accent" />
           </div>
 
           {/* Emotions */}
           <div className="flex items-center gap-2">
-            <span className="text-[10px] text-fw-text-secondary">Emotion:</span>
+            <span className="text-[14px] text-fw-text-secondary">Emotion:</span>
             {EMOTIONS.map((em) => (
-              <button key={em} onClick={() => setForm({ ...form, emotion: em })} className={cn('px-2 py-0.5 text-[10px] rounded capitalize', form.emotion === em ? 'bg-fw-accent text-white' : 'bg-fw-bg text-fw-text-secondary border border-fw-border')}>{em}</button>
+              <button key={em} onClick={() => setForm({ ...form, emotion: em })} className={cn('px-2 py-0.5 text-[14px] rounded capitalize', form.emotion === em ? 'bg-fw-accent text-white' : 'bg-fw-bg text-fw-text-secondary border border-fw-border')}>{em}</button>
             ))}
           </div>
 
           {/* Rating */}
           <div className="flex items-center gap-2">
-            <span className="text-[10px] text-fw-text-secondary">Rating:</span>
+            <span className="text-[14px] text-fw-text-secondary">Rating:</span>
             {[1, 2, 3, 4, 5].map((r) => (
-              <button key={r} onClick={() => setForm({ ...form, rating: r as any })} className={cn('w-6 h-6 text-[11px] rounded', form.rating === r ? 'bg-fw-accent text-white' : 'bg-fw-bg text-fw-text-secondary border border-fw-border')}>{r}</button>
+              <button key={r} onClick={() => setForm({ ...form, rating: r as any })} className={cn('w-6 h-6 text-[13px] rounded', form.rating === r ? 'bg-fw-accent text-white' : 'bg-fw-bg text-fw-text-secondary border border-fw-border')}>{r}</button>
             ))}
           </div>
 
@@ -180,7 +190,7 @@ export function JournalPanel() {
           <div className="flex items-center gap-2 flex-wrap">
             <Tag size={10} className="text-fw-text-secondary" />
             {form.tags.map((tag) => (
-              <span key={tag} className="flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] bg-fw-accent/15 text-fw-accent rounded border border-fw-accent/30">
+              <span key={tag} className="flex items-center gap-0.5 px-1.5 py-0.5 text-[14px] bg-fw-accent/15 text-fw-accent rounded border border-fw-accent/30">
                 {tag}
                 <button onClick={() => removeTag(tag)} className="ml-0.5 hover:text-red-400"><X size={8} /></button>
               </span>
@@ -190,18 +200,18 @@ export function JournalPanel() {
               value={tagInput}
               onChange={(e) => setTagInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(tagInput); } }}
-              className="bg-fw-bg border border-fw-border rounded text-[10px] px-2 py-0.5 text-fw-text outline-none w-16 focus:border-fw-accent"
+              className="bg-fw-bg border border-fw-border rounded text-[14px] px-2 py-0.5 text-fw-text outline-none w-16 focus:border-fw-accent"
             />
             {/* Quick tag suggestions */}
             {COMMON_TAGS.filter((t) => !form.tags.includes(t)).slice(0, 4).map((t) => (
-              <button key={t} onClick={() => addTag(t)} className="text-[9px] text-fw-text-muted hover:text-fw-accent">+{t}</button>
+              <button key={t} onClick={() => addTag(t)} className="text-[13px] text-fw-text-muted hover:text-fw-accent">+{t}</button>
             ))}
           </div>
 
           {/* Actions */}
           <div className="flex gap-2">
-            <button onClick={handleSave} className="flex items-center gap-1 px-3 py-1.5 text-[11px] bg-fw-accent text-white rounded"><Save size={11} /> {editId ? 'Update' : 'Save'}</button>
-            <button onClick={() => { setIsAdding(false); setEditId(null); }} className="flex items-center gap-1 px-3 py-1.5 text-[11px] text-fw-text-secondary border border-fw-border rounded"><X size={11} /> Cancel</button>
+            <button onClick={handleSave} className="flex items-center gap-1 px-3 py-1.5 text-[13px] bg-fw-accent text-white rounded"><Save size={11} /> {editId ? 'Update' : 'Save'}</button>
+            <button onClick={() => { setIsAdding(false); setEditId(null); }} className="flex items-center gap-1 px-3 py-1.5 text-[13px] text-fw-text-secondary border border-fw-border rounded"><X size={11} /> Cancel</button>
           </div>
         </div>
       )}
@@ -209,7 +219,7 @@ export function JournalPanel() {
       {/* Entries List */}
       <div className="flex-1 overflow-y-auto">
         {filteredEntries.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-[12px] text-fw-text-secondary">
+          <div className="flex items-center justify-center h-full text-[14px] text-fw-text-secondary">
             {entries.length === 0 ? 'No journal entries yet. Click "New Entry" to start.' : 'No entries match filters.'}
           </div>
         ) : (
@@ -218,29 +228,29 @@ export function JournalPanel() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className={cn(
-                    'text-[9px] font-bold px-1.5 py-0.5 rounded uppercase',
+                    'text-[13px] font-bold px-1.5 py-0.5 rounded uppercase',
                     (entry.tradePhase || 'after') === 'before' ? 'bg-yellow-900/30 text-yellow-400' :
                     (entry.tradePhase || 'after') === 'during' ? 'bg-blue-900/30 text-blue-400' :
                     'bg-green-900/30 text-green-400'
                   )}>
                     {(entry.tradePhase || 'after').toUpperCase()}
                   </span>
-                  <span className="text-[12px] font-semibold text-fw-text">{entry.symbol || '—'}</span>
-                  <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded', entry.side === 'BUY' ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400')}>{entry.side}</span>
-                  <span className="text-[10px] text-fw-text-secondary capitalize">{entry.emotion}</span>
-                  <span className="text-[10px] text-fw-text-secondary">{'★'.repeat(entry.rating)}</span>
+                  <span className="text-[14px] font-semibold text-fw-text">{entry.symbol || '—'}</span>
+                  <span className={cn('text-[14px] font-bold px-1.5 py-0.5 rounded', entry.side === 'BUY' ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400')}>{entry.side}</span>
+                  <span className="text-[14px] text-fw-text-secondary capitalize">{entry.emotion}</span>
+                  <span className="text-[14px] text-fw-text-secondary">{'★'.repeat(entry.rating)}</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  {entry.pnl !== undefined && entry.pnl !== 0 && <span className={cn('text-[11px] font-mono', (entry.pnl || 0) >= 0 ? 'text-green' : 'text-red')}>₹{entry.pnl?.toLocaleString()}</span>}
+                  {entry.pnl !== undefined && entry.pnl !== 0 && <span className={cn('text-[13px] font-mono', (entry.pnl || 0) >= 0 ? 'text-green' : 'text-red')}>₹{entry.pnl?.toLocaleString()}</span>}
                   <button onClick={() => startEdit(entry)} className="p-1 text-fw-text-secondary hover:text-fw-text"><Edit2 size={11} /></button>
                   <button onClick={() => deleteEntry(entry.id)} className="p-1 text-fw-text-secondary hover:text-red-400"><Trash2 size={11} /></button>
                 </div>
               </div>
-              <p className="text-[11px] text-fw-text-secondary mt-1">{entry.notes}</p>
-              {entry.mistakes && <p className="text-[10px] text-red-400 mt-0.5">⚠ {entry.mistakes}</p>}
-              {entry.lessons && <p className="text-[10px] text-fw-accent mt-0.5">💡 {entry.lessons}</p>}
+              <p className="text-[13px] text-fw-text-secondary mt-1">{entry.notes}</p>
+              {entry.mistakes && <p className="text-[14px] text-red-400 mt-0.5">⚠ {entry.mistakes}</p>}
+              {entry.lessons && <p className="text-[14px] text-fw-accent mt-0.5">💡 {entry.lessons}</p>}
               {entry.screenshotUrl && (
-                <a href={entry.screenshotUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[10px] text-blue-400 hover:underline mt-0.5">
+                <a href={entry.screenshotUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[14px] text-blue-400 hover:underline mt-0.5">
                   <Image size={9} /> Screenshot
                 </a>
               )}
@@ -248,11 +258,11 @@ export function JournalPanel() {
               {entry.tags && entry.tags.length > 0 && (
                 <div className="flex items-center gap-1 mt-1">
                   {entry.tags.map((t) => (
-                    <span key={t} className="px-1.5 py-0.5 text-[9px] bg-fw-bg border border-fw-border rounded text-fw-text-secondary">{t}</span>
+                    <span key={t} className="px-1.5 py-0.5 text-[13px] bg-fw-bg border border-fw-border rounded text-fw-text-secondary">{t}</span>
                   ))}
                 </div>
               )}
-              <span className="text-[9px] text-fw-text-secondary/50">{entry.date}</span>
+              <span className="text-[13px] text-fw-text-secondary/50">{entry.date}</span>
             </div>
           ))
         )}

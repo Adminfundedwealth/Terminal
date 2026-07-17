@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { Save, FolderOpen, Trash2, Star, Copy } from 'lucide-react';
 import { useAppStore } from '@/store/appStore';
 
@@ -87,7 +87,7 @@ export function ChartTemplates({ onClose }: { onClose?: () => void }) {
         <span className="text-xs font-bold text-fw-text uppercase tracking-wide">Chart Templates</span>
         <button
           onClick={() => setShowSave(!showSave)}
-          className="flex items-center gap-1 text-[10px] px-2 py-1 rounded bg-fw-accent text-white hover:bg-fw-accent-hover"
+          className="flex items-center gap-1 text-[14px] px-2 py-1 rounded bg-fw-accent text-white hover:bg-fw-accent-hover"
         >
           <Save className="w-3 h-3" /> Save Current
         </button>
@@ -104,7 +104,7 @@ export function ChartTemplates({ onClose }: { onClose?: () => void }) {
             onKeyDown={e => e.key === 'Enter' && saveTemplate()}
             autoFocus
           />
-          <button onClick={saveTemplate} className="text-[10px] px-3 py-1.5 bg-fw-accent text-white rounded">Save</button>
+          <button onClick={saveTemplate} className="text-[14px] px-3 py-1.5 bg-fw-accent text-white rounded">Save</button>
         </div>
       )}
 
@@ -123,7 +123,7 @@ export function ChartTemplates({ onClose }: { onClose?: () => void }) {
             </button>
             <div className="flex-1 min-w-0 cursor-pointer" onClick={() => loadTemplate(t)}>
               <div className="text-xs font-bold text-fw-text truncate">{t.name}</div>
-              <div className="text-[10px] text-fw-text-muted">
+              <div className="text-[14px] text-fw-text-muted">
                 {t.timeframe} • {t.chartType} • {t.indicators.length} indicators
               </div>
             </div>
