@@ -38,7 +38,7 @@ for (const e of logoEntries) {
     continue;
   }
   const rel = e.logoSrc.replace(/^\//, '');
-  const filePath = path.join(repoRoot, rel);
+  const filePath = path.join(repoRoot, 'public', rel);
   if (!fs.existsSync(filePath)) {
     missingFiles.push({ symbol: e.symbol, expected: rel });
   } else {

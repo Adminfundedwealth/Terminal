@@ -22,7 +22,7 @@ const REGISTRY: Record<string, { kind: SymbolIconKind; accent: string; logoSrc?:
   LT: { kind: 'logo', accent: '#0f766e', logoSrc: '/logos/LT.svg' },
   AXISBANK: { kind: 'logo', accent: '#ef4444', logoSrc: '/logos/AXISBANK.svg' },
   INFY: { kind: 'logo', accent: '#2563eb', logoSrc: '/logos/INFY.svg' },
-  HDFC: { kind: 'logo', accent: '#0078d4', logoSrc: '/logos/HDFC.svg' },
+  HDFC: { kind: 'logo', accent: '#0078d4', logoSrc: '/logos/HDFCBANK.svg' },
   KOTAKBANK: { kind: 'logo', accent: '#f59e0b', logoSrc: '/logos/KOTAKBANK.svg' },
   BAJFINANCE: { kind: 'logo', accent: '#fb923c', logoSrc: '/logos/BAJFINANCE.svg' },
   MANDM: { kind: 'logo', accent: '#1d4ed8', logoSrc: '/logos/MANDM.svg' },
