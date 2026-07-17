@@ -125,7 +125,12 @@ export function BottomPanel() {
                 : 'fw-tab-inactive border-transparent hover:opacity-95 hover:bg-fw-hover/24'
             )}
           >
-            {tab.label}
+            <span
+              style={{ fontSize: bottomTab === tab.id ? 16 : 16, fontWeight: bottomTab === tab.id ? 800 : 600 }}
+              className={cn('align-middle')}
+            >
+              {tab.label}
+            </span>
             {tab.count > 0 && (
               <span className={cn(
                 'ml-2 inline-block',
