@@ -150,6 +150,8 @@ export interface AccountInfo {
   accountCode?: string;
   clientId?: string; // Legacy alias for accountCode
   name?: string;
+  email?: string;
+  displayName?: string; // Legacy alias for name
   userId?: string;
   brokerProvider?: string;
   balance: number;

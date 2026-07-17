@@ -214,18 +214,19 @@ export async function validateSSOToken(ssoToken, { ipAddress, userAgent } = {}) 
  * In development, also used by /auth/dev/generate-sso.
  */
 export function generateSSOToken(payload) {
-  return jwt.sign(
-    {
-      sub: payload.fwUserId,
-      accountId: payload.accountId,
-      challengeId: payload.challengeId || null,
-      email: payload.email || null,
-      name: payload.name || null,
-      nonce: crypto.randomUUID(),
-    },
-    SSO_SHARED_SECRET,
-    { expiresIn: '60s' }
-  );
+  const claims = {
+    sub: payload.fwUserId,
+    accountId: payload.accountId,
+    challengeId: payload.challengeId || null,
+    email: payload.email || null,
+    name: payload.name || null,
+    nonce: crypto.randomUUID(),
+  };
+  // Pass accountCode through if the caller provided it — terminal's validateSSOToken
+  // will use it as a hint, but always re-verifies against the DB.
+  if (payload.accountCode) claims.accountCode = payload.accountCode;
+
+  return jwt.sign(claims, SSO_SHARED_SECRET, { expiresIn: '60s' });
 }
 
 /**

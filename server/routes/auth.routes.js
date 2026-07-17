@@ -162,7 +162,7 @@ export function createAuthRouter() {
       });
     }
 
-    const { fwUserId, accountId, challengeId, email, name } = req.validatedBody;
+    const { fwUserId, accountId, challengeId, email, name, accountCode } = req.validatedBody;
 
     if (!fwUserId || !accountId) {
       return res.status(400).json({
@@ -175,6 +175,7 @@ export function createAuthRouter() {
       fwUserId,
       accountId,
       challengeId: challengeId || null,
+      accountCode: accountCode || null,
       email: email || null,
       name: name || null,
     });

@@ -197,11 +197,64 @@ export class AccountService {
     if (!supabase) {
       return null;
     }
-    const { data, error } = await supabase.from('trading_accounts').select('*').eq('id', accountId).single();
+
+    // Fetch trading account with joined challenge data in one query
+    const { data, error } = await supabase
+      .from('trading_accounts')
+      .select('*, challenge_accounts(id, type, plan, initial_balance, current_balance, peak_balance, profit_target_pct, daily_loss_limit_pct, max_drawdown_pct, status, started_at, expires_at)')
+      .eq('id', accountId)
+      .single();
+
     if (error || !data) {
       return null;
     }
-    return data;
+
+    // Look up trader display name
+    let displayName = 'Trader';
+    let email = null;
+    if (data.trader_id) {
+      const { data: trader } = await supabase
+        .from('terminal_traders')
+        .select('display_name, email')
+        .eq('id', data.trader_id)
+        .single();
+      if (trader) {
+        displayName = trader.display_name || 'Trader';
+        email = trader.email || null;
+      }
+    }
+
+    const ch = data.challenge_accounts;
+
+    // Map snake_case DB fields to camelCase AccountInfo shape
+    return {
+      id: data.id,
+      accountCode: data.account_code,
+      clientId: data.broker_client_id || data.account_code,
+      name: displayName,
+      email,
+      userId: data.trader_id,
+      brokerProvider: data.broker_provider,
+      balance: parseFloat(data.balance) || 0,
+      peakBalance: parseFloat(ch?.peak_balance ?? data.peak_balance) || parseFloat(data.balance) || 0,
+      availableMargin: parseFloat(data.available_margin) || 0,
+      usedMargin: parseFloat(data.used_margin) || 0,
+      totalPnl: 0,
+      status: data.status,
+      lockedReason: data.locked_reason || null,
+      challenge: ch ? {
+        id: ch.id,
+        type: ch.type,
+        plan: ch.plan,
+        initialBalance: parseFloat(ch.initial_balance) || 0,
+        status: ch.status,
+        startedAt: ch.started_at,
+        expiresAt: ch.expires_at,
+        profitTargetPct: parseFloat(ch.profit_target_pct) || 10,
+        dailyLossLimitPct: parseFloat(ch.daily_loss_limit_pct) || 5,
+        maxDrawdownPct: parseFloat(ch.max_drawdown_pct) || 10,
+      } : null,
+    };
   }
 
   async getPositions(accountId) {

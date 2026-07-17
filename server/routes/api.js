@@ -232,7 +232,7 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
         const account = await accountService.getAccount(req.user.accountId);
         if (account && (account.status === 'locked' || account.status === 'breached' || account.status === 'suspended')) {
           tradingBlocked = true;
-          blockReason = account.locked_reason || `Account is ${account.status}`;
+          blockReason = account.lockedReason || account.locked_reason || `Account is ${account.status}`;
         }
       } catch (_e) {
         // Non-critical — don't block status endpoint
@@ -289,8 +289,24 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
   router.get('/accounts', requireAuth, async (req, res) => {
     try {
       const { AccountRepository } = await import('../repositories/account.repository.js');
-      const accounts = await new AccountRepository().findByUserId(req.user.userId);
-      res.json(accounts || []);
+      const rows = await new AccountRepository().findByUserId(req.user.userId);
+      if (!rows || !rows.length) return res.json([]);
+      // Map snake_case DB rows to camelCase AccountInfo shape (same as getAccount)
+      const accounts = rows.map(row => ({
+        id: row.id,
+        accountCode: row.account_code,
+        clientId: row.broker_client_id || row.account_code,
+        userId: row.trader_id,
+        brokerProvider: row.broker_provider,
+        balance: parseFloat(row.balance) || 0,
+        peakBalance: parseFloat(row.peak_balance) || parseFloat(row.balance) || 0,
+        availableMargin: parseFloat(row.available_margin) || 0,
+        usedMargin: parseFloat(row.used_margin) || 0,
+        status: row.status,
+        lockedReason: row.locked_reason || null,
+        challenge: null, // Challenge data not fetched in list view for performance
+      }));
+      res.json(accounts);
     } catch (err) {
       if (err.message && err.message.includes('schema cache')) {
         return res.json([]);

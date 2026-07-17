@@ -147,6 +147,11 @@ export const schemas = {
     challengeId: z.string().uuid().optional().nullable(),
     email: z.string().email().optional().nullable(),
     name: z.string().max(200).optional().nullable(),
+    // Optional pass-through fields from the dashboard API server
+    accountCode: z.string().max(50).optional().nullable(),
+    traderId: z.string().optional().nullable(),
+    plan: z.string().max(50).optional().nullable(),
+    activationToken: z.string().optional().nullable(),
   }),
 
   // Alert
