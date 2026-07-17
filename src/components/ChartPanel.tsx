@@ -9,7 +9,21 @@ import { Maximize2 } from 'lucide-react';
 import { IndicatorPanel, DEFAULT_INDICATORS, type IndicatorConfig, type IndicatorType } from './IndicatorPanel';
 import { DrawingTools, type DrawingMode } from './DrawingTools';
 import { ChartDrawingToolbar } from './ChartDrawingToolbar';
-import { calculateSMA, calculateEMA, calculateRSI, calculateMACD, calculateBollinger, calculateVWAP, extractVolume } from '@/utils/indicators';
+import { DrawingLayersPanel } from './DrawingLayersPanel';
+import { EmojiMarkerPicker } from './EmojiMarkerPicker';
+import {
+  calculateSMA, calculateEMA, calculateRSI, calculateMACD, calculateBollinger,
+  calculateVWAP, extractVolume, calculateATR, calculateStochastic, calculateStochRSI,
+  calculateSuperTrend, calculateParabolicSAR, calculateADX, calculateCCI, calculateIchimoku,
+  calculatePivots, calculateWilliamsR, calculateStdDev, calculateDEMA, calculateTEMA,
+  calculateAO, calculateMomentum, calculateROC, calculateKeltner, calculateDonchian,
+  calculateEnvelopes, calculateHMA, calculateTRIX, calculateUltimateOscillator,
+  calculatePriceOscillator, calculateHistoricalVolatility, calculateMassIndex, calculateVortex,
+  calculateAroon, calculateCMO, calculateChoppiness, calculateDPO, calculateFisher,
+  calculateConnorsRSI, calculateCoppock, calculateLinearRegression, calculateMcGinley,
+  calculateBOP, calculateTypicalPrice, calculateMedianPrice, calculateAveragePrice,
+  calculateRVI, calculateLSMA,
+} from '@/utils/indicators';
 
 const TIMEFRAMES: Timeframe[] = ['1', '3', '5', '15', '30', '60', '240', 'D', 'W'];
 const CHART_TYPES: { value: ChartType; label: string }[] = [
@@ -35,6 +49,12 @@ export function ChartPanel() {
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | ISeriesApi<'Line'> | ISeriesApi<'Area'> | null>(null);
   const indicatorSeriesRef = useRef<Map<string, any>>(new Map());
+  // Generic sub-chart map: indicatorId → IChartApi
+  const subChartsRef = useRef<Map<string, IChartApi>>(new Map());
+  // Container refs for sub-charts — keyed by indicatorId
+  const subChartContainersRef = useRef<Map<string, HTMLDivElement | null>>(new Map());
+
+  // Legacy fixed refs kept for layout (RSI, MACD, Volume containers still rendered separately)
   const rsiChartRef = useRef<IChartApi | null>(null);
   const macdChartRef = useRef<IChartApi | null>(null);
   const volumeChartRef = useRef<IChartApi | null>(null);
@@ -52,6 +72,22 @@ export function ChartPanel() {
   const drawClicksRef = useRef<{ time: number; price: number }[]>([]);
   const priceLineSeriesRef = useRef<any[]>([]);
 
+  // New toggle states for tools 5-8
+  const [magnetActive, setMagnetActive] = useState(false);
+  const [lockActive, setLockActive] = useState(false);
+  const [eyeHidden, setEyeHidden] = useState(false);
+  const [layersOpen, setLayersOpen] = useState(false);
+
+  // Brush / Measure SVG overlay state
+  const [brushPaths, setBrushPaths] = useState<{ id: number; points: string; color: string; hidden?: boolean }[]>([]);
+  const [measureLabel, setMeasureLabel] = useState<{ x: number; y: number; text: string } | null>(null);
+
+  // Emoji picker state
+  const [emojiPicker, setEmojiPicker] = useState<{ screenX: number; screenY: number; chartPoint: { time: number; price: number } } | null>(null);
+
+  // Highlighted drawing id (from Layers panel)
+  const [highlightedId, setHighlightedId] = useState<number | null>(null);
+
   // Refs that mirror state so chart click handler always reads current values (no stale closure)
   const drawingModeRef = useRef<DrawingMode>('none');
   const drawingsRef = useRef<any[]>([]);
@@ -64,6 +100,8 @@ export function ChartPanel() {
   useEffect(() => { activeSymbolRef.current = activeSymbol; }, [activeSymbol]);
 
   const setDrawingModeSync = (mode: DrawingMode) => {
+    // Lock mode: allow switching to 'none' (pointer) but block entering any drawing mode
+    if (lockActive && mode !== 'none') return;
     drawingModeRef.current = mode;
     drawClicksRef.current = [];
     setDrawingMode(mode);
@@ -74,9 +112,35 @@ export function ChartPanel() {
   // Load drawings for active symbol
   useEffect(() => {
     if (activeSymbol) {
-      setDrawings(loadDrawings(activeSymbol.token));
+      const loaded = loadDrawings(activeSymbol.token);
+      setDrawings(loaded);
+      // Rehydrate brush SVG paths from persisted drawings
+      setBrushPaths(
+        loaded
+          .filter((d: any) => d.type === 'brush' && d.svgPath)
+          .map((d: any) => ({ id: d.id, points: d.svgPath, color: '#f59e0b' }))
+      );
     }
   }, [activeSymbol?.token]);
+
+  // Eye toggle: show or hide all drawings without deleting them
+  useEffect(() => {
+    if (eyeHidden) {
+      // Remove all rendered drawings temporarily
+      priceLineSeriesRef.current.forEach(pl => {
+        try { (seriesRef.current as any).removePriceLine(pl); } catch {}
+      });
+      priceLineSeriesRef.current = [];
+      trendlineSeriesRef.current.forEach(s => {
+        try { chartRef.current?.removeSeries(s); } catch {}
+      });
+      trendlineSeriesRef.current.clear();
+      if (seriesRef.current) (seriesRef.current as any).setMarkers([]);
+    } else {
+      // Re-apply all drawings
+      applyOverlayDrawings(drawingsRef.current);
+    }
+  }, [eyeHidden]);
 
   // Create main chart
   useEffect(() => {
@@ -101,7 +165,35 @@ export function ChartPanel() {
       if (drawingModeRef.current === 'none' || !param.point || !param.time) return;
       const price = seriesRef.current ? (seriesRef.current as any).coordinateToPrice(param.point.y) : 0;
       if (price == null || price === 0) return;
-      handleDrawingClickRef.current({ time: param.time as number, price });
+
+      // Magnet snap: find nearest candle and snap to closest OHLC
+      let snappedPrice = price;
+      if (magnetActiveRef.current && rawDataRef.current.length > 0) {
+        const clickTime = param.time as number;
+        const raw = rawDataRef.current;
+        let closest = raw[0];
+        let minDist = Math.abs(raw[0].time - clickTime);
+        for (const bar of raw) {
+          const d = Math.abs(bar.time - clickTime);
+          if (d < minDist) { minDist = d; closest = bar; }
+        }
+        const ohlc = [closest.open, closest.high, closest.low, closest.close];
+        snappedPrice = ohlc.reduce((prev, cur) => Math.abs(cur - price) < Math.abs(prev - price) ? cur : prev, ohlc[0]);
+      }
+
+      // Emoji mode: show picker at screen position, store chart point for later placement
+      if (drawingModeRef.current === 'emoji') {
+        const rect = chartContainerRef.current?.getBoundingClientRect();
+        if (rect) {
+          setEmojiPicker({
+            screenX: rect.left + param.point.x + 8,
+            screenY: rect.top + param.point.y + 8,
+            chartPoint: { time: param.time as number, price: snappedPrice },
+          });
+        }
+        return;
+      }
+      handleDrawingClickRef.current({ time: param.time as number, price: snappedPrice });
     });
 
     // Keyboard shortcuts
@@ -115,6 +207,14 @@ export function ChartPanel() {
         case 'f': setDrawingModeSync('fibonacci'); break;
         case 'r': setDrawingModeSync('rectangle'); break;
         case 'n': setDrawingModeSync('text'); break;
+        // New shortcuts — B=Brush, E=Emoji, M=Measure, Z=Zoom
+        case 'b': setDrawingModeSync('brush'); break;
+        case 'e': setDrawingModeSync('emoji'); break;
+        case 'm': setDrawingModeSync('measure'); break;
+        case 'z': setDrawingModeSync('zoom'); break;
+        // Toggles — G=Magnet, L=Lock
+        case 'g': setMagnetActive(prev => !prev); break;
+        case 'l': setLockActive(prev => !prev); break;
       }
     };
     window.addEventListener('keydown', handleKey);
@@ -189,8 +289,128 @@ export function ChartPanel() {
         drawClicksRef.current = [];
         setDrawingModeSync('none');
       }
+
+    } else if (mode === 'measure') {
+      clicks.push(point);
+      if (clicks.length === 2) {
+        const [p1, p2] = clicks;
+        const priceDiff = p2.price - p1.price;
+        const pricePct = ((priceDiff / p1.price) * 100).toFixed(2);
+        const sign = priceDiff >= 0 ? '+' : '';
+        // Bar count: approximate by dividing time difference by candle interval seconds
+        const rawData = rawDataRef.current;
+        let barCount = 0;
+        if (rawData.length >= 2) {
+          const interval = rawData[1].time - rawData[0].time;
+          barCount = Math.round(Math.abs(p2.time - p1.time) / interval);
+        }
+        const timeDiffMins = Math.abs(p2.time - p1.time) / 60;
+        const timeStr = timeDiffMins < 60
+          ? `${Math.round(timeDiffMins)}m`
+          : timeDiffMins < 1440
+            ? `${(timeDiffMins / 60).toFixed(1)}h`
+            : `${(timeDiffMins / 1440).toFixed(1)}d`;
+
+        const labelText = `${sign}${priceDiff.toFixed(2)} (${sign}${pricePct}%) · ${barCount} bars · ${timeStr}`;
+        const newDrawing = { type: 'measure', points: [...clicks], label: labelText, id: Date.now() };
+        const updated = [...drawingsRef.current, newDrawing];
+        drawingsRef.current = updated;
+        setDrawings(updated);
+        saveDrawings(sym.token, updated);
+        applyOverlayDrawings(updated);
+        drawClicksRef.current = [];
+        setDrawingModeSync('none');
+      }
     }
   }, []);
+
+  // ── Magnet snap: given a raw point, snap to nearest candle OHLC if magnet is on ──
+  const magnetActiveRef = useRef(false);
+  useEffect(() => { magnetActiveRef.current = magnetActive; }, [magnetActive]);
+
+  // ── Brush tool: track active stroke in progress ──────────────────────────
+  const brushActiveRef = useRef(false);
+  const brushCurrentPoints = useRef<string>('');
+  const brushCurrentId = useRef<number>(0);
+
+  // Zoom tool: track drag selection rect
+  const zoomDragRef = useRef<{ startX: number; startY: number } | null>(null);
+  const [zoomRect, setZoomRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+
+  // ── Brush/Zoom SVG overlay mouse handlers ────────────────────────────────
+  const overlayMouseDown = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
+    const mode = drawingModeRef.current;
+    if (mode === 'brush') {
+      brushActiveRef.current = true;
+      brushCurrentId.current = Date.now();
+      const rect = e.currentTarget.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      brushCurrentPoints.current = `M${x},${y}`;
+      setBrushPaths(prev => [...prev, { id: brushCurrentId.current, points: brushCurrentPoints.current, color: '#f59e0b' }]);
+      e.stopPropagation();
+    } else if (mode === 'zoom') {
+      const rect = e.currentTarget.getBoundingClientRect();
+      zoomDragRef.current = { startX: e.clientX - rect.left, startY: e.clientY - rect.top };
+      e.stopPropagation();
+    }
+  }, []);
+
+  const overlayMouseMove = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
+    const mode = drawingModeRef.current;
+    if (mode === 'brush' && brushActiveRef.current) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      brushCurrentPoints.current += ` L${x},${y}`;
+      setBrushPaths(prev => prev.map(p =>
+        p.id === brushCurrentId.current ? { ...p, points: brushCurrentPoints.current } : p
+      ));
+    } else if (mode === 'zoom' && zoomDragRef.current) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const cx = e.clientX - rect.left;
+      const cy = e.clientY - rect.top;
+      const { startX, startY } = zoomDragRef.current;
+      setZoomRect({
+        x: Math.min(startX, cx),
+        y: Math.min(startY, cy),
+        w: Math.abs(cx - startX),
+        h: Math.abs(cy - startY),
+      });
+    }
+  }, []);
+
+  const overlayMouseUp = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
+    const mode = drawingModeRef.current;
+    if (mode === 'brush' && brushActiveRef.current) {
+      brushActiveRef.current = false;
+      // Persist brush stroke as a drawing object
+      const sym = activeSymbolRef.current;
+      if (sym && brushCurrentPoints.current.length > 2) {
+        const newDrawing = { type: 'brush', svgPath: brushCurrentPoints.current, id: brushCurrentId.current };
+        const updated = [...drawingsRef.current, newDrawing];
+        drawingsRef.current = updated;
+        setDrawings(updated);
+        saveDrawings(sym.token, updated);
+        // brushPaths state already has the rendered path; sync id mapping
+      }
+      brushCurrentPoints.current = '';
+      setDrawingModeSync('none');
+    } else if (mode === 'zoom' && zoomDragRef.current && zoomRect) {
+      // Apply zoom: convert pixel rect to time range via chart API
+      if (chartRef.current) {
+        const ts = chartRef.current.timeScale();
+        const t1 = ts.coordinateToTime(zoomRect.x);
+        const t2 = ts.coordinateToTime(zoomRect.x + zoomRect.w);
+        if (t1 && t2) {
+          ts.setVisibleRange({ from: t1 as any, to: t2 as any });
+        }
+      }
+      zoomDragRef.current = null;
+      setZoomRect(null);
+      setDrawingModeSync('none');
+    }
+  }, [zoomRect]);
 
   // Keep the ref updated with the latest callback
   useEffect(() => { handleDrawingClickRef.current = handleDrawingClick; }, [handleDrawingClick]);
@@ -283,7 +503,29 @@ export function ChartPanel() {
       });
     });
 
-    // Re-apply markers (text + vlines)
+    // Measure — rendered as a trendline (LineSeries) between the two points
+    drawingsList.filter(d => d.type === 'measure').forEach(d => {
+      if (!chartRef.current) return;
+      const [p1, p2] = d.points;
+      const sorted = [p1, p2].sort((a: any, b: any) => a.time - b.time);
+      const color = (p2.price >= p1.price) ? '#22c55e' : '#ef4444';
+      const series = chartRef.current.addLineSeries({
+        color,
+        lineWidth: 2 as any,
+        lineStyle: 1, // dashed
+        lastValueVisible: false,
+        priceLineVisible: false,
+        crosshairMarkerVisible: false,
+        title: d.label ?? '',
+      });
+      series.setData([
+        { time: sorted[0].time as any, value: sorted[0].price },
+        { time: sorted[1].time as any, value: sorted[1].price },
+      ]);
+      trendlineSeriesRef.current.set(String(d.id), series);
+    });
+
+    // Re-apply markers (text + vlines + emoji)
     applyAllMarkers(drawingsList);
   }
 
@@ -295,8 +537,39 @@ export function ChartPanel() {
     const vlineMarkers = drawingsList
       .filter(d => d.type === 'vline')
       .map(d => ({ time: d.time, position: 'belowBar' as const, color: '#06b6d4', shape: 'arrowUp' as const, text: '|' }));
-    const all = [...textMarkers, ...vlineMarkers].sort((a: any, b: any) => a.time - b.time);
+    const emojiMarkers = drawingsList
+      .filter(d => d.type === 'emoji')
+      .map(d => ({ time: d.time, position: 'aboveBar' as const, color: '#f59e0b', shape: 'circle' as const, text: d.emoji }));
+    const all = [...textMarkers, ...vlineMarkers, ...emojiMarkers].sort((a: any, b: any) => a.time - b.time);
     (seriesRef.current as any).setMarkers(all);
+  }
+
+  // ── Layers panel helpers ────────────────────────────────────────────────
+  function handleLayersDelete(id: number) {
+    if (!activeSymbol) return;
+    const updated = drawingsRef.current.filter(d => d.id !== id);
+    drawingsRef.current = updated;
+    setDrawings(updated);
+    saveDrawings(activeSymbol.token, updated);
+    applyOverlayDrawings(updated);
+    // Also remove from brush paths if it was a brush drawing
+    setBrushPaths(prev => prev.filter(p => p.id !== id));
+  }
+
+  function handleLayersToggleVisibility(id: number) {
+    const updated = drawingsRef.current.map(d => d.id === id ? { ...d, hidden: !d.hidden } : d);
+    drawingsRef.current = updated;
+    setDrawings(updated);
+    if (activeSymbol) saveDrawings(activeSymbol.token, updated);
+    // Re-apply only visible drawings
+    applyOverlayDrawings(updated.filter(d => !d.hidden));
+    // Also toggle brush path visibility
+    setBrushPaths(prev => prev.map(p => p.id === id ? { ...p, hidden: !p.hidden } : p));
+  }
+
+  function handleLayersHighlight(id: number) {
+    setHighlightedId(id);
+    setTimeout(() => setHighlightedId(null), 1500);
   }
 
   function clearAllDrawings() {
@@ -313,6 +586,9 @@ export function ChartPanel() {
     drawingsRef.current = [];
     setDrawings([]);
     saveDrawings(activeSymbol.token, []);
+    // Clear brush SVG paths too
+    setBrushPaths([]);
+    setMeasureLabel(null);
   }
 
   function clearLastDrawing() {
@@ -386,109 +662,289 @@ export function ChartPanel() {
     if (data.length === 0) return;
 
     // Remove old indicator series from main chart
-    indicatorSeriesRef.current.forEach((s, key) => {
+    indicatorSeriesRef.current.forEach((s) => {
       try { chartRef.current!.removeSeries(s); } catch {}
     });
     indicatorSeriesRef.current.clear();
 
-    // Remove sub-charts
+    // Remove all sub-charts (generic map)
+    subChartsRef.current.forEach((sc) => { try { sc.remove(); } catch {} });
+    subChartsRef.current.clear();
+
+    // Legacy fixed sub-charts
     if (rsiChartRef.current) { rsiChartRef.current.remove(); rsiChartRef.current = null; }
     if (macdChartRef.current) { macdChartRef.current.remove(); macdChartRef.current = null; }
     if (volumeChartRef.current) { volumeChartRef.current.remove(); volumeChartRef.current = null; }
 
     // Apply overlay indicators
     for (const ind of indicators) {
-      if (!ind.enabled) continue;
-      if (ind.pane === 'main') {
-        applyMainIndicator(ind, data);
-      }
+      if (!ind.enabled || ind.pane !== 'main') continue;
+      applyMainIndicator(ind, data);
     }
 
-    // Apply separate pane indicators
-    const hasRSI = indicators.find(i => i.id === 'rsi' && i.enabled);
-    const hasMACD = indicators.find(i => i.id === 'macd' && i.enabled);
-    const hasVolume = indicators.find(i => i.id === 'volume' && i.enabled);
-
-    if (hasVolume && volumeContainerRef.current) {
-      const vc = createChart(volumeContainerRef.current, subChartOptions(volumeContainerRef.current));
-      volumeChartRef.current = vc;
-      const vs = vc.addHistogramSeries({ priceFormat: { type: 'volume' }, priceScaleId: '' });
-      vs.priceScale().applyOptions({ scaleMargins: { top: 0.1, bottom: 0 } });
-      vs.setData(extractVolume(data) as any);
-      vc.timeScale().fitContent();
-      syncTimeScales(chartRef.current, vc);
-    }
-
-    if (hasRSI && rsiContainerRef.current) {
-      const rc = createChart(rsiContainerRef.current, subChartOptions(rsiContainerRef.current));
-      rsiChartRef.current = rc;
-      const rsiData = calculateRSI(data, hasRSI.period || 14);
-      const rs = rc.addLineSeries({ color: '#a855f7', lineWidth: 2 as any });
-      rs.setData(rsiData as any);
-      // Overbought/oversold lines
-      rs.createPriceLine({ price: 70, color: 'rgba(239,68,68,0.4)', lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: '' });
-      rs.createPriceLine({ price: 30, color: 'rgba(34,197,94,0.4)', lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: '' });
-      rc.timeScale().fitContent();
-      syncTimeScales(chartRef.current, rc);
-    }
-
-    if (hasMACD && macdContainerRef.current) {
-      const mc = createChart(macdContainerRef.current, subChartOptions(macdContainerRef.current));
-      macdChartRef.current = mc;
-      const macdData = calculateMACD(data);
-      const macdLine = mc.addLineSeries({ color: '#3b82f6', lineWidth: 2 as any });
-      const signalLine = mc.addLineSeries({ color: '#f97316', lineWidth: 1 });
-      const histogram = mc.addHistogramSeries({ });
-      macdLine.setData(macdData.map(d => ({ time: d.time as any, value: d.macd })));
-      signalLine.setData(macdData.map(d => ({ time: d.time as any, value: d.signal })));
-      histogram.setData(macdData.map(d => ({ time: d.time as any, value: d.histogram, color: d.histogram >= 0 ? 'rgba(38,166,154,0.6)' : 'rgba(239,83,80,0.6)' })));
-      mc.timeScale().fitContent();
-      syncTimeScales(chartRef.current, mc);
+    // Apply separate-pane indicators
+    for (const ind of indicators) {
+      if (!ind.enabled || ind.pane !== 'separate') continue;
+      applySubPaneIndicator(ind, data);
     }
   };
 
   const applyMainIndicator = (ind: IndicatorConfig, data: OHLC[]) => {
     if (!chartRef.current) return;
-    let seriesData: { time: number; value: number }[] = [];
+    const addLine = (d: { time: number; value: number }[], color: string, key: string, lineWidth = 1, lineStyle = 0) => {
+      if (!d.length) return;
+      const s = chartRef.current!.addLineSeries({ color, lineWidth: lineWidth as any, lineStyle, lastValueVisible: false, priceLineVisible: false });
+      s.setData(d as any);
+      indicatorSeriesRef.current.set(key, s);
+    };
 
     switch (ind.type) {
-      case 'sma':
-        seriesData = calculateSMA(data, ind.period || 20);
-        break;
-      case 'ema':
-        seriesData = calculateEMA(data, ind.period || 20);
-        break;
-      case 'vwap':
-        seriesData = calculateVWAP(data);
-        break;
+      case 'sma': addLine(calculateSMA(data, ind.period || 20), ind.color || '#fff', ind.id, 1); break;
+      case 'ema': addLine(calculateEMA(data, ind.period || 20), ind.color || '#fff', ind.id, 1); break;
+      case 'dema': addLine(calculateDEMA(data, ind.period || 14), ind.color || '#f97316', ind.id, 1); break;
+      case 'tema': addLine(calculateTEMA(data, ind.period || 14), ind.color || '#84cc16', ind.id, 1); break;
+      case 'hma': addLine(calculateHMA(data, ind.period || 9), ind.color || '#14b8a6', ind.id, 1); break;
+      case 'mcginley': addLine(calculateMcGinley(data, ind.period || 14), ind.color || '#a855f7', ind.id, 1); break;
+      case 'lsma': addLine(calculateLSMA(data, ind.period || 14), ind.color || '#0ea5e9', ind.id, 1); break;
+      case 'linearreg': addLine(calculateLinearRegression(data, ind.period || 14), ind.color || '#fb923c', ind.id, 1); break;
+      case 'vwap': addLine(calculateVWAP(data), ind.color || '#a855f7', ind.id, 1); break;
+      case 'typicalprice': addLine(calculateTypicalPrice(data), ind.color || '#67e8f9', ind.id, 1); break;
+      case 'medianprice': addLine(calculateMedianPrice(data), ind.color || '#fde68a', ind.id, 1); break;
+      case 'avgprice': addLine(calculateAveragePrice(data), ind.color || '#bbf7d0', ind.id, 1); break;
+
       case 'bollinger': {
         const bb = calculateBollinger(data, ind.period || 20, 2);
-        // Upper band
-        const upper = chartRef.current.addLineSeries({ color: 'rgba(139,92,246,0.5)', lineWidth: 1, lastValueVisible: false, priceLineVisible: false });
-        upper.setData(bb.map(b => ({ time: b.time as any, value: b.upper })));
-        indicatorSeriesRef.current.set(ind.id + '_upper', upper);
-        // Lower band
-        const lower = chartRef.current.addLineSeries({ color: 'rgba(139,92,246,0.5)', lineWidth: 1, lastValueVisible: false, priceLineVisible: false });
-        lower.setData(bb.map(b => ({ time: b.time as any, value: b.lower })));
-        indicatorSeriesRef.current.set(ind.id + '_lower', lower);
-        // Middle
-        const middle = chartRef.current.addLineSeries({ color: 'rgba(139,92,246,0.3)', lineWidth: 1, lineStyle: 2, lastValueVisible: false, priceLineVisible: false });
-        middle.setData(bb.map(b => ({ time: b.time as any, value: b.middle })));
-        indicatorSeriesRef.current.set(ind.id + '_middle', middle);
-        return;
+        addLine(bb.map(b => ({ time: b.time, value: b.upper })), 'rgba(139,92,246,0.5)', ind.id + '_upper', 1);
+        addLine(bb.map(b => ({ time: b.time, value: b.lower })), 'rgba(139,92,246,0.5)', ind.id + '_lower', 1);
+        addLine(bb.map(b => ({ time: b.time, value: b.middle })), 'rgba(139,92,246,0.3)', ind.id + '_middle', 1, 2);
+        break;
+      }
+      case 'keltner': {
+        const kc = calculateKeltner(data, ind.period || 20, 10, 2);
+        addLine(kc.map(b => ({ time: b.time, value: b.upper })), 'rgba(20,184,166,0.5)', ind.id + '_upper', 1);
+        addLine(kc.map(b => ({ time: b.time, value: b.lower })), 'rgba(20,184,166,0.5)', ind.id + '_lower', 1);
+        addLine(kc.map(b => ({ time: b.time, value: b.middle })), 'rgba(20,184,166,0.3)', ind.id + '_middle', 1, 2);
+        break;
+      }
+      case 'donchian': {
+        const dc = calculateDonchian(data, ind.period || 20);
+        addLine(dc.map(b => ({ time: b.time, value: b.upper })), 'rgba(251,146,60,0.5)', ind.id + '_upper', 1);
+        addLine(dc.map(b => ({ time: b.time, value: b.lower })), 'rgba(251,146,60,0.5)', ind.id + '_lower', 1);
+        addLine(dc.map(b => ({ time: b.time, value: b.middle })), 'rgba(251,146,60,0.3)', ind.id + '_middle', 1, 2);
+        break;
+      }
+      case 'envelopes': {
+        const env = calculateEnvelopes(data, ind.period || 20);
+        addLine(env.map(b => ({ time: b.time, value: b.upper })), 'rgba(236,72,153,0.5)', ind.id + '_upper', 1);
+        addLine(env.map(b => ({ time: b.time, value: b.lower })), 'rgba(236,72,153,0.5)', ind.id + '_lower', 1);
+        addLine(env.map(b => ({ time: b.time, value: b.middle })), 'rgba(236,72,153,0.3)', ind.id + '_middle', 1, 2);
+        break;
+      }
+      case 'supertrend': {
+        const st = calculateSuperTrend(data, ind.period || 10, ind.params?.multiplier || 3);
+        const bullish = st.filter(s => s.direction === 1).map(s => ({ time: s.time, value: s.value }));
+        const bearish = st.filter(s => s.direction === -1).map(s => ({ time: s.time, value: s.value }));
+        addLine(bullish, 'rgba(38,166,154,0.8)', ind.id + '_bull', 2);
+        addLine(bearish, 'rgba(239,83,80,0.8)', ind.id + '_bear', 2);
+        break;
+      }
+      case 'psar': {
+        const sar = calculateParabolicSAR(data);
+        const bullSAR = sar.filter(s => s.direction === 1).map(s => ({ time: s.time, value: s.value }));
+        const bearSAR = sar.filter(s => s.direction === -1).map(s => ({ time: s.time, value: s.value }));
+        // SAR shown as dots — use LineSeries with crosshair markers only
+        addLine(bullSAR, 'rgba(38,166,154,0.9)', ind.id + '_bull', 1);
+        addLine(bearSAR, 'rgba(239,83,80,0.9)', ind.id + '_bear', 1);
+        break;
+      }
+      case 'ichimoku': {
+        const ic = calculateIchimoku(data);
+        addLine(ic.filter(x => x.tenkan !== null).map(x => ({ time: x.time, value: x.tenkan! })), '#e53e3e', ind.id + '_tenkan', 1);
+        addLine(ic.filter(x => x.kijun !== null).map(x => ({ time: x.time, value: x.kijun! })), '#3182ce', ind.id + '_kijun', 1);
+        addLine(ic.filter(x => x.senkouA !== null).map(x => ({ time: x.time, value: x.senkouA! })), 'rgba(38,166,154,0.4)', ind.id + '_senkouA', 1);
+        addLine(ic.filter(x => x.senkouB !== null).map(x => ({ time: x.time, value: x.senkouB! })), 'rgba(239,83,80,0.4)', ind.id + '_senkouB', 1);
+        addLine(ic.filter(x => x.chikou !== null).map(x => ({ time: x.time, value: x.chikou! })), 'rgba(168,85,247,0.6)', ind.id + '_chikou', 1);
+        break;
+      }
+      case 'pivots': {
+        const pv = calculatePivots(data);
+        if (!pv.length) break;
+        // Show as price lines on the last pivot
+        const last = pv[pv.length - 1];
+        const pvLines = [
+          { price: last.pivot, color: '#fff', title: 'P' },
+          { price: last.r1, color: '#ef4444', title: 'R1' }, { price: last.r2, color: '#ef4444', title: 'R2' }, { price: last.r3, color: '#ef4444', title: 'R3' },
+          { price: last.s1, color: '#22c55e', title: 'S1' }, { price: last.s2, color: '#22c55e', title: 'S2' }, { price: last.s3, color: '#22c55e', title: 'S3' },
+        ];
+        pvLines.forEach(pl => {
+          if (!seriesRef.current) return;
+          const pline = (seriesRef.current as any).createPriceLine({ price: pl.price, color: pl.color, lineWidth: 1, lineStyle: 3, axisLabelVisible: true, title: pl.title });
+          indicatorSeriesRef.current.set(ind.id + '_' + pl.title, pline);
+        });
+        break;
       }
     }
+  };
 
-    if (seriesData.length > 0) {
-      const series = chartRef.current.addLineSeries({
-        color: ind.color || '#ffffff',
-        lineWidth: 2 as any,
-        lastValueVisible: false,
-        priceLineVisible: false,
-      });
-      series.setData(seriesData as any);
-      indicatorSeriesRef.current.set(ind.id, series);
+  // ── Sub-pane indicator renderer ─────────────────────────────────────────
+  const applySubPaneIndicator = (ind: IndicatorConfig, data: OHLC[]) => {
+    const container = subChartContainersRef.current.get(ind.id);
+    if (!container || !chartRef.current) return;
+
+    const sc = createChart(container, subChartOptions(container));
+    subChartsRef.current.set(ind.id, sc);
+    const addLine = (d: { time: number; value: number }[], color: string, lw = 1) => {
+      if (!d.length) return null;
+      const s = sc.addLineSeries({ color, lineWidth: lw as any, lastValueVisible: false, priceLineVisible: false });
+      s.setData(d as any);
+      return s;
+    };
+
+    switch (ind.type) {
+      case 'volume': {
+        const vs = sc.addHistogramSeries({ priceFormat: { type: 'volume' }, priceScaleId: '' });
+        vs.priceScale().applyOptions({ scaleMargins: { top: 0.1, bottom: 0 } });
+        vs.setData(extractVolume(data) as any);
+        break;
+      }
+      case 'rsi': {
+        const rsiData = calculateRSI(data, ind.period || 14);
+        const rs = addLine(rsiData, '#a855f7', 2);
+        if (rs) {
+          rs.createPriceLine({ price: 70, color: 'rgba(239,68,68,0.4)', lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: '' });
+          rs.createPriceLine({ price: 30, color: 'rgba(34,197,94,0.4)', lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: '' });
+        }
+        break;
+      }
+      case 'macd': {
+        const macdData = calculateMACD(data);
+        addLine(macdData.map(d => ({ time: d.time, value: d.macd })), '#3b82f6', 2);
+        addLine(macdData.map(d => ({ time: d.time, value: d.signal })), '#f97316', 1);
+        const hist = sc.addHistogramSeries({});
+        hist.setData(macdData.map(d => ({ time: d.time as any, value: d.histogram, color: d.histogram >= 0 ? 'rgba(38,166,154,0.6)' : 'rgba(239,83,80,0.6)' })));
+        break;
+      }
+      case 'stochastic': {
+        const st = calculateStochastic(data, ind.period || 14);
+        const kLine = addLine(st.map(s => ({ time: s.time, value: s.k })), '#3b82f6', 2);
+        addLine(st.map(s => ({ time: s.time, value: s.d })), '#f97316', 1);
+        if (kLine) {
+          kLine.createPriceLine({ price: 80, color: 'rgba(239,68,68,0.4)', lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: '' });
+          kLine.createPriceLine({ price: 20, color: 'rgba(34,197,94,0.4)', lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: '' });
+        }
+        break;
+      }
+      case 'stochrsi': {
+        const sr = calculateStochRSI(data, ind.period || 14);
+        const kLine = addLine(sr.map(s => ({ time: s.time, value: s.k })), '#3b82f6', 2);
+        addLine(sr.map(s => ({ time: s.time, value: s.d })), '#f97316', 1);
+        if (kLine) {
+          kLine.createPriceLine({ price: 80, color: 'rgba(239,68,68,0.3)', lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: '' });
+          kLine.createPriceLine({ price: 20, color: 'rgba(34,197,94,0.3)', lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: '' });
+        }
+        break;
+      }
+      case 'adx': {
+        const adxData = calculateADX(data, ind.period || 14);
+        addLine(adxData.map(d => ({ time: d.time, value: d.adx })), '#f59e0b', 2);
+        addLine(adxData.map(d => ({ time: d.time, value: d.diPlus })), '#22c55e', 1);
+        addLine(adxData.map(d => ({ time: d.time, value: d.diMinus })), '#ef4444', 1);
+        break;
+      }
+      case 'atr': addLine(calculateATR(data, ind.period || 14), '#f59e0b', 2); break;
+      case 'cci': {
+        const cciLine = addLine(calculateCCI(data, ind.period || 20), '#06b6d4', 2);
+        if (cciLine) {
+          cciLine.createPriceLine({ price: 100, color: 'rgba(239,68,68,0.3)', lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: '' });
+          cciLine.createPriceLine({ price: -100, color: 'rgba(34,197,94,0.3)', lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: '' });
+        }
+        break;
+      }
+      case 'williamsr': {
+        const wr = addLine(calculateWilliamsR(data, ind.period || 14), '#ec4899', 2);
+        if (wr) {
+          wr.createPriceLine({ price: -20, color: 'rgba(239,68,68,0.3)', lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: '' });
+          wr.createPriceLine({ price: -80, color: 'rgba(34,197,94,0.3)', lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: '' });
+        }
+        break;
+      }
+      case 'stddev': addLine(calculateStdDev(data, ind.period || 20), '#f97316', 2); break;
+      case 'ao': {
+        const aoData = calculateAO(data);
+        const aoHist = sc.addHistogramSeries({});
+        aoHist.setData(aoData as any);
+        break;
+      }
+      case 'momentum': addLine(calculateMomentum(data, ind.period || 10), '#10b981', 2); break;
+      case 'roc': addLine(calculateROC(data, ind.period || 9), '#3b82f6', 2); break;
+      case 'trix': addLine(calculateTRIX(data, ind.period || 14), '#a78bfa', 2); break;
+      case 'ultimateosc': {
+        const uo = addLine(calculateUltimateOscillator(data), '#f59e0b', 2);
+        if (uo) {
+          uo.createPriceLine({ price: 70, color: 'rgba(239,68,68,0.3)', lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: '' });
+          uo.createPriceLine({ price: 30, color: 'rgba(34,197,94,0.3)', lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: '' });
+        }
+        break;
+      }
+      case 'histvolatility': addLine(calculateHistoricalVolatility(data, ind.period || 20), '#ef4444', 2); break;
+      case 'priceoscillator': addLine(calculatePriceOscillator(data, ind.period || 9), '#06b6d4', 2); break;
+      case 'massindex': addLine(calculateMassIndex(data), '#f97316', 2); break;
+      case 'vortex': {
+        const vData = calculateVortex(data, ind.period || 14);
+        addLine(vData.map(d => ({ time: d.time, value: d.vip })), '#22c55e', 2);
+        addLine(vData.map(d => ({ time: d.time, value: d.vim })), '#ef4444', 1);
+        break;
+      }
+      case 'aroon': {
+        const aroonData = calculateAroon(data, ind.period || 14);
+        addLine(aroonData.map(d => ({ time: d.time, value: d.up })), '#22c55e', 1);
+        addLine(aroonData.map(d => ({ time: d.time, value: d.down })), '#ef4444', 1);
+        addLine(aroonData.map(d => ({ time: d.time, value: d.oscillator })), '#f59e0b', 2);
+        break;
+      }
+      case 'cmo': {
+        const cmoLine = addLine(calculateCMO(data, ind.period || 9), '#a855f7', 2);
+        if (cmoLine) {
+          cmoLine.createPriceLine({ price: 50, color: 'rgba(239,68,68,0.3)', lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: '' });
+          cmoLine.createPriceLine({ price: -50, color: 'rgba(34,197,94,0.3)', lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: '' });
+        }
+        break;
+      }
+      case 'choppiness': {
+        const ci = addLine(calculateChoppiness(data, ind.period || 14), '#06b6d4', 2);
+        if (ci) {
+          ci.createPriceLine({ price: 61.8, color: 'rgba(239,68,68,0.3)', lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: '' });
+          ci.createPriceLine({ price: 38.2, color: 'rgba(34,197,94,0.3)', lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: '' });
+        }
+        break;
+      }
+      case 'dpo': addLine(calculateDPO(data, ind.period || 20), '#84cc16', 2); break;
+      case 'fisher': {
+        const fisherData = calculateFisher(data, ind.period || 9);
+        addLine(fisherData.map(d => ({ time: d.time, value: d.fisher })), '#f59e0b', 2);
+        addLine(fisherData.map(d => ({ time: d.time, value: d.signal })), '#ef4444', 1);
+        break;
+      }
+      case 'connorsrsi': {
+        const crsi = addLine(calculateConnorsRSI(data), '#a855f7', 2);
+        if (crsi) {
+          crsi.createPriceLine({ price: 90, color: 'rgba(239,68,68,0.3)', lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: '' });
+          crsi.createPriceLine({ price: 10, color: 'rgba(34,197,94,0.3)', lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: '' });
+        }
+        break;
+      }
+      case 'coppock': addLine(calculateCoppock(data), '#f59e0b', 2); break;
+      case 'rvi': {
+        const rviData = calculateRVI(data, ind.period || 10);
+        addLine(rviData.map(d => ({ time: d.time, value: d.rvi })), '#3b82f6', 2);
+        addLine(rviData.map(d => ({ time: d.time, value: d.signal })), '#f97316', 1);
+        break;
+      }
+      case 'bop': addLine(calculateBOP(data), '#10b981', 2); break;
     }
+
+    sc.timeScale().fitContent();
+    syncTimeScales(chartRef.current!, sc);
   };
 
   function subChartOptions(container: HTMLElement) {
@@ -565,11 +1021,24 @@ export function ChartPanel() {
     setIndicators(prev => prev.map(i => i.id === id ? { ...i, period, label: `${i.type.toUpperCase()} ${period}` } : i));
   }, []);
 
-  const spread = quote ? (quote.high - quote.low) : 0;
-  const hasRSI = indicators.find(i => i.id === 'rsi' && i.enabled);
-  const hasMACD = indicators.find(i => i.id === 'macd' && i.enabled);
-  const hasVolume = indicators.find(i => i.id === 'volume' && i.enabled);
+  // ── Emoji placement callback ─────────────────────────────────────────────
+  const handleEmojiSelect = useCallback((emoji: string) => {
+    if (!emojiPicker) return;
+    const { chartPoint } = emojiPicker;
+    const sym = activeSymbolRef.current;
+    if (!sym) { setEmojiPicker(null); return; }
+    const newDrawing = { type: 'emoji', time: chartPoint.time, price: chartPoint.price, emoji, id: Date.now() };
+    const updated = [...drawingsRef.current, newDrawing];
+    drawingsRef.current = updated;
+    setDrawings(updated);
+    saveDrawings(sym.token, updated);
+    applyAllMarkers(updated);
+    setEmojiPicker(null);
+    setDrawingModeSync('none');
+  }, [emojiPicker]);
 
+  const separatePaneIndicators = indicators.filter(i => i.enabled && i.pane === 'separate');
+  const spread = quote ? (quote.high - quote.low) : 0;
   return (
     <div className={cn('h-full flex flex-col bg-[#0d0f15]', isFullscreen && 'fixed inset-0 z-50')}>
       {/* Symbol Context Bar — Enhanced */}
@@ -640,6 +1109,13 @@ export function ChartPanel() {
           onClearLast={clearLastDrawing}
           onClearAll={clearAllDrawings}
           drawingCount={drawings.length}
+          magnetActive={magnetActive}
+          lockActive={lockActive}
+          eyeHidden={eyeHidden}
+          onToggleMagnet={() => setMagnetActive(v => !v)}
+          onToggleLock={() => setLockActive(v => !v)}
+          onToggleEye={() => setEyeHidden(v => !v)}
+          onOpenLayers={() => setLayersOpen(v => !v)}
         />
 
         {/* Chart + sub-panes */}
@@ -673,21 +1149,112 @@ export function ChartPanel() {
                 </div>
               </div>
             )}
+
+            {/* SVG overlay — brush strokes, measure annotations, zoom rect */}
+            <svg
+              className={cn(
+                'absolute inset-0 w-full h-full z-[15]',
+                (drawingMode === 'brush' || drawingMode === 'zoom') ? 'cursor-crosshair' : 'pointer-events-none',
+              )}
+              onMouseDown={overlayMouseDown}
+              onMouseMove={overlayMouseMove}
+              onMouseUp={overlayMouseUp}
+              onMouseLeave={overlayMouseUp}
+            >
+              {/* Brush strokes */}
+              {!eyeHidden && brushPaths.map(p => (
+                <path
+                  key={p.id}
+                  d={p.points}
+                  stroke={highlightedId === p.id ? '#ffffff' : p.color}
+                  strokeWidth={highlightedId === p.id ? 3 : 2}
+                  fill="none"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  opacity={0.85}
+                />
+              ))}
+              {/* Zoom selection rectangle */}
+              {zoomRect && drawingMode === 'zoom' && (
+                <rect
+                  x={zoomRect.x} y={zoomRect.y}
+                  width={zoomRect.w} height={zoomRect.h}
+                  fill="rgba(59,130,246,0.1)"
+                  stroke="#3b82f6"
+                  strokeWidth={1}
+                  strokeDasharray="4,3"
+                />
+              )}
+              {/* Measure label floating badge — render near midpoint of measure line */}
+              {!eyeHidden && drawings.filter(d => d.type === 'measure').map(d => {
+                if (!chartRef.current || !seriesRef.current) return null;
+                const [p1, p2] = d.points;
+                const midTime = Math.round((p1.time + p2.time) / 2) as any;
+                const midPrice = (p1.price + p2.price) / 2;
+                const x = chartRef.current.timeScale().timeToCoordinate(midTime);
+                const y = (seriesRef.current as any).priceToCoordinate(midPrice);
+                if (x == null || y == null) return null;
+                return (
+                  <g key={d.id}>
+                    <rect x={x - 2} y={y - 12} width={d.label?.length * 5.5 + 12 || 80} height={18} rx={4}
+                      fill="#1a1d28" stroke={d.points[1].price >= d.points[0].price ? '#22c55e' : '#ef4444'} strokeWidth={1} />
+                    <text x={x + 4} y={y} fontSize={9} fill={d.points[1].price >= d.points[0].price ? '#22c55e' : '#ef4444'}
+                      fontFamily="monospace">
+                      {d.label}
+                    </text>
+                  </g>
+                );
+              })}
+            </svg>
+
+            {/* Status hint bar */}
             {drawingMode !== 'none' && (
               <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 px-3 py-1 rounded-full bg-fw-accent/90 text-white text-[10px] font-medium pointer-events-none">
-                {drawingMode === 'hline' && 'Click to place horizontal line'}
-                {drawingMode === 'vline' && 'Click to place vertical line'}
-                {drawingMode === 'text' && 'Click to place text note'}
+                {drawingMode === 'hline'      && 'Click to place horizontal line'}
+                {drawingMode === 'vline'      && 'Click to place vertical line'}
+                {drawingMode === 'text'       && 'Click to place text note'}
+                {drawingMode === 'emoji'      && 'Click chart to choose annotation emoji'}
+                {drawingMode === 'brush'      && 'Click & drag to draw freehand'}
+                {drawingMode === 'zoom'       && 'Drag to zoom into range'}
+                {drawingMode === 'measure'    && `Click point ${drawClicksRef.current.length + 1} of 2`}
                 {(drawingMode === 'trendline' || drawingMode === 'fibonacci' || drawingMode === 'rectangle') && `Click point ${drawClicksRef.current.length + 1} of 2`}
               </div>
             )}
+
+            {/* Layers panel — positioned inside chart area, left side */}
+            {layersOpen && (
+              <DrawingLayersPanel
+                items={drawings.map(d => ({ id: d.id, type: d.type, label: d.label ?? '', hidden: d.hidden ?? false }))}
+                onClose={() => setLayersOpen(false)}
+                onHighlight={handleLayersHighlight}
+                onToggleVisibility={handleLayersToggleVisibility}
+                onDelete={handleLayersDelete}
+              />
+            )}
           </div>
-          {/* Sub-chart panes */}
-          {hasVolume && <div ref={volumeContainerRef} className="h-[60px] min-h-[60px] border-t border-fw-border/30" />}
-          {hasRSI && <div ref={rsiContainerRef} className="h-[80px] min-h-[80px] border-t border-fw-border/30" />}
-          {hasMACD && <div ref={macdContainerRef} className="h-[80px] min-h-[80px] border-t border-fw-border/30" />}
+          {/* Sub-chart panes — one per enabled separate-pane indicator */}
+          {separatePaneIndicators.map(ind => (
+            <div
+              key={ind.id}
+              ref={el => { subChartContainersRef.current.set(ind.id, el); }}
+              className={cn(
+                'border-t border-fw-border/30',
+                ind.type === 'volume' ? 'h-[60px] min-h-[60px]' : 'h-[80px] min-h-[80px]'
+              )}
+            />
+          ))}
         </div>
       </div>
+
+      {/* Emoji Marker Picker — rendered at screen-level to avoid clipping */}
+      {emojiPicker && (
+        <EmojiMarkerPicker
+          x={emojiPicker.screenX}
+          y={emojiPicker.screenY}
+          onSelect={handleEmojiSelect}
+          onClose={() => { setEmojiPicker(null); setDrawingModeSync('none'); }}
+        />
+      )}
     </div>
   );
 }
