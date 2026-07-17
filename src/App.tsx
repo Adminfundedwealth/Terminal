@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+﻿import { useEffect, useRef, useState, useCallback } from 'react';
 import { Sidebar } from '@/components/Sidebar';
 import { TopBar } from '@/components/TopBar';
 import { Watchlist } from '@/components/Watchlist';
@@ -20,7 +20,6 @@ import { ToastProvider } from '@/components/ToastProvider';
 import { MobileLayout } from '@/components/MobileLayout';
 import { useHotkeys } from '@/hooks/useHotkeys';
 import { useAuth } from '@/hooks/useAuth';
-import { useAccountSwitcher } from '@/hooks/useAccountSwitcher';
 import { useWatchlistSync } from '@/hooks/useWatchlistSync';
 import { useAppStore } from '@/store/appStore';
 import { useThemeStore } from '@/store/themeStore';
@@ -111,9 +110,6 @@ export default function App() {
   const { theme, showOptionChain, panels, activeWorkspace } = useAppStore();
   const { isAuthenticated, isLoading, error } = useAuth();
 
-  // Multi-account: load all accounts, handle URL param + localStorage auto-select
-  useAccountSwitcher();
-
   // Sync watchlists with backend
   useWatchlistSync();
 
@@ -188,14 +184,14 @@ export default function App() {
             </div>
           </div>
           <div className="flex flex-col items-center gap-1">
-            <span className="text-title font-extrabold tracking-wide bg-gradient-to-r from-[#00D4FF] via-[#4F46E5] to-[#7C3AED] bg-clip-text text-transparent">
+            <span className="text-[14px] font-extrabold tracking-wide bg-gradient-to-r from-[#00D4FF] via-[#4F46E5] to-[#7C3AED] bg-clip-text text-transparent">
               FUNDEDWEALTH
             </span>
-            <span className="text-xxs font-bold tracking-[0.25em] text-fw-accent/70">
+            <span className="text-[14px] font-bold tracking-[0.25em] text-fw-accent/70">
               TERMINAL
             </span>
           </div>
-          <div className="flex items-center gap-2 text-fw-text-muted text-xs">
+          <div className="flex items-center gap-2 text-fw-text-muted text-[13px]">
             <div className="w-3 h-3 border-2 border-fw-accent border-t-transparent rounded-full animate-spin" />
             Connecting...
           </div>
@@ -226,7 +222,7 @@ export default function App() {
 
   return (
     <ToastProvider>
-      <div className="h-screen w-screen flex bg-fw-bg overflow-hidden text-base">
+    <div className="h-screen w-screen flex bg-fw-bg overflow-hidden text-[13px]">
       {/* Left Sidebar Rail */}
       <Sidebar />
 

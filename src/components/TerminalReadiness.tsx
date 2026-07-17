@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { getTerminalStatus, type TerminalStatus } from '@/services/api';
 import { useTradingStore } from '@/store/tradingStore';
 import { cn } from '@/utils/helpers';
@@ -31,12 +31,12 @@ export function TerminalReadiness() {
 
   // Overall readiness
   const isReady = brokerOk && feedOk && tradingAllowed && !isLocked;
-  const readinessLabel = isLocked ? 'BLOCKED' : !brokerOk ? 'NO FEED' : !tradingAllowed ? 'RESTRICTED' : isReady ? 'READY' : 'DEGRADED';
+  const readinessLabel = isLocked ? 'BLOCKED' : !brokerOk ? 'BROKER OFFLINE' : !tradingAllowed ? 'RESTRICTED' : isReady ? 'READY' : 'DEGRADED';
   const readinessColor = isLocked ? 'text-red' : !brokerOk ? 'text-orange-400' : isReady ? 'text-emerald-400' : 'text-yellow-400';
   const readinessBadge = isLocked ? 'fw-badge-red' : !brokerOk ? 'fw-badge-orange' : isReady ? 'fw-badge-green' : 'fw-badge-yellow';
 
   return (
-    <div className="px-3 py-2 border-b border-fw-border bg-gradient-to-r from-fw-surface to-fw-surface-2">
+    <div className="px-3 py-2 border-b border-fw-border bg-gradient-to-r from-[#0a0c12] to-[#0c0e16]">
       {/* Readiness Row */}
       <div className="flex items-center justify-between mb-1.5">
         <div className="flex items-center gap-2">
@@ -47,22 +47,22 @@ export function TerminalReadiness() {
         </div>
         <div className="flex items-center gap-1.5">
           {/* Broker */}
-          <div className="flex items-center gap-1" title={brokerOk ? 'Broker connected' : 'Broker disconnected'}>
+          <div className="flex items-center gap-1" title={brokerOk ? 'Broker data feed connected' : 'Broker data feed offline — market data unavailable'}>
             {brokerOk ? <Wifi size={9} className="text-emerald-400" /> : <WifiOff size={9} className="text-red-400" />}
-            <span className={cn('text-xs font-medium', brokerOk ? 'text-emerald-400' : 'text-red-400')}>
-              {brokerOk ? 'Feed' : 'No Feed'}
+            <span className={cn('text-[13px] font-medium', brokerOk ? 'text-emerald-400' : 'text-red-400')}>
+              {brokerOk ? 'Feed Live' : 'Feed Offline'}
             </span>
           </div>
           {/* Quotes */}
           {status?.feed?.cachedQuotes != null && (
-            <span className="text-xxs text-fw-text-secondary font-mono">{status.feed.cachedQuotes}q</span>
+            <span className="text-[8px] text-fw-text-muted font-mono">{status.feed.cachedQuotes}q</span>
           )}
         </div>
       </div>
 
       {/* Status Details Row */}
       {isLocked && (
-        <div className="flex items-center gap-3 text-[9px]">
+        <div className="flex items-center gap-3 text-[13px]">
           <span className="text-red/80 font-semibold">⚠ Account {accountStatus} — trading disabled</span>
         </div>
       )}

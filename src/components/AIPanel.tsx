@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+﻿import { useState, useMemo } from 'react';
 import { Bot, TrendingUp, Brain, Calendar, MessageCircle, RefreshCw, AlertCircle } from 'lucide-react';
 import { useTradingStore } from '@/store/tradingStore';
 import { useJournalStore } from '@/store/journalStore';
@@ -36,10 +36,11 @@ export function AIPanel() {
   return (
     <div className="h-full flex flex-col bg-fw-surface overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-fw-border bg-fw-surface flex-shrink-0">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-fw-border bg-[#10121a] flex-shrink-0">
         <div className="flex items-center gap-2">
           <Bot size={16} className="text-fw-purple" />
-          <span className="text-base font-bold text-fw-text">AI Workspace</span>
+          <span className="text-[14px] font-bold text-fw-text">Insights</span>
+          <span className="text-[13px] text-fw-text-muted bg-fw-purple/10 border border-fw-purple/20 px-1.5 py-0.5 rounded font-medium">Rule-based · No AI backend</span>
         </div>
         <div className="flex items-center gap-1">
           {tabs.map(tab => (
@@ -47,7 +48,7 @@ export function AIPanel() {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={cn(
-                'flex items-center gap-1 px-2 py-1 text-xs rounded transition-all',
+                'flex items-center gap-1 px-2 py-1 text-[14px] rounded transition-all',
                 activeTab === tab.id
                   ? 'bg-fw-purple/15 text-fw-purple border border-fw-purple/30'
                   : 'text-fw-text-secondary hover:text-fw-text hover:bg-fw-hover'
@@ -129,7 +130,7 @@ function TradeReviewTab() {
 
   return (
     <div className="p-3 space-y-3">
-      <div className="text-sm text-fw-text-secondary mb-2">
+      <div className="text-[13px] text-fw-text-secondary mb-2">
         Select a trade to review. Scores are computed from terminal data (journal entries, P&L, emotions).
       </div>
 
@@ -147,11 +148,11 @@ function TradeReviewTab() {
             )}
           >
             <div className="flex items-center gap-2">
-              <span className={cn('text-xs font-bold px-1.5 py-0.5 rounded', t.side === 'BUY' ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400')}>{t.side}</span>
-              <span className="text-sm font-semibold text-fw-text">{t.symbol}</span>
-              <span className="text-xs text-fw-text-secondary">{t.date}</span>
+              <span className={cn('text-[14px] font-bold px-1.5 py-0.5 rounded', t.side === 'BUY' ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400')}>{t.side}</span>
+              <span className="text-[13px] font-semibold text-fw-text">{t.symbol}</span>
+              <span className="text-[14px] text-fw-text-muted">{t.date}</span>
             </div>
-            <span className={cn('text-sm font-mono font-bold', t.pnl >= 0 ? 'text-green' : 'text-red')}>
+            <span className={cn('text-[13px] font-mono font-bold', t.pnl >= 0 ? 'text-green' : 'text-red')}>
               {t.pnl >= 0 ? '+' : ''}₹{t.pnl.toLocaleString('en-IN')}
             </span>
           </button>
@@ -161,14 +162,14 @@ function TradeReviewTab() {
       {/* Review Scores */}
       {selectedReview && (
         <div className="border border-fw-border rounded p-3 bg-fw-bg/50 space-y-3">
-          <div className="text-sm font-bold text-fw-text">Analysis</div>
+          <div className="text-[13px] font-bold text-fw-text">Analysis</div>
           <div className="grid grid-cols-3 gap-3">
             <ScoreCard label="Entry Quality" score={selectedReview.entryQuality} />
             <ScoreCard label="Exit Quality" score={selectedReview.exitQuality} />
             <ScoreCard label="Risk Mgmt" score={selectedReview.riskManagement} />
           </div>
-          <p className="text-sm text-fw-text-secondary leading-relaxed">{selectedReview.explanation}</p>
-          <div className="px-2 py-1.5 bg-fw-purple/5 border border-fw-purple/20 rounded text-xs text-fw-purple">
+          <p className="text-[13px] text-fw-text-secondary leading-relaxed">{selectedReview.explanation}</p>
+          <div className="px-2 py-1.5 bg-fw-purple/5 border border-fw-purple/20 rounded text-[14px] text-fw-purple">
             ℹ Analysis is rule-based (client-side). Connect an AI backend at /api/ai/review for LLM-powered insights.
           </div>
         </div>
@@ -248,10 +249,10 @@ function BehavioralTab() {
       {/* Consistency Score */}
       <div className="flex items-center justify-between p-3 bg-fw-bg border border-fw-border rounded">
         <div>
-          <div className="text-xs text-fw-text-secondary uppercase">Consistency Score</div>
-          <div className="text-xs text-fw-text-secondary">{analysis.totalAnalyzed} trades over {analysis.tradingDays} days</div>
+          <div className="text-[14px] text-fw-text-muted uppercase">Consistency Score</div>
+          <div className="text-[13px] text-fw-text-secondary">{analysis.totalAnalyzed} trades over {analysis.tradingDays} days</div>
         </div>
-        <div className={cn('text-title-lg font-black font-mono', analysis.consistencyScore >= 70 ? 'text-green' : analysis.consistencyScore >= 40 ? 'text-yellow-400' : 'text-red')}>
+        <div className={cn('text-[24px] font-black font-mono', analysis.consistencyScore >= 70 ? 'text-green' : analysis.consistencyScore >= 40 ? 'text-yellow-400' : 'text-red')}>
           {analysis.consistencyScore}
         </div>
       </div>
@@ -280,7 +281,7 @@ function BehavioralTab() {
         />
       </div>
 
-      <div className="px-2 py-1.5 bg-fw-purple/5 border border-fw-purple/20 rounded text-xs text-fw-purple">
+      <div className="px-2 py-1.5 bg-fw-purple/5 border border-fw-purple/20 rounded text-[14px] text-fw-purple">
         ℹ Behavioral analysis is rule-based (client-side). Connect /api/ai/behavior for LLM insights.
       </div>
     </div>
@@ -326,7 +327,7 @@ function DailySummaryTab() {
 
   return (
     <div className="p-3 space-y-3">
-      <div className="text-sm font-bold text-fw-text">Today's Summary</div>
+      <div className="text-[13px] font-bold text-fw-text">Today's Summary</div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-4 gap-2">
@@ -339,33 +340,33 @@ function DailySummaryTab() {
       {/* W/L Breakdown */}
       <div className="flex items-center gap-4 px-3 py-2 bg-fw-bg border border-fw-border rounded">
         <div className="flex items-center gap-1">
-          <span className="text-xs text-fw-text-secondary">Wins:</span>
-          <span className="text-base font-mono font-bold text-green">{summary.wins}</span>
+          <span className="text-[14px] text-fw-text-muted">Wins:</span>
+          <span className="text-[14px] font-mono font-bold text-green">{summary.wins}</span>
         </div>
         <div className="flex items-center gap-1">
-          <span className="text-xs text-fw-text-secondary">Losses:</span>
-          <span className="text-base font-mono font-bold text-red">{summary.losses}</span>
+          <span className="text-[14px] text-fw-text-muted">Losses:</span>
+          <span className="text-[14px] font-mono font-bold text-red">{summary.losses}</span>
         </div>
         <div className="flex items-center gap-1">
-          <span className="text-xs text-fw-text-secondary">Open Positions:</span>
-          <span className="text-base font-mono font-bold text-fw-text">{summary.openPositions}</span>
+          <span className="text-[14px] text-fw-text-muted">Open Positions:</span>
+          <span className="text-[14px] font-mono font-bold text-fw-text">{summary.openPositions}</span>
         </div>
       </div>
 
       {/* Suggestions */}
       {summary.suggestions.length > 0 && (
         <div className="space-y-1.5">
-          <div className="text-xs text-fw-text-secondary font-bold uppercase">Insights & Suggestions</div>
+          <div className="text-[14px] text-fw-text-secondary font-bold uppercase">Insights & Suggestions</div>
           {summary.suggestions.map((s, i) => (
             <div key={i} className="flex items-start gap-2 px-3 py-2 bg-fw-purple/5 border border-fw-purple/15 rounded">
               <Bot size={12} className="text-fw-purple mt-0.5 flex-shrink-0" />
-              <span className="text-sm text-fw-text-secondary leading-relaxed">{s}</span>
+              <span className="text-[13px] text-fw-text-secondary leading-relaxed">{s}</span>
             </div>
           ))}
         </div>
       )}
 
-      <div className="px-2 py-1.5 bg-fw-purple/5 border border-fw-purple/20 rounded text-xs text-fw-purple">
+      <div className="px-2 py-1.5 bg-fw-purple/5 border border-fw-purple/20 rounded text-[14px] text-fw-purple">
         ℹ Summary computed from positions + journal data. Connect /api/ai/summary for LLM-generated narratives.
       </div>
     </div>
@@ -436,33 +437,33 @@ function CoachingTab() {
       {/* Week Context */}
       <div className="flex items-center gap-4 px-3 py-2 bg-fw-bg border border-fw-border rounded">
         <div>
-          <div className="text-xs text-fw-text-secondary uppercase">Last 7 Days</div>
-          <div className="text-base font-mono font-bold text-fw-text">{coaching.totalTrades} trades</div>
+          <div className="text-[13px] text-fw-text-muted uppercase">Last 7 Days</div>
+          <div className="text-[14px] font-mono font-bold text-fw-text">{coaching.totalTrades} trades</div>
         </div>
         <div>
-          <div className="text-xs text-fw-text-secondary uppercase">Week P&L</div>
-          <div className={cn('text-base font-mono font-bold', coaching.weekPnl >= 0 ? 'text-green' : 'text-red')}>
+          <div className="text-[13px] text-fw-text-muted uppercase">Week P&L</div>
+          <div className={cn('text-[14px] font-mono font-bold', coaching.weekPnl >= 0 ? 'text-green' : 'text-red')}>
             ₹{coaching.weekPnl.toLocaleString('en-IN')}
           </div>
         </div>
         <div>
-          <div className="text-xs text-fw-text-secondary uppercase">Win Rate</div>
-          <div className="text-base font-mono font-bold text-fw-text">{(coaching.winRate * 100).toFixed(0)}%</div>
+          <div className="text-[13px] text-fw-text-muted uppercase">Win Rate</div>
+          <div className="text-[14px] font-mono font-bold text-fw-text">{(coaching.winRate * 100).toFixed(0)}%</div>
         </div>
       </div>
 
       {/* Coaching Tips */}
       <div className="space-y-2">
-        <div className="text-xs text-fw-text-secondary font-bold uppercase">Coaching Advice</div>
+        <div className="text-[14px] text-fw-text-secondary font-bold uppercase">Coaching Advice</div>
         {coaching.tips.map((tip, i) => (
           <div key={i} className="p-3 bg-fw-bg/50 border border-fw-border rounded">
-            <div className="text-xs font-bold text-fw-purple mb-1">{tip.category}</div>
-            <p className="text-sm text-fw-text-secondary leading-relaxed">{tip.advice}</p>
+            <div className="text-[14px] font-bold text-fw-purple mb-1">{tip.category}</div>
+            <p className="text-[13px] text-fw-text-secondary leading-relaxed">{tip.advice}</p>
           </div>
         ))}
       </div>
 
-      <div className="px-2 py-1.5 bg-fw-purple/5 border border-fw-purple/20 rounded text-xs text-fw-purple">
+      <div className="px-2 py-1.5 bg-fw-purple/5 border border-fw-purple/20 rounded text-[14px] text-fw-purple">
         ℹ Coaching is rule-based from journal + positions data. Connect /api/ai/coaching for personalized LLM advice.
       </div>
     </div>
@@ -474,9 +475,9 @@ function CoachingTab() {
 function InsufficientDataMessage({ message, count }: { message: string; count: number }) {
   return (
     <div className="flex flex-col items-center justify-center h-full gap-3 px-6 text-center">
-      <AlertCircle size={32} className="text-fw-text-secondary/40" />
-      <div className="text-base text-fw-text-secondary">{message}</div>
-      <div className="text-sm text-fw-text-secondary">{count} trade{count !== 1 ? 's' : ''} available (need 5+)</div>
+      <AlertCircle size={32} className="text-fw-text-muted/40" />
+      <div className="text-[14px] text-fw-text-secondary">{message}</div>
+      <div className="text-[13px] text-fw-text-muted">{count} trade{count !== 1 ? 's' : ''} available (need 5+)</div>
     </div>
   );
 }
@@ -485,9 +486,9 @@ function ScoreCard({ label, score }: { label: string; score: number }) {
   const color = score >= 7 ? 'text-green' : score >= 5 ? 'text-yellow-400' : 'text-red';
   return (
     <div className="bg-fw-bg border border-fw-border rounded p-2 text-center">
-      <div className="text-xs text-fw-text-secondary uppercase">{label}</div>
-      <div className={cn('text-title font-black font-mono', color)}>{score}</div>
-      <div className="text-xs text-fw-text-secondary">/10</div>
+      <div className="text-[13px] text-fw-text-muted uppercase">{label}</div>
+      <div className={cn('text-[18px] font-black font-mono', color)}>{score}</div>
+      <div className="text-[13px] text-fw-text-muted">/10</div>
     </div>
   );
 }
@@ -497,9 +498,9 @@ function BehaviorFlag({ label, detected, detail }: { label: string; detected: bo
     <div className={cn('p-2 rounded border', detected ? 'border-red-800/30 bg-red-900/10' : 'border-fw-border bg-fw-bg/50')}>
       <div className="flex items-center gap-1.5 mb-0.5">
         <div className={cn('w-2 h-2 rounded-full', detected ? 'bg-red' : 'bg-green')} />
-        <span className="text-xs font-bold text-fw-text">{label}</span>
+        <span className="text-[14px] font-bold text-fw-text">{label}</span>
       </div>
-      <span className="text-xs text-fw-text-secondary leading-relaxed">{detail}</span>
+      <span className="text-[14px] text-fw-text-muted leading-relaxed">{detail}</span>
     </div>
   );
 }
@@ -508,8 +509,8 @@ function MiniStat({ label, value, color }: { label: string; value: string; color
   const c = color === 'green' ? 'text-green' : color === 'red' ? 'text-red' : 'text-fw-text';
   return (
     <div className="bg-fw-bg border border-fw-border rounded p-2">
-      <div className="text-xs text-fw-text-secondary uppercase">{label}</div>
-      <div className={cn('text-lg font-bold font-mono', c)}>{value}</div>
+      <div className="text-[13px] text-fw-text-muted uppercase">{label}</div>
+      <div className={cn('text-[13px] font-bold font-mono', c)}>{value}</div>
     </div>
   );
 }

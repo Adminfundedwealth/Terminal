@@ -1,0 +1,12 @@
+{
+  "consoleLogs": [
+    "[DEBUG] [vite] connecting...",
+    "[DEBUG] [vite] connected.",
+    "[INFO] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold",
+    "[ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+    "[WARNING] [WatchlistSync] Failed to load from backend, using local: Error: Request failed\n    at request (http://localhost:3000/src/services/api.ts:12:17)\n    at async loadWatchlistsFromBackend (http://localhost:3000/src/hooks/useWatchlistSync.ts:89:20)",
+    "[ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error)"
+  ],
+  "pageErrors": [],
+  "timestamp": "2026-07-15T18:19:06.216Z"
+}

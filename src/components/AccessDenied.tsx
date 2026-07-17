@@ -35,10 +35,10 @@ export function AccessDenied({ error }: AccessDeniedProps) {
 
         {/* Branding */}
         <div className="flex flex-col items-center gap-1">
-          <span className="text-lg font-extrabold tracking-wide bg-gradient-to-r from-[#00D4FF] via-[#4F46E5] to-[#7C3AED] bg-clip-text text-transparent">
+          <span className="text-[16px] font-extrabold tracking-wide bg-gradient-to-r from-[#00D4FF] via-[#4F46E5] to-[#7C3AED] bg-clip-text text-transparent">
             FUNDEDWEALTH
           </span>
-          <span className="text-sm font-bold tracking-[0.25em] text-fw-accent/70">
+          <span className="text-[13px] font-bold tracking-[0.25em] text-fw-accent/70">
             TERMINAL
           </span>
         </div>
@@ -49,10 +49,10 @@ export function AccessDenied({ error }: AccessDeniedProps) {
             <svg className="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v.01M12 9v3m0-9a9 9 0 110 18 9 9 0 010-18z" />
             </svg>
-            <span className="text-md font-semibold text-red-400">Access Denied</span>
+            <span className="text-[14px] font-semibold text-red-400">Access Denied</span>
           </div>
 
-          <p className="text-lg text-fw-text-secondary leading-relaxed">
+          <p className="text-[13px] text-fw-text-muted leading-relaxed">
             {error || 'Please login from your FundedWealth Dashboard to access the Trading Terminal.'}
           </p>
         </div>
@@ -60,7 +60,7 @@ export function AccessDenied({ error }: AccessDeniedProps) {
         {/* Action Button */}
         <a
           href={loginUrl}
-          className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg bg-gradient-to-r from-[#4F46E5] to-[#7C3AED] text-white text-lg font-semibold hover:opacity-90 transition-opacity"
+          className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg bg-gradient-to-r from-[#4F46E5] to-[#7C3AED] text-white text-[13px] font-semibold hover:opacity-90 transition-opacity"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
@@ -69,7 +69,7 @@ export function AccessDenied({ error }: AccessDeniedProps) {
         </a>
 
         {/* Info */}
-        <p className="text-sm text-fw-text-secondary/60">
+        <p className="text-[13px] text-fw-text-muted/60">
           You can access the Terminal by clicking "Launch Terminal" from your Dashboard after logging in.
         </p>
       </div>

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * EMOJI MARKER PICKER
  * Small floating picker with 12 trading annotation icons.
  * Returns selected emoji string via onSelect.
@@ -36,7 +36,7 @@ export function EmojiMarkerPicker({ x, y, onSelect, onClose }: Props) {
       style={{ left: x, top: y, minWidth: 160 }}
     >
       <div className="flex items-center justify-between mb-1.5 px-0.5">
-        <span className="text-[9px] font-semibold text-fw-text-muted uppercase tracking-wide">Annotation</span>
+        <span className="text-[13px] font-semibold text-fw-text-muted uppercase tracking-wide">Annotation</span>
         <button onClick={onClose} className="p-0.5 rounded hover:bg-fw-hover text-fw-text-muted hover:text-fw-text">
           <X size={10} />
         </button>

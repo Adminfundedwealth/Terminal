@@ -11,9 +11,9 @@
   --fw-surface-2: #1e2230;
   --fw-border: #262a36;
   --fw-border-light: #2f3444;
-  --fw-text: #F8FAFC;
-  --fw-text-secondary: #D1D5DB;
-  --fw-text-muted: #9CA3AF;
+  --fw-text: #e1e4eb;
+  --fw-text-secondary: #6b7280;
+  --fw-text-muted: #4b5060;
   --fw-accent: #3b82f6;
   --fw-accent-hover: #2563eb;
   --fw-green: #22c55e;
@@ -35,9 +35,9 @@
   --fw-surface-2: #252a37;
   --fw-border: #2a2e39;
   --fw-border-light: #363a45;
-  --fw-text: #F8FAFC;
-  --fw-text-secondary: #D1D5DB;
-  --fw-text-muted: #9CA3AF;
+  --fw-text: #d1d4dc;
+  --fw-text-secondary: #787b86;
+  --fw-text-muted: #5d606b;
   --fw-accent: #2962ff;
   --fw-accent-hover: #1e50e6;
   --fw-green: #26a69a;
@@ -60,9 +60,9 @@
   --fw-surface-2: #1a1c28;
   --fw-border: #222433;
   --fw-border-light: #2c2f40;
-  --fw-text: #F8FAFC;
-  --fw-text-secondary: #D1D5DB;
-  --fw-text-muted: #9CA3AF;
+  --fw-text: #dce0e8;
+  --fw-text-secondary: #6e7280;
+  --fw-text-muted: #4a4f5c;
   --fw-accent: #3b82f6;
   --fw-accent-hover: #2563eb;
   --fw-green: #10b981;
@@ -95,7 +95,7 @@ body,
   color: var(--fw-text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1.4;
 }
 
@@ -179,7 +179,7 @@ header [data-brand] {
 .fw-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .fw-table th {
@@ -187,7 +187,7 @@ header [data-brand] {
   padding: 6px 10px;
   color: var(--fw-text-secondary);
   font-weight: 700;
-  font-size: 10px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   border-bottom: 1px solid var(--fw-border);
@@ -200,7 +200,7 @@ header [data-brand] {
 
 .fw-table td {
   padding: 5px 10px;
-  font-size: 12px;
+  font-size: 14px;
   border-bottom: 1px solid rgba(38, 42, 54, 0.3);
   white-space: nowrap;
   font-feature-settings: "tnum";
@@ -395,7 +395,7 @@ header [data-brand] {
   .fw-table th,
   .fw-table td {
     padding: 6px 8px;
-    font-size: 11px;
+    font-size: 13px;
   }
 }
 
@@ -570,7 +570,7 @@ button, [role="button"] {
   gap: 4px;
   padding: 3px 8px;
   border-radius: 4px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.02em;
   line-height: 1;
@@ -592,34 +592,13 @@ button, [role="button"] {
 .fw-tab-inactive {
   opacity: 0.55;
   color: var(--fw-text-muted) !important;
-  font-size: 16px !important;
-  padding: 8px 12px !important;
 }
 
 /* Bottom tab — active full contrast + weight */
 .fw-tab-active {
   opacity: 1 !important;
-  font-weight: 800 !important;
+  font-weight: 600 !important;
   color: var(--fw-accent) !important;
-  font-size: 16px !important;
-  padding: 8px 12px !important;
-}
-
-/* Active pill for tab count — prominent badge */
-.fw-active-pill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 6px 10px;
-  min-width: 34px;
-  height: 34px;
-  border-radius: 9999px;
-  background: var(--fw-accent);
-  color: #071124;
-  font-weight: 800;
-  font-size: 13px;
-  box-shadow: 0 8px 24px rgba(59,130,246,0.16);
-  transform: translateY(-4px);
 }
 
 /* Ticker price — semi-bold monospace numbers */
@@ -637,7 +616,7 @@ button, [role="button"] {
   padding: 1px 5px;
   border-radius: 3px;
   font-family: 'Roboto Mono', ui-monospace, monospace;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { Grid3X3 } from 'lucide-react';
 import { apiService } from '@/services/api';
 import { useAppStore } from '@/store/appStore';
@@ -66,7 +66,7 @@ export function HeatmapPanel() {
             <button
               key={v}
               onClick={() => setView(v)}
-              className={`text-xs px-2 py-0.5 rounded capitalize ${view === v ? 'bg-fw-accent text-white' : 'text-fw-text-secondary hover:bg-fw-hover'}`}
+              className={`text-[14px] px-2 py-0.5 rounded capitalize ${view === v ? 'bg-fw-accent text-white' : 'text-fw-text-secondary hover:bg-fw-hover'}`}
             >
               {v === 'nifty50' ? 'NIFTY 50' : v === 'banknifty' ? 'BANKNIFTY' : v.charAt(0).toUpperCase() + v.slice(1)}
             </button>
@@ -77,10 +77,10 @@ export function HeatmapPanel() {
       {/* Heatmap Grid */}
       <div className="flex-1 overflow-auto p-2">
         {loading && (
-          <div className="flex items-center justify-center h-full text-fw-text-secondary text-xs">Loading...</div>
+          <div className="flex items-center justify-center h-full text-fw-text-muted text-xs">Loading...</div>
         )}
         {!loading && items.length === 0 && (
-          <div className="flex items-center justify-center h-full text-fw-text-secondary text-xs">No data</div>
+          <div className="flex items-center justify-center h-full text-fw-text-muted text-xs">No data</div>
         )}
         {!loading && items.length > 0 && (
           <div className="grid grid-cols-5 sm:grid-cols-8 lg:grid-cols-10 gap-1 auto-rows-[60px]">
@@ -90,10 +90,10 @@ export function HeatmapPanel() {
                 onClick={() => (setActiveSymbol as any)({ token: item.token, symbol: item.symbol, segment: 'NSE' })}
                 className={`rounded flex flex-col items-center justify-center cursor-pointer transition-all hover:scale-105 border border-white/5 ${getColor(item.changePct)}`}
               >
-                <span className="text-xs font-bold text-white/90 truncate max-w-full px-1">
+                <span className="text-[14px] font-bold text-white/90 truncate max-w-full px-1">
                   {item.symbol.replace('NSE:', '').substring(0, 8)}
                 </span>
-                <span className={`text-sm font-mono font-bold ${getTextColor(item.changePct)}`}>
+                <span className={`text-[13px] font-mono font-bold ${getTextColor(item.changePct)}`}>
                   {item.changePct >= 0 ? '+' : ''}{item.changePct.toFixed(1)}%
                 </span>
               </div>
@@ -104,11 +104,11 @@ export function HeatmapPanel() {
 
       {/* Legend */}
       <div className="flex items-center justify-center gap-1 px-3 py-1.5 border-t border-fw-border">
-        <span className="text-xs text-fw-text-secondary mr-1">-3%</span>
+        <span className="text-[13px] text-fw-text-muted mr-1">-3%</span>
         {[-3, -2, -1, -0.5, 0, 0.5, 1, 2, 3].map(v => (
           <div key={v} className={`w-4 h-3 rounded-sm ${getColor(v)}`} />
         ))}
-        <span className="text-xs text-fw-text-secondary ml-1">+3%</span>
+        <span className="text-[13px] text-fw-text-muted ml-1">+3%</span>
       </div>
     </div>
   );

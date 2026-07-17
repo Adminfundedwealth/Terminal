@@ -1,6 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import { useAppStore } from '@/store/appStore';
-import SymbolLogo from '@/components/SymbolLogo';
 import { useMarketStore } from '@/store/marketStore';
 import { cn, formatPrice } from '@/utils/helpers';
 
@@ -65,25 +64,20 @@ export function TimeSalesPanel() {
   const buyPct = tape.length > 0 ? (buyCount / tape.length) * 100 : 50;
 
   return (
-    <div className="h-full flex flex-col bg-fw-surface">
+    <div className="h-full flex flex-col bg-[#0c0e14]">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-fw-border bg-fw-surface flex-shrink-0">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-fw-border bg-[#10121a] flex-shrink-0">
         <div className="flex items-center gap-2">
-          <span className="text-base font-bold text-fw-text">Time & Sales</span>
-          {activeSymbol && (
-            <div className="flex items-center gap-1.5">
-              <SymbolLogo symbol={activeSymbol.symbol} size={16} />
-              <span className="text-xs text-fw-text-secondary">{activeSymbol.symbol}</span>
-            </div>
-          )}
+          <span className="text-[14px] font-bold text-fw-text">Time & Sales</span>
+          {activeSymbol && <span className="text-[14px] text-fw-text-muted">{activeSymbol.symbol}</span>}
         </div>
-        <span className="text-xs text-fw-text-secondary">{tape.length} ticks</span>
+        <span className="text-[14px] text-fw-text-muted">{tape.length} ticks</span>
       </div>
 
       {/* Buy/Sell pressure */}
       {tape.length > 0 && (
         <div className="px-3 py-1.5 border-b border-fw-border/30 flex-shrink-0">
-          <div className="flex justify-between text-xs mb-0.5">
+          <div className="flex justify-between text-[14px] mb-0.5">
             <span className="text-green font-bold">{buyCount} Buy ({buyPct.toFixed(0)}%)</span>
             <span className="text-red font-bold">{sellCount} Sell ({(100 - buyPct).toFixed(0)}%)</span>
           </div>
@@ -95,29 +89,29 @@ export function TimeSalesPanel() {
       )}
 
       {/* Column Headers */}
-      <div className="grid grid-cols-[60px_1fr_80px_60px] px-3 py-1 border-b border-fw-border/20 bg-fw-surface-2 flex-shrink-0">
-        <span className="text-xs text-fw-text-secondary font-bold">TIME</span>
-        <span className="text-xs text-fw-text-secondary font-bold text-right">PRICE</span>
-        <span className="text-xs text-fw-text-secondary font-bold text-right">QTY</span>
-        <span className="text-xs text-fw-text-secondary font-bold text-center">SIDE</span>
+      <div className="grid grid-cols-[60px_1fr_80px_60px] px-3 py-1 border-b border-fw-border/20 bg-[#0d0f15] flex-shrink-0">
+        <span className="text-[13px] text-fw-text-muted font-bold">TIME</span>
+        <span className="text-[13px] text-fw-text-muted font-bold text-right">PRICE</span>
+        <span className="text-[13px] text-fw-text-muted font-bold text-right">QTY</span>
+        <span className="text-[13px] text-fw-text-muted font-bold text-center">SIDE</span>
       </div>
 
       {/* Tape */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
         {tape.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-base text-fw-text-secondary">
+          <div className="flex items-center justify-center h-full text-[14px] text-fw-text-muted">
             Waiting for ticks...
           </div>
         ) : (
           tape.map(entry => (
             <div key={entry.id} className="grid grid-cols-[60px_1fr_80px_60px] items-center px-3 py-[3px] border-b border-fw-border/10 hover:bg-fw-hover/20">
-              <span className="text-sm font-mono text-fw-text-secondary tabular-nums">{entry.time}</span>
-              <span className={cn('text-base font-mono font-bold text-right tabular-nums', entry.side === 'BUY' ? 'text-green' : 'text-red')}>
+              <span className="text-[13px] font-mono text-fw-text-muted tabular-nums">{entry.time}</span>
+              <span className={cn('text-[14px] font-mono font-bold text-right tabular-nums', entry.side === 'BUY' ? 'text-green' : 'text-red')}>
                 {formatPrice(entry.price)}
               </span>
-              <span className="text-sm font-mono text-fw-text-secondary text-right tabular-nums">{entry.qty.toLocaleString()}</span>
+              <span className="text-[13px] font-mono text-fw-text-secondary text-right tabular-nums">{entry.qty.toLocaleString()}</span>
               <span className="text-center">
-                <span className={cn('px-1.5 py-0.5 text-xxs font-bold rounded', entry.side === 'BUY' ? 'bg-green-900/30 text-green' : 'bg-red-900/30 text-red')}>
+                <span className={cn('px-1.5 py-0.5 text-[8px] font-bold rounded', entry.side === 'BUY' ? 'bg-green-900/30 text-green' : 'bg-red-900/30 text-red')}>
                   {entry.side === 'BUY' ? 'B' : 'S'}
                 </span>
               </span>

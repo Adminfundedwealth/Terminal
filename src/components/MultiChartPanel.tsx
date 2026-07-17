@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useAppStore } from '@/store/appStore';
 import { ChartPanel } from '@/components/ChartPanel';
 import { cn } from '@/utils/helpers';
@@ -24,16 +24,16 @@ export function MultiChartPanel() {
   const cellCount = layout.cols * layout.rows;
 
   return (
-    <div className="h-full flex flex-col bg-fw-surface">
+    <div className="h-full flex flex-col bg-[#0c0e14]">
       {/* Layout selector */}
-      <div className="flex items-center gap-1 px-2 py-1 border-b border-fw-border bg-fw-surface flex-shrink-0">
+      <div className="flex items-center gap-1 px-2 py-1 border-b border-fw-border bg-[#10121a] flex-shrink-0">
         {LAYOUTS.map(l => (
           <button
             key={l.value}
             onClick={() => setChartLayout(l.value)}
             className={cn(
-              'px-2 py-1 text-xs font-bold rounded transition-colors',
-              chartLayout === l.value ? 'bg-fw-accent text-white' : 'text-fw-text-secondary hover:text-fw-text bg-fw-bg border border-fw-border'
+              'px-2 py-1 text-[14px] font-bold rounded transition-colors',
+              chartLayout === l.value ? 'bg-fw-accent text-white' : 'text-fw-text-muted hover:text-fw-text bg-fw-bg border border-fw-border'
             )}
           >
             {l.label}

@@ -5,40 +5,19 @@
  * Color tokens are injected at runtime by themeStore.ts via JavaScript.
  * 
  * This file defines the structural/spacing variables that density modes control.
- * Typography tokens define consistent font sizes across the UI.
- * Color hierarchy tokens ensure proper contrast and readability.
  */
 
 :root {
-  /* Typography Tokens — Production-Grade Sizes */
-  --fw-font-size-base: 16px;
-  --fw-font-size-label: 14px;
-  --fw-font-size-button: 18px;
-  --fw-font-size-price: 16px;
-  --fw-font-size-price-lg: 18px;
-  --fw-font-size-title: 18px;
-  --fw-font-size-title-lg: 20px;
-  --fw-font-size-xs: 11px;
-  --fw-font-size-sm: 12px;
-  --fw-font-size-md: 14px;
-  --fw-font-size-lg: 16px;
-  --fw-font-size-xl: 18px;
-  --fw-font-size-2xl: 20px;
-  --fw-line-height: 1.4;
-  --fw-line-height-tight: 1.3;
-  --fw-line-height-relaxed: 1.5;
-  
-  /* Color Hierarchy Tokens — Proper Contrast on Dark Theme */
-  --fw-color-primary: #F8FAFC;
-  --fw-color-secondary: #D1D5DB;
-  --fw-color-muted: #9CA3AF;
-  
   /* Density spacing tokens (overridden by themeStore on mode change) */
   --fw-spacing-xs: 4px;
   --fw-spacing-sm: 6px;
   --fw-spacing-md: 8px;
   --fw-spacing-lg: 12px;
   --fw-spacing-xl: 16px;
+  
+  /* Font size token (overridden by themeStore) */
+  --fw-font-size-base: 14px;
+  --fw-line-height: 1.4;
 }
 
 /* Density mode data attributes for targeted overrides */
@@ -48,13 +27,7 @@
   --fw-spacing-md: 6px;
   --fw-spacing-lg: 8px;
   --fw-spacing-xl: 12px;
-  --fw-font-size-base: 14px;
-  --fw-font-size-label: 12px;
-  --fw-font-size-button: 16px;
-  --fw-font-size-price: 14px;
-  --fw-font-size-price-lg: 16px;
-  --fw-font-size-title: 16px;
-  --fw-font-size-title-lg: 18px;
+  --fw-font-size-base: 13px;
   --fw-line-height: 1.3;
 }
 
@@ -64,13 +37,7 @@
   --fw-spacing-md: 8px;
   --fw-spacing-lg: 12px;
   --fw-spacing-xl: 16px;
-  --fw-font-size-base: 16px;
-  --fw-font-size-label: 14px;
-  --fw-font-size-button: 18px;
-  --fw-font-size-price: 16px;
-  --fw-font-size-price-lg: 18px;
-  --fw-font-size-title: 18px;
-  --fw-font-size-title-lg: 20px;
+  --fw-font-size-base: 14px;
   --fw-line-height: 1.4;
 }
 
@@ -80,13 +47,7 @@
   --fw-spacing-md: 12px;
   --fw-spacing-lg: 16px;
   --fw-spacing-xl: 24px;
-  --fw-font-size-base: 17px;
-  --fw-font-size-label: 15px;
-  --fw-font-size-button: 20px;
-  --fw-font-size-price: 18px;
-  --fw-font-size-price-lg: 20px;
-  --fw-font-size-title: 20px;
-  --fw-font-size-title-lg: 22px;
+  --fw-font-size-base: 15px;
   --fw-line-height: 1.5;
 }
 
@@ -94,83 +55,6 @@
 .fw-text-base {
   font-size: var(--fw-font-size-base);
   line-height: var(--fw-line-height);
-}
-
-.fw-text-label {
-  font-size: var(--fw-font-size-label);
-  line-height: var(--fw-line-height);
-}
-
-.fw-text-button {
-  font-size: var(--fw-font-size-button);
-  line-height: var(--fw-line-height);
-}
-
-.fw-text-price {
-  font-size: var(--fw-font-size-price);
-  line-height: var(--fw-line-height);
-  font-variant-numeric: tabular-nums;
-}
-
-.fw-text-price-lg {
-  font-size: var(--fw-font-size-price-lg);
-  line-height: var(--fw-line-height);
-  font-variant-numeric: tabular-nums;
-}
-
-.fw-text-title {
-  font-size: var(--fw-font-size-title);
-  line-height: var(--fw-line-height-tight);
-  font-weight: bold;
-}
-
-.fw-text-title-lg {
-  font-size: var(--fw-font-size-title-lg);
-  line-height: var(--fw-line-height-tight);
-  font-weight: bold;
-}
-
-.fw-text-xs {
-  font-size: var(--fw-font-size-xs);
-  line-height: var(--fw-line-height-tight);
-}
-
-.fw-text-sm {
-  font-size: var(--fw-font-size-sm);
-  line-height: var(--fw-line-height);
-}
-
-.fw-text-md {
-  font-size: var(--fw-font-size-md);
-  line-height: var(--fw-line-height);
-}
-
-.fw-text-lg {
-  font-size: var(--fw-font-size-lg);
-  line-height: var(--fw-line-height);
-}
-
-.fw-text-xl {
-  font-size: var(--fw-font-size-xl);
-  line-height: var(--fw-line-height);
-}
-
-.fw-text-2xl {
-  font-size: var(--fw-font-size-2xl);
-  line-height: var(--fw-line-height);
-}
-
-/* Color hierarchy classes */
-.fw-text-primary {
-  color: var(--fw-color-primary);
-}
-
-.fw-text-secondary {
-  color: var(--fw-color-secondary);
-}
-
-.fw-text-muted {
-  color: var(--fw-color-muted);
 }
 
 .fw-p-xs { padding: var(--fw-spacing-xs); }

@@ -1,9 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import { Search, Filter, TrendingUp, TrendingDown, Zap, BarChart3 } from 'lucide-react';
 import { apiService } from '@/services/api';
 import { useAppStore } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
-import SymbolLogo from '@/components/SymbolLogo';
 
 interface ScanResult {
   token: string;
@@ -128,7 +127,7 @@ export function ScannerPanel() {
             <button
               key={s}
               onClick={() => setSegment(s)}
-              className={`text-xs px-2 py-0.5 rounded ${segment === s ? 'bg-fw-accent text-white' : 'text-fw-text-secondary hover:bg-fw-hover'}`}
+              className={`text-[14px] px-2 py-0.5 rounded ${segment === s ? 'bg-fw-accent text-white' : 'text-fw-text-secondary hover:bg-fw-hover'}`}
             >
               {s}
             </button>
@@ -144,7 +143,7 @@ export function ScannerPanel() {
             <button
               key={scan.id}
               onClick={() => setActiveScan(scan.id)}
-              className={`flex items-center gap-1 text-xs px-2 py-1 rounded border transition-all
+              className={`flex items-center gap-1 text-[14px] px-2 py-1 rounded border transition-all
                 ${activeScan === scan.id
                   ? 'border-fw-accent bg-fw-accent/10 text-fw-accent'
                   : 'border-fw-border text-fw-text-secondary hover:border-fw-text-muted'}`}
@@ -159,12 +158,12 @@ export function ScannerPanel() {
       {/* Results */}
       <div className="flex-1 overflow-y-auto">
         {loading && (
-          <div className="flex items-center justify-center h-20 text-fw-text-secondary text-xs">
+          <div className="flex items-center justify-center h-20 text-fw-text-muted text-xs">
             Scanning...
           </div>
         )}
         {!loading && results.length === 0 && (
-          <div className="flex items-center justify-center h-20 text-fw-text-secondary text-xs">
+          <div className="flex items-center justify-center h-20 text-fw-text-muted text-xs">
             No results for this scan
           </div>
         )}
@@ -182,12 +181,7 @@ export function ScannerPanel() {
             <tbody>
               {results.map(r => (
                 <tr key={r.token} className="cursor-pointer" onClick={() => selectSymbol(r)}>
-                  <td>
-                    <div className="flex items-center gap-2">
-                      <SymbolLogo symbol={r.symbol} size={18} />
-                      <span className="font-bold text-fw-text">{r.symbol}</span>
-                    </div>
-                  </td>
+                  <td className="font-bold text-fw-text">{r.symbol}</td>
                   <td className="text-right font-mono">{r.ltp.toFixed(2)}</td>
                   <td className={`text-right font-mono ${r.changePct >= 0 ? 'text-green' : 'text-red'}`}>
                     {r.changePct >= 0 ? '+' : ''}{r.changePct.toFixed(2)}%
@@ -195,7 +189,7 @@ export function ScannerPanel() {
                   <td className="text-right font-mono text-fw-text-secondary">
                     {r.volume > 100000 ? (r.volume / 100000).toFixed(1) + 'L' : r.volume.toLocaleString('en-IN')}
                   </td>
-                  <td className="text-right text-fw-text-secondary">{r.signal}</td>
+                  <td className="text-right text-fw-text-muted">{r.signal}</td>
                 </tr>
               ))}
             </tbody>
@@ -204,7 +198,7 @@ export function ScannerPanel() {
       </div>
 
       {/* Footer */}
-      <div className="px-3 py-1 border-t border-fw-border text-xs text-fw-text-secondary flex items-center justify-between">
+      <div className="px-3 py-1 border-t border-fw-border text-[14px] text-fw-text-muted flex items-center justify-between">
         <span>{results.length} results</span>
         <button onClick={runScan} className="hover:text-fw-accent">↻ Refresh</button>
       </div>

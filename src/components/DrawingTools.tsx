@@ -1,4 +1,4 @@
-/**
+﻿/**
  * DRAWING TOOLS
  * 
  * Chart drawing tools dropdown with mode selection.
@@ -12,7 +12,10 @@ import { cn } from '@/utils/helpers';
 
 export type DrawingMode =
   | 'none'
+  | 'crosshair'
   | 'trendline'
+  | 'arrow'
+  | 'ray'
   | 'hline'
   | 'vline'
   | 'fibonacci'
@@ -31,16 +34,18 @@ interface DrawingToolsProps {
 }
 
 const TOOLS: { mode: DrawingMode; icon: React.ReactNode; label: string; shortcut: string }[] = [
-  { mode: 'trendline', icon: <TrendingUp size={11} />, label: 'Trendline',             shortcut: 'T — click 2 points' },
-  { mode: 'hline',     icon: <Minus       size={11} />, label: 'Horizontal Line',      shortcut: 'H — click price level' },
+  { mode: 'trendline', icon: <TrendingUp size={11} />, label: 'Trend Line',            shortcut: 'T — click 2 points' },
+  { mode: 'arrow',     icon: <PenTool    size={11} />, label: 'Arrow',                 shortcut: 'A — click 2 points' },
+  { mode: 'ray',       icon: <Minus      size={11} />, label: 'Ray',                   shortcut: 'Y — click 2 points' },
+  { mode: 'hline',     icon: <Minus      size={11} />, label: 'Horizontal Line',       shortcut: 'H — click price level' },
   { mode: 'vline',     icon: <AlignCenter size={11} />, label: 'Vertical Line',        shortcut: 'V — click time' },
-  { mode: 'fibonacci', icon: <GitBranch   size={11} />, label: 'Fibonacci Retracement',shortcut: 'F — click high/low' },
-  { mode: 'rectangle', icon: <Square      size={11} />, label: 'Price Zone',           shortcut: 'R — click 2 points' },
-  { mode: 'text',      icon: <Type        size={11} />, label: 'Text Note',            shortcut: 'N — click to place' },
-  { mode: 'brush',     icon: <Brush       size={11} />, label: 'Brush (Freehand)',     shortcut: 'B — click & drag' },
-  { mode: 'emoji',     icon: <Smile       size={11} />, label: 'Emoji Marker',         shortcut: 'E — click to place' },
-  { mode: 'measure',   icon: <Ruler       size={11} />, label: 'Measure (Ruler)',      shortcut: 'M — click 2 points' },
-  { mode: 'zoom',      icon: <ZoomIn      size={11} />, label: 'Zoom Selection',       shortcut: 'Z — drag to zoom' },
+  { mode: 'fibonacci', icon: <GitBranch  size={11} />, label: 'Fibonacci Retracement', shortcut: 'F — click high/low' },
+  { mode: 'rectangle', icon: <Square     size={11} />, label: 'Price Zone',            shortcut: 'R — click 2 points' },
+  { mode: 'text',      icon: <Type       size={11} />, label: 'Text Note',             shortcut: 'N — click to place' },
+  { mode: 'brush',     icon: <Brush      size={11} />, label: 'Brush (Freehand)',      shortcut: 'B — click & drag' },
+  { mode: 'emoji',     icon: <Smile      size={11} />, label: 'Emoji Marker',          shortcut: 'E — click to place' },
+  { mode: 'measure',   icon: <Ruler      size={11} />, label: 'Measure (Ruler)',       shortcut: 'M — click 2 points' },
+  { mode: 'zoom',      icon: <ZoomIn     size={11} />, label: 'Zoom Selection',        shortcut: 'Z — drag to zoom' },
 ];
 
 export function DrawingTools({ activeMode, onModeChange, onClearAll, drawingCount }: DrawingToolsProps) {
@@ -51,7 +56,7 @@ export function DrawingTools({ activeMode, onModeChange, onClearAll, drawingCoun
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          'flex items-center gap-1 px-1.5 py-0.5 text-xs rounded font-medium transition-colors',
+          'flex items-center gap-1 px-1.5 py-0.5 text-[14px] rounded font-medium transition-colors',
           activeMode !== 'none' ? 'bg-fw-accent/20 text-fw-accent' : 'text-fw-text-secondary hover:text-fw-text hover:bg-fw-hover'
         )}
       >
@@ -62,9 +67,9 @@ export function DrawingTools({ activeMode, onModeChange, onClearAll, drawingCoun
       {isOpen && (
         <div className="absolute top-full left-0 mt-1 w-[200px] bg-fw-surface border border-fw-border rounded-lg shadow-xl z-[100] overflow-hidden">
           <div className="px-3 py-2 border-b border-fw-border/50 flex items-center justify-between">
-            <span className="text-xs font-bold text-fw-text-secondary uppercase tracking-wider">Drawing Tools</span>
+            <span className="text-[14px] font-bold text-fw-text-muted uppercase tracking-wider">Drawing Tools</span>
             <button onClick={() => setIsOpen(false)} className="p-0.5 rounded hover:bg-fw-hover">
-              <X size={10} className="text-fw-text-secondary" />
+              <X size={10} className="text-fw-text-muted" />
             </button>
           </div>
 
@@ -85,10 +90,10 @@ export function DrawingTools({ activeMode, onModeChange, onClearAll, drawingCoun
                   {tool.icon}
                 </div>
                 <div className="flex-1">
-                  <span className={cn('text-sm block', activeMode === tool.mode ? 'text-fw-accent font-medium' : 'text-fw-text')}>
+                  <span className={cn('text-[13px] block', activeMode === tool.mode ? 'text-fw-accent font-medium' : 'text-fw-text')}>
                     {tool.label}
                   </span>
-                  <span className="text-xs text-fw-text-secondary">{tool.shortcut}</span>
+                  <span className="text-[13px] text-fw-text-muted">{tool.shortcut}</span>
                 </div>
               </button>
             ))}
@@ -98,7 +103,7 @@ export function DrawingTools({ activeMode, onModeChange, onClearAll, drawingCoun
             <div className="border-t border-fw-border/50 p-2">
               <button
                 onClick={() => { onClearAll(); setIsOpen(false); }}
-                className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium text-red-400 hover:bg-red-500/10 transition-colors"
+                className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded text-[14px] font-medium text-red-400 hover:bg-red-500/10 transition-colors"
               >
                 <Trash2 size={10} />
                 Clear All Drawings ({drawingCount})

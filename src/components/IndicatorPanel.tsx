@@ -1,4 +1,4 @@
-/**
+﻿/**
  * INDICATOR PANEL
  *
  * Searchable dropdown to toggle chart indicators on/off.
@@ -138,7 +138,7 @@ export function IndicatorPanel({ indicators, onToggle, onUpdatePeriod }: Indicat
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          'flex items-center gap-1 px-1.5 py-0.5 text-xs rounded font-medium transition-colors',
+          'flex items-center gap-1 px-1.5 py-0.5 text-[14px] rounded font-medium transition-colors',
           activeCount > 0 ? 'bg-fw-accent/20 text-fw-accent' : 'text-fw-text-secondary hover:text-fw-text hover:bg-fw-hover'
         )}
       >
@@ -154,7 +154,7 @@ export function IndicatorPanel({ indicators, onToggle, onUpdatePeriod }: Indicat
           <div className="absolute top-full left-0 mt-1 w-[240px] bg-fw-surface border border-fw-border rounded-lg shadow-xl z-[100] overflow-hidden flex flex-col" style={{ maxHeight: '480px' }}>
             {/* Header */}
             <div className="px-3 py-2 border-b border-fw-border/50 flex items-center justify-between flex-shrink-0">
-              <span className="text-[10px] font-bold text-fw-text-muted uppercase tracking-wider">Indicators</span>
+              <span className="text-[14px] font-bold text-fw-text-muted uppercase tracking-wider">Indicators</span>
               <button onClick={() => setIsOpen(false)} className="p-0.5 rounded hover:bg-fw-hover">
                 <X size={10} className="text-fw-text-muted" />
               </button>
@@ -169,7 +169,7 @@ export function IndicatorPanel({ indicators, onToggle, onUpdatePeriod }: Indicat
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   placeholder="Search indicators…"
-                  className="flex-1 bg-transparent text-[11px] text-fw-text placeholder-fw-text-muted outline-none min-w-0"
+                  className="flex-1 bg-transparent text-[13px] text-fw-text placeholder-fw-text-muted outline-none min-w-0"
                 />
                 {search && (
                   <button onClick={() => setSearch('')} className="text-fw-text-muted hover:text-fw-text">
@@ -182,13 +182,13 @@ export function IndicatorPanel({ indicators, onToggle, onUpdatePeriod }: Indicat
             {/* List */}
             <div className="overflow-y-auto py-1 flex-1">
               {noResults ? (
-                <div className="px-3 py-4 text-center text-[11px] text-fw-text-muted">No indicators found</div>
+                <div className="px-3 py-4 text-center text-[13px] text-fw-text-muted">No indicators found</div>
               ) : (
                 <>
                   {overlays.length > 0 && (
                     <>
                       <div className="px-3 py-1">
-                        <span className="text-[9px] font-bold text-fw-text-muted uppercase tracking-wider">Overlays</span>
+                        <span className="text-[13px] font-bold text-fw-text-muted uppercase tracking-wider">Overlays</span>
                       </div>
                       {overlays.map(ind => (
                         <IndicatorRow key={ind.id} indicator={ind} onToggle={onToggle}
@@ -206,7 +206,7 @@ export function IndicatorPanel({ indicators, onToggle, onUpdatePeriod }: Indicat
                   {panes.length > 0 && (
                     <>
                       <div className="px-3 py-1">
-                        <span className="text-[9px] font-bold text-fw-text-muted uppercase tracking-wider">Separate Panes</span>
+                        <span className="text-[13px] font-bold text-fw-text-muted uppercase tracking-wider">Separate Panes</span>
                       </div>
                       {panes.map(ind => (
                         <IndicatorRow key={ind.id} indicator={ind} onToggle={onToggle}
@@ -252,7 +252,7 @@ function IndicatorRow({
       {ind.color && (
         <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: ind.color }} />
       )}
-      <span className={cn('text-[11px] flex-1 truncate', ind.enabled ? 'text-fw-text' : 'text-fw-text-secondary')}>
+      <span className={cn('text-[13px] flex-1 truncate', ind.enabled ? 'text-fw-text' : 'text-fw-text-secondary')}>
         {ind.label}
       </span>
       {hasPeriod && (
@@ -274,12 +274,12 @@ function IndicatorRow({
               }
               if (e.key === 'Escape') setEditingId(null);
             }}
-            className="w-9 text-[9px] text-center bg-fw-bg border border-fw-border rounded px-1 py-0.5 text-fw-text"
+            className="w-9 text-[13px] text-center bg-fw-bg border border-fw-border rounded px-1 py-0.5 text-fw-text"
           />
         ) : (
           <button
             onClick={() => { setEditingId(ind.id); setEditValue(String(ind.period)); }}
-            className="text-xs text-fw-text-secondary hover:text-fw-text px-1"
+            className="text-[13px] text-fw-text-muted hover:text-fw-text px-1"
             title="Edit period"
           >
             <Settings size={9} />

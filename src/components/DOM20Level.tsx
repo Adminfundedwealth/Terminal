@@ -1,7 +1,6 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { Layers } from 'lucide-react';
 import { useAppStore } from '@/store/appStore';
-import SymbolLogo from '@/components/SymbolLogo';
 import { wsService } from '@/services/websocket';
 
 interface DepthLevel {
@@ -90,19 +89,14 @@ export function DOM20Level() {
         <div className="flex items-center gap-2">
           <Layers className="w-4 h-4 text-fw-accent" />
           <span className="font-bold text-fw-text uppercase tracking-wide">DOM</span>
-          {activeSymbol && (
-            <div className="flex items-center gap-1.5">
-              <SymbolLogo symbol={activeSymbol.symbol} size={16} />
-              <span className="text-fw-text-secondary">{activeSymbol.symbol}</span>
-            </div>
-          )}
+          {activeSymbol && <span className="text-fw-text-secondary">{activeSymbol.symbol}</span>}
         </div>
         <div className="flex items-center gap-1">
           {([5, 10, 20] as const).map(l => (
             <button
               key={l}
               onClick={() => setLevels(l)}
-              className={`text-xs px-1.5 py-0.5 rounded ${levels === l ? 'bg-fw-accent text-white' : 'text-fw-text-secondary hover:bg-fw-hover'}`}
+              className={`text-[14px] px-1.5 py-0.5 rounded ${levels === l ? 'bg-fw-accent text-white' : 'text-fw-text-secondary hover:bg-fw-hover'}`}
             >
               {l}L
             </button>
@@ -112,9 +106,9 @@ export function DOM20Level() {
 
       {/* Pressure Bar */}
       <div className="px-3 py-1.5 border-b border-fw-border">
-        <div className="flex items-center justify-between text-xs mb-0.5">
+        <div className="flex items-center justify-between text-[14px] mb-0.5">
           <span className="text-green font-mono">{dom.totalBuyQty.toLocaleString('en-IN')} Buy</span>
-          <span className="text-fw-text-secondary">Spread: {dom.spread.toFixed(2)}</span>
+          <span className="text-fw-text-muted">Spread: {dom.spread.toFixed(2)}</span>
           <span className="text-red font-mono">{dom.totalSellQty.toLocaleString('en-IN')} Sell</span>
         </div>
         <div className="h-2 rounded-full bg-fw-surface-2 overflow-hidden flex">
@@ -124,7 +118,7 @@ export function DOM20Level() {
       </div>
 
       {/* Column Headers */}
-      <div className="grid grid-cols-6 px-2 py-1 border-b border-fw-border text-xs text-fw-text-secondary font-bold uppercase">
+      <div className="grid grid-cols-6 px-2 py-1 border-b border-fw-border text-[13px] text-fw-text-muted font-bold uppercase">
         <span>Orders</span>
         <span className="text-right">Qty</span>
         <span className="text-right text-green">Bid</span>
@@ -136,7 +130,7 @@ export function DOM20Level() {
       {/* Depth Rows */}
       <div className="flex-1 overflow-y-auto">
         {dom.bids.length === 0 && dom.asks.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-fw-text-secondary">
+          <div className="flex items-center justify-center h-full text-fw-text-muted">
             {activeSymbol ? 'Waiting for depth...' : 'Select a symbol'}
           </div>
         ) : (
@@ -161,7 +155,7 @@ export function DOM20Level() {
                   />
                 )}
 
-                <span className="font-mono text-fw-text-secondary relative">{bid?.orders || ''}</span>
+                <span className="font-mono text-fw-text-muted relative">{bid?.orders || ''}</span>
                 <span className="font-mono text-right text-fw-text-secondary relative">{bid?.qty?.toLocaleString('en-IN') || ''}</span>
                 <span
                   className="font-mono text-right text-green font-bold relative cursor-pointer hover:underline"
@@ -176,7 +170,7 @@ export function DOM20Level() {
                   {ask?.price.toFixed(2) || ''}
                 </span>
                 <span className="font-mono text-right text-fw-text-secondary relative">{ask?.qty?.toLocaleString('en-IN') || ''}</span>
-                <span className="font-mono text-right text-fw-text-secondary relative">{ask?.orders || ''}</span>
+                <span className="font-mono text-right text-fw-text-muted relative">{ask?.orders || ''}</span>
               </div>
             );
           })
@@ -186,7 +180,7 @@ export function DOM20Level() {
       {/* LTP */}
       {dom.ltp > 0 && (
         <div className="px-3 py-1.5 border-t border-fw-border text-center">
-          <span className="text-fw-text-secondary text-xs">LTP: </span>
+          <span className="text-fw-text-muted text-[14px]">LTP: </span>
           <span className="font-mono font-bold text-fw-accent">{dom.ltp.toFixed(2)}</span>
         </div>
       )}

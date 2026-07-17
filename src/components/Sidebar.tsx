@@ -1,4 +1,4 @@
-import { 
+﻿import { 
   LayoutDashboard, BarChart3, TrendingUp, LineChart, Activity, Diamond, DollarSign,
   Search, Bell, ScanLine, PieChart, BookOpen, Settings, Wifi, WifiOff, Bot, Users, User, LogOut
 } from 'lucide-react';
@@ -42,7 +42,7 @@ export function Sidebar() {
               onError={(e) => {
                 const el = e.target as HTMLImageElement;
                 el.style.display = 'none';
-                el.parentElement!.innerHTML = '<span class="text-xs font-black bg-gradient-to-br from-[#00D4FF] via-[#4F46E5] to-[#7C3AED] bg-clip-text text-transparent">FW</span>';
+                el.parentElement!.innerHTML = '<span class="text-[13px] font-black bg-gradient-to-br from-[#00D4FF] via-[#4F46E5] to-[#7C3AED] bg-clip-text text-transparent">FW</span>';
               }}
             />
           </div>
@@ -78,7 +78,7 @@ export function Sidebar() {
             {activeWorkspace === ws.id && (
               <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-r-full" style={{ backgroundColor: ws.color }} />
             )}
-            <div className="absolute left-full ml-2 px-2 py-1 bg-fw-surface-2 border border-fw-border rounded-md text-xs text-fw-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 shadow-xl">
+            <div className="absolute left-full ml-2 px-2 py-1 bg-[#1a1d28] border border-fw-border rounded-md text-[14px] text-fw-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 shadow-xl">
               {ws.label}
             </div>
           </button>
@@ -95,7 +95,7 @@ export function Sidebar() {
         <SidebarBtn icon={<Bell size={15} />} label="Alerts" onClick={() => setBottomTab('alerts')} />
         <SidebarBtn icon={<BookOpen size={15} />} label="Journal" onClick={() => setBottomTab('journal')} />
         <SidebarBtn icon={<PieChart size={15} />} label="Analytics" onClick={() => setBottomTab('analytics')} />
-        <SidebarBtn icon={<Bot size={15} />} label="AI Workspace" onClick={() => setBottomTab('ai')} />
+        <SidebarBtn icon={<Bot size={15} />} label="Insights (Rule-based analysis)" onClick={() => setBottomTab('ai')} />
         <SidebarBtn icon={<Users size={15} />} label="Accounts" onClick={() => setBottomTab('accounts')} />
       </div>
 
@@ -138,7 +138,7 @@ function SidebarBtn({ icon, label, active, onClick }: { icon: React.ReactNode; l
       )}
     >
       {icon}
-      <div className="absolute left-full ml-2 px-2 py-1 bg-fw-surface-2 border border-fw-border rounded-md text-xs text-fw-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 shadow-xl">
+      <div className="absolute left-full ml-2 px-2 py-1 bg-[#1a1d28] border border-fw-border rounded-md text-[14px] text-fw-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 shadow-xl">
         {label}
       </div>
     </button>

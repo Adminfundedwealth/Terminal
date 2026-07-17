@@ -1,11 +1,10 @@
-import { Search, Moon, Palette, Shield, Zap, TrendingUp, TrendingDown, Activity, Target, AlertTriangle, Bell } from 'lucide-react';
+﻿import { Search, Moon, Palette, Shield, Zap, TrendingUp, TrendingDown, Activity, Target, AlertTriangle, Bell } from 'lucide-react';
 import { useAppStore } from '@/store/appStore';
 import { useTradingStore } from '@/store/tradingStore';
 import { useMarketStore } from '@/store/marketStore';
 import { cn, formatPrice } from '@/utils/helpers';
 import { AccountSelector } from './AccountSelector';
 import { useState, useEffect } from 'react';
-import SymbolLogo from '@/components/SymbolLogo';
 import { getMarginInfo, getRiskState, type RiskState } from '@/services/api';
 import type { Theme } from '@/types';
 
@@ -66,20 +65,20 @@ export function TopBar() {
   const riskBg = riskLevel === 'HIGH' ? 'bg-red-900/15 border-red-800/30' : riskLevel === 'CAUTION' ? 'bg-orange-900/15 border-orange-800/30' : 'bg-emerald-900/15 border-emerald-800/30';
 
   return (
-    <header className="min-h-[64px] bg-gradient-to-b from-fw-surface to-fw-surface-2 border-b border-fw-border flex flex-col select-none overflow-hidden">
+    <header className="min-h-[64px] bg-gradient-to-b from-[#0e1018] to-[#0c0e14] border-b border-fw-border flex flex-col select-none overflow-hidden">
       {/* Row 1: Main Command Bar */}
       <div className="flex items-center px-3 h-[38px]">
         {/* Brand */}
         <div data-brand className="flex items-center gap-2 mr-3 flex-shrink-0">
           <div className="relative">
             <div className="absolute -inset-0.5 rounded-md bg-gradient-to-br from-[#00D4FF]/10 via-[#4F46E5]/8 to-[#7C3AED]/10 blur-sm opacity-60" />
-            <div className="relative w-6 h-6 rounded-md bg-gradient-to-br from-fw-surface to-fw-surface-2 border border-white/10 flex items-center justify-center">
-              <img src="/logo.png" alt="FW" className="w-4 h-4 object-contain" onError={(e) => { const el = e.target as HTMLImageElement; el.style.display = 'none'; el.parentElement!.innerHTML = '<span class="text-xxs font-black bg-gradient-to-br from-[#00D4FF] via-[#4F46E5] to-[#7C3AED] bg-clip-text text-transparent">FW</span>'; }} />
+            <div className="relative w-6 h-6 rounded-md bg-gradient-to-br from-[#0a0a0a] to-[#1a1a2e] border border-white/10 flex items-center justify-center">
+              <img src="/logo.png" alt="FW" className="w-4 h-4 object-contain" onError={(e) => { const el = e.target as HTMLImageElement; el.style.display = 'none'; el.parentElement!.innerHTML = '<span class="text-[7px] font-black bg-gradient-to-br from-[#00D4FF] via-[#4F46E5] to-[#7C3AED] bg-clip-text text-transparent">FW</span>'; }} />
             </div>
           </div>
           <div className="flex flex-col leading-none items-center">
-            <span className="text-title font-extrabold tracking-wide bg-gradient-to-r from-[#00D4FF] via-[#4F46E5] to-[#7C3AED] bg-clip-text text-transparent">FUNDEDWEALTH</span>
-            <span className="text-xs font-bold tracking-[0.2em] text-fw-accent/80 drop-shadow-[0_0_6px_rgba(59,130,246,0.5)]">TERMINAL</span>
+            <span className="text-[13px] font-extrabold tracking-wide bg-gradient-to-r from-[#00D4FF] via-[#4F46E5] to-[#7C3AED] bg-clip-text text-transparent">FUNDEDWEALTH</span>
+            <span className="text-[13px] font-bold tracking-[0.2em] text-fw-accent/80 drop-shadow-[0_0_6px_rgba(59,130,246,0.5)]">TERMINAL</span>
           </div>
         </div>
 
@@ -110,11 +109,10 @@ export function TopBar() {
             const up = (q?.changePercent || 0) >= 0;
             return (
               <div key={token} className="flex items-center gap-1.5">
-                <SymbolLogo symbol={symbol} size={16} />
-                <span className="text-[11px] font-semibold text-fw-text-muted tracking-wide">{symbol}</span>
+                <span className="text-[13px] font-semibold text-fw-text-muted tracking-wide">{symbol}</span>
                 {q ? (
                   <>
-                    <span className={cn('ticker-price text-[12px]', up ? 'text-green' : 'text-red')}>
+                    <span className={cn('ticker-price text-[14px]', up ? 'text-green' : 'text-red')}>
                       {formatPrice(q.ltp)}
                     </span>
                     <span className={cn('ticker-change', up ? 'ticker-change-up' : 'ticker-change-down')}>
@@ -122,7 +120,7 @@ export function TopBar() {
                     </span>
                   </>
                 ) : (
-                  <span className="text-sm text-fw-text-secondary/50 font-mono">—</span>
+                  <span className="text-[13px] text-fw-text-muted/50 font-mono">—</span>
                 )}
               </div>
             );
@@ -145,7 +143,7 @@ export function TopBar() {
           <AccountSelector />
           <div className="flex items-center bg-fw-bg rounded border border-fw-border p-0.5">
             {([{ value: 'dark' as Theme, label: 'D' }, { value: 'fw-blue' as Theme, label: 'B' }]).map((t) => (
-              <button key={t.value} onClick={() => setTheme(t.value)} className={cn('px-1.5 py-0.5 rounded text-xs font-bold', theme === t.value ? 'bg-fw-accent text-white' : 'text-fw-text-secondary hover:text-fw-text')}>{t.label}</button>
+              <button key={t.value} onClick={() => setTheme(t.value)} className={cn('px-1.5 py-0.5 rounded text-[13px] font-bold', theme === t.value ? 'bg-fw-accent text-white' : 'text-fw-text-muted hover:text-fw-text')}>{t.label}</button>
             ))}
           </div>
           <button onClick={() => setBottomTab('alerts')} className="p-1 rounded hover:bg-fw-hover text-fw-text-secondary hover:text-fw-text transition-colors" title="Alerts">
@@ -158,15 +156,15 @@ export function TopBar() {
       </div>
 
       {/* Row 2: Account Metrics + Challenge Context Strip */}
-      <div className="flex items-center px-3 h-[26px] border-t border-fw-border/20 bg-fw-surface">
+      <div className="flex items-center px-3 h-[26px] border-t border-fw-border/20 bg-[#090b10]">
         {/* Account Metrics */}
-        <div className="flex items-center gap-4 text-base mr-4 pr-4 border-r border-fw-border/20">
+        <div className="flex items-center gap-4 text-[14px] mr-4 pr-4 border-r border-fw-border/20">
           <MetricInline label="Balance" value={`₹${formatCompact(balance)}`} />
           <MetricInline label="Equity" value={`₹${formatCompact(equity)}`} className={equity >= balance ? 'text-emerald-400' : 'text-red-400'} />
           <MetricInline label="Margin" value={`₹${formatCompact(marginInfo?.usedMargin || 0)}`} className="text-orange-400" />
           <MetricInline label="Free" value={`₹${formatCompact(marginInfo?.availableMargin || balance)}`} className="text-emerald-400" />
           <div className="flex items-center gap-1">
-            <span className="text-fw-text-secondary">P&L</span>
+            <span className="text-fw-text-muted">P&L</span>
             {pnlValue >= 0 ? <TrendingUp size={10} className="text-green" /> : <TrendingDown size={10} className="text-red" />}
             <span className={cn('font-mono font-bold tabular-nums', pnlValue >= 0 ? 'text-green' : 'text-red')}>
               {pnlValue >= 0 ? '+' : ''}₹{formatCompact(Math.abs(pnlValue))}
@@ -175,20 +173,20 @@ export function TopBar() {
         </div>
 
         {/* Challenge Risk Context */}
-        <div className="flex items-center gap-4 text-base">
+        <div className="flex items-center gap-4 text-[14px]">
           <div className="flex items-center gap-1">
             <AlertTriangle size={9} className="text-red-400/70" />
-            <span className="text-fw-text-secondary">Daily Left:</span>
+            <span className="text-fw-text-muted">Daily Left:</span>
             <span className="font-mono font-bold text-red-400 tabular-nums">₹{formatCompact(dailyLossRemaining)}</span>
           </div>
           <div className="flex items-center gap-1">
             <Activity size={9} className="text-orange-400/70" />
-            <span className="text-fw-text-secondary">DD Left:</span>
+            <span className="text-fw-text-muted">DD Left:</span>
             <span className="font-mono font-bold text-orange-400 tabular-nums">₹{formatCompact(ddRemaining)}</span>
           </div>
           <div className="flex items-center gap-1">
             <Target size={9} className="text-emerald-400/70" />
-            <span className="text-fw-text-secondary">Target:</span>
+            <span className="text-fw-text-muted">Target:</span>
             <span className="font-mono font-bold text-emerald-400 tabular-nums">{targetPct.toFixed(0)}%</span>
             <div className="w-16 h-[4px] rounded-full bg-fw-border/30 overflow-hidden">
               <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${targetPct}%` }} />
@@ -197,7 +195,7 @@ export function TopBar() {
         </div>
 
         <div className="flex-1" />
-        <span className="text-xs text-fw-text-secondary/50 font-mono">{new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+        <span className="text-[13px] text-fw-text-muted/50 font-mono">{new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
       </div>
     </header>
   );
@@ -206,7 +204,7 @@ export function TopBar() {
 function MetricInline({ label, value, className }: { label: string; value: string; className?: string }) {
   return (
     <div className="flex items-center gap-1">
-      <span className="text-fw-text-secondary">{label}</span>
+      <span className="text-fw-text-muted">{label}</span>
       <span className={cn('font-mono font-bold tabular-nums text-fw-text', className)}>{value}</span>
     </div>
   );

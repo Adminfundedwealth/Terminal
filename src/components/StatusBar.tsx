@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useMarketStore } from '@/store/marketStore';
 import { useAppStore } from '@/store/appStore';
 import SymbolLogo from '@/components/SymbolLogo';
@@ -70,7 +70,7 @@ export function StatusBar() {
   const ws = wsConfig[wsState];
 
   return (
-    <div className="h-[22px] min-h-[22px] bg-[#08090e] border-t border-fw-border/50 flex items-center px-3 gap-4 text-[9px] select-none">
+    <div className="h-[22px] min-h-[22px] bg-[#08090e] border-t border-fw-border/50 flex items-center px-3 gap-4 text-[13px] select-none">
       {/* Broker Feed Status */}
       <div className="flex items-center gap-1">
         {ws.icon}

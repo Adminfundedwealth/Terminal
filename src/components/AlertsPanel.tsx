@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+﻿import { useState, useEffect, useRef, useCallback } from 'react';
 import { Plus, Trash2, Bell, BellOff, Volume2, VolumeX, MessageSquare } from 'lucide-react';
 import { useJournalStore, type PriceAlert, type AlertNotifyMethod } from '@/store/journalStore';
 import { useMarketStore } from '@/store/marketStore';
@@ -144,8 +144,8 @@ export function AlertsPanel() {
   return (
     <div className="h-full flex flex-col overflow-hidden">
       <div className="flex items-center justify-between px-3 py-2 border-b border-fw-border">
-        <span className="text-base font-bold text-fw-text">Price Alerts ({activeAlerts.length} active)</span>
-        <button onClick={prefill} className="flex items-center gap-1 px-2 py-1 text-sm bg-fw-accent text-white rounded hover:brightness-110">
+        <span className="text-[14px] font-bold text-fw-text">Price Alerts ({activeAlerts.length} active)</span>
+        <button onClick={prefill} className="flex items-center gap-1 px-2 py-1 text-[13px] bg-fw-accent text-white rounded hover:brightness-110">
           <Plus size={12} /> New Alert
         </button>
       </div>
@@ -153,25 +153,25 @@ export function AlertsPanel() {
       {isAdding && (
         <div className="px-3 py-2 border-b border-fw-border bg-fw-bg/50 space-y-2">
           <div className="grid grid-cols-3 gap-2">
-            <input placeholder="Symbol" value={form.symbol} onChange={(e) => setForm({ ...form, symbol: e.target.value.toUpperCase() })} className="bg-fw-bg border border-fw-border rounded text-sm px-2 py-1.5 text-fw-text outline-none focus:border-fw-accent" />
-            <select value={form.condition} onChange={(e) => setForm({ ...form, condition: e.target.value as any })} className="bg-fw-bg border border-fw-border rounded text-sm px-2 py-1.5 text-fw-text">
+            <input placeholder="Symbol" value={form.symbol} onChange={(e) => setForm({ ...form, symbol: e.target.value.toUpperCase() })} className="bg-fw-bg border border-fw-border rounded text-[13px] px-2 py-1.5 text-fw-text outline-none focus:border-fw-accent" />
+            <select value={form.condition} onChange={(e) => setForm({ ...form, condition: e.target.value as any })} className="bg-fw-bg border border-fw-border rounded text-[13px] px-2 py-1.5 text-fw-text">
               <option value="above">Price Above</option>
               <option value="below">Price Below</option>
               <option value="cross_above">Crosses Above</option>
               <option value="cross_below">Crosses Below</option>
             </select>
-            <input type="number" placeholder="Price" value={form.price || ''} onChange={(e) => setForm({ ...form, price: parseFloat(e.target.value) || 0 })} className="bg-fw-bg border border-fw-border rounded text-sm px-2 py-1.5 text-fw-text font-mono outline-none focus:border-fw-accent" step={0.05} />
+            <input type="number" placeholder="Price" value={form.price || ''} onChange={(e) => setForm({ ...form, price: parseFloat(e.target.value) || 0 })} className="bg-fw-bg border border-fw-border rounded text-[13px] px-2 py-1.5 text-fw-text font-mono outline-none focus:border-fw-accent" step={0.05} />
           </div>
           {/* Notification Methods */}
           <div className="flex items-center gap-2">
-            <span className="text-xs text-fw-text-secondary">Notify via:</span>
+            <span className="text-[14px] text-fw-text-secondary">Notify via:</span>
             <NotifyToggle label="Popup" icon={<Bell size={11} />} active={form.notifyVia.includes('popup')} onClick={() => toggleNotifyMethod('popup')} />
             <NotifyToggle label="Sound" icon={<Volume2 size={11} />} active={form.notifyVia.includes('sound')} onClick={() => toggleNotifyMethod('sound')} />
             <NotifyToggle label="Toast" icon={<MessageSquare size={11} />} active={form.notifyVia.includes('toast')} onClick={() => toggleNotifyMethod('toast')} />
           </div>
           <div className="flex gap-2">
-            <button onClick={handleAdd} className="px-3 py-1.5 text-sm bg-fw-accent text-white rounded">Create Alert</button>
-            <button onClick={() => setIsAdding(false)} className="px-3 py-1.5 text-sm text-fw-text-secondary border border-fw-border rounded">Cancel</button>
+            <button onClick={handleAdd} className="px-3 py-1.5 text-[13px] bg-fw-accent text-white rounded">Create Alert</button>
+            <button onClick={() => setIsAdding(false)} className="px-3 py-1.5 text-[13px] text-fw-text-secondary border border-fw-border rounded">Cancel</button>
           </div>
         </div>
       )}
@@ -179,7 +179,7 @@ export function AlertsPanel() {
       <div className="flex-1 overflow-y-auto">
         {activeAlerts.length > 0 && (
           <div className="px-3 py-1.5">
-            <span className="text-xs text-fw-text-secondary uppercase font-semibold">Active</span>
+            <span className="text-[14px] text-fw-text-secondary uppercase font-semibold">Active</span>
             {activeAlerts.map((alert) => (
               <AlertRow key={alert.id} alert={alert} onDelete={() => deleteAlert(alert.id)} onToggle={() => toggleAlert(alert.id)} quote={quotes[alert.token]} />
             ))}
@@ -187,14 +187,14 @@ export function AlertsPanel() {
         )}
         {triggeredAlerts.length > 0 && (
           <div className="px-3 py-1.5">
-            <span className="text-xs text-fw-text-secondary uppercase font-semibold">Triggered</span>
+            <span className="text-[14px] text-fw-text-secondary uppercase font-semibold">Triggered</span>
             {triggeredAlerts.map((alert) => (
               <AlertRow key={alert.id} alert={alert} onDelete={() => deleteAlert(alert.id)} onToggle={() => {}} quote={quotes[alert.token]} />
             ))}
           </div>
         )}
         {alerts.length === 0 && (
-          <div className="flex items-center justify-center h-full text-base text-fw-text-secondary">No alerts. Click "New Alert" to create one.</div>
+          <div className="flex items-center justify-center h-full text-[14px] text-fw-text-secondary">No alerts. Click "New Alert" to create one.</div>
         )}
       </div>
     </div>
@@ -206,7 +206,7 @@ function NotifyToggle({ label, icon, active, onClick }: { label: string; icon: R
     <button
       onClick={onClick}
       className={cn(
-        'flex items-center gap-1 px-2 py-0.5 text-xs rounded border transition-colors',
+        'flex items-center gap-1 px-2 py-0.5 text-[14px] rounded border transition-colors',
         active ? 'bg-fw-accent/20 border-fw-accent text-fw-accent' : 'border-fw-border text-fw-text-secondary'
       )}
     >
@@ -221,19 +221,19 @@ function AlertRow({ alert, onDelete, onToggle, quote }: { alert: PriceAlert; onD
     <div className="flex items-center justify-between py-1.5 border-b border-fw-border/30">
       <div className="flex items-center gap-2">
         {alert.triggered ? <Bell size={12} className="text-fw-accent" /> : alert.active ? <Bell size={12} className="text-green" /> : <BellOff size={12} className="text-fw-text-secondary" />}
-        <span className="text-base font-medium text-fw-text">{alert.symbol}</span>
-        <span className="text-xs text-fw-text-secondary capitalize">{conditionLabel}</span>
-        <span className="text-base font-mono text-fw-text">₹{formatPrice(alert.price)}</span>
+        <span className="text-[14px] font-medium text-fw-text">{alert.symbol}</span>
+        <span className="text-[14px] text-fw-text-secondary capitalize">{conditionLabel}</span>
+        <span className="text-[14px] font-mono text-fw-text">₹{formatPrice(alert.price)}</span>
         {/* Notify icons */}
         <div className="flex items-center gap-0.5">
-          {alert.notifyVia?.includes('popup') && <Bell size={9} className="text-fw-text-secondary" />}
-          {alert.notifyVia?.includes('sound') && <Volume2 size={9} className="text-fw-text-secondary" />}
-          {alert.notifyVia?.includes('toast') && <MessageSquare size={9} className="text-fw-text-secondary" />}
+          {alert.notifyVia?.includes('popup') && <Bell size={9} className="text-fw-text-muted" />}
+          {alert.notifyVia?.includes('sound') && <Volume2 size={9} className="text-fw-text-muted" />}
+          {alert.notifyVia?.includes('toast') && <MessageSquare size={9} className="text-fw-text-muted" />}
         </div>
       </div>
       <div className="flex items-center gap-1">
-        {quote && <span className="text-xs font-mono text-fw-text-secondary">LTP: ₹{formatPrice(quote.ltp)}</span>}
-        {alert.triggered && <span className="text-xs text-fw-accent">✓ triggered</span>}
+        {quote && <span className="text-[14px] font-mono text-fw-text-secondary">LTP: ₹{formatPrice(quote.ltp)}</span>}
+        {alert.triggered && <span className="text-[13px] text-fw-accent">✓ triggered</span>}
         {!alert.triggered && (
           <button onClick={onToggle} className="p-1 text-fw-text-secondary hover:text-fw-text" title={alert.active ? 'Disable' : 'Enable'}>
             {alert.active ? <Volume2 size={11} /> : <VolumeX size={11} />}
