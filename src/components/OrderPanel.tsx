@@ -7,7 +7,7 @@ import { cn, formatPrice } from '@/utils/helpers';
 import { orderSuccessMessage, exitSuccessMessage } from '@/utils/orderMessages';
 import { ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
 import type { OrderSide, OrderType, ProductType } from '@/types';
-import { SymbolIcon } from '@/components/SymbolIcon';
+import SymbolLogo from '@/components/SymbolLogo';
 
 const ORDER_TYPES: { value: OrderType; label: string }[] = [
   { value: 'MARKET', label: 'MKT' },
@@ -131,7 +131,7 @@ export function OrderPanel() {
       {/* Compact Header with Symbol + LTP */}
       <div className="px-3 py-2.5 border-b border-fw-border bg-gradient-to-r from-fw-surface to-fw-surface-2 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-2">
-          <SymbolIcon symbol={symbol} size={20} />
+          <SymbolLogo symbol={symbol} size={20} />
           <span className="text-title font-black text-fw-text">{symbol}</span>
           {activeSymbol?.segment && (
             <span className="text-xs font-bold text-fw-text-secondary bg-fw-bg px-1.5 py-0.5 rounded border border-fw-border/50">{activeSymbol.segment}</span>

@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { Plus, X, Search, Star, Upload } from 'lucide-react';
 import { useAppStore } from '@/store/appStore';
-import { SymbolIcon } from '@/components/SymbolIcon';
+import SymbolLogo from '@/components/SymbolLogo';
 import { useMarketStore } from '@/store/marketStore';
 import { useTradingStore } from '@/store/tradingStore';
 import { cn, formatPrice, getChangeColor } from '@/utils/helpers';
@@ -253,7 +253,7 @@ function WatchlistRow({ item, isSelected, isPinned, onSelect, onRemove, onPin }:
       {/* Symbol */}
       <div className="flex items-center gap-1.5 min-w-0">
         {isPinned && <Star size={8} className="text-fw-accent flex-shrink-0 fill-fw-accent" />}
-        <SymbolIcon symbol={item.symbol} size={18} className="flex-shrink-0" />
+        <SymbolLogo symbol={item.symbol} size={18} className="flex-shrink-0" />
         <div className="flex flex-col min-w-0">
           <span className={cn('text-sm font-bold truncate leading-tight', isSelected ? 'text-fw-text' : 'text-fw-text/90')}>
             {item.symbol}

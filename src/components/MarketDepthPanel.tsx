@@ -5,7 +5,7 @@ import { useTradingStore } from '@/store/tradingStore';
 import { cn, formatPrice } from '@/utils/helpers';
 import { Layers, ArrowUpDown } from 'lucide-react';
 import type { MarketDepthLevel } from '@/types';
-import { SymbolIcon } from '@/components/SymbolIcon';
+import SymbolLogo from '@/components/SymbolLogo';
 
 function fmtQty(n: number): string {
   if (n >= 10_000_000) return (n / 10_000_000).toFixed(1) + 'Cr';
@@ -43,7 +43,7 @@ export function MarketDepthPanel() {
           <span className="text-xs font-black text-fw-text uppercase tracking-wider">Depth</span>
           {activeSymbol && (
             <div className="flex items-center gap-1.5">
-              <SymbolIcon symbol={activeSymbol.symbol} size={16} />
+              <SymbolLogo symbol={activeSymbol.symbol} size={16} />
               <span className="text-xs text-fw-text-secondary font-mono ml-1">{activeSymbol.symbol}</span>
             </div>
           )}

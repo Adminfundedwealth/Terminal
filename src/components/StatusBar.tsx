@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useMarketStore } from '@/store/marketStore';
 import { useAppStore } from '@/store/appStore';
-import { SymbolIcon } from '@/components/SymbolIcon';
+import SymbolLogo from '@/components/SymbolLogo';
 import { wsService } from '@/services/websocket';
 import { cn } from '@/utils/helpers';
 import { Wifi, WifiOff, Loader2 } from 'lucide-react';
@@ -102,7 +102,7 @@ export function StatusBar() {
         <span className="text-fw-text-secondary uppercase font-medium">{activeWorkspace}</span>
         {activeSymbol && (
           <div className="ml-2 flex items-center gap-1.5">
-            <SymbolIcon symbol={activeSymbol.symbol} size={14} />
+            <SymbolLogo symbol={activeSymbol.symbol} size={14} />
             <span className="text-fw-text-secondary font-mono">{activeSymbol.symbol}</span>
           </div>
         )}

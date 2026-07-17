@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAppStore } from '@/store/appStore';
-import { SymbolIcon } from '@/components/SymbolIcon';
+import SymbolLogo from '@/components/SymbolLogo';
 import { useMarketStore } from '@/store/marketStore';
 import { cn, formatPrice } from '@/utils/helpers';
 
@@ -72,7 +72,7 @@ export function TimeSalesPanel() {
           <span className="text-base font-bold text-fw-text">Time & Sales</span>
           {activeSymbol && (
             <div className="flex items-center gap-1.5">
-              <SymbolIcon symbol={activeSymbol.symbol} size={16} />
+              <SymbolLogo symbol={activeSymbol.symbol} size={16} />
               <span className="text-xs text-fw-text-secondary">{activeSymbol.symbol}</span>
             </div>
           )}

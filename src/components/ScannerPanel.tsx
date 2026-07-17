@@ -3,7 +3,7 @@ import { Search, Filter, TrendingUp, TrendingDown, Zap, BarChart3 } from 'lucide
 import { apiService } from '@/services/api';
 import { useAppStore } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
-import { SymbolIcon } from '@/components/SymbolIcon';
+import SymbolLogo from '@/components/SymbolLogo';
 
 interface ScanResult {
   token: string;
@@ -184,7 +184,7 @@ export function ScannerPanel() {
                 <tr key={r.token} className="cursor-pointer" onClick={() => selectSymbol(r)}>
                   <td>
                     <div className="flex items-center gap-2">
-                      <SymbolIcon symbol={r.symbol} size={18} />
+                      <SymbolLogo symbol={r.symbol} size={18} />
                       <span className="font-bold text-fw-text">{r.symbol}</span>
                     </div>
                   </td>

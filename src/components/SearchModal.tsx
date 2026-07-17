@@ -3,7 +3,7 @@ import { Search, X, Plus } from 'lucide-react';
 import { useAppStore } from '@/store/appStore';
 import { searchInstruments } from '@/services/api';
 import { cn, debounce } from '@/utils/helpers';
-import { SymbolIcon } from '@/components/SymbolIcon';
+import SymbolLogo from '@/components/SymbolLogo';
 import type { Instrument } from '@/types';
 
 const SEGMENTS: { value: string; label: string }[] = [
@@ -177,7 +177,7 @@ export function SearchModal() {
                   idx === selectedIndex ? 'bg-fw-hover border-l-2 border-l-fw-accent' : 'hover:bg-fw-hover border-l-2 border-l-transparent'
                 )}
               >
-                <SymbolIcon symbol={instrument.symbol} size={18} className="mr-2 flex-shrink-0" />
+                <SymbolLogo symbol={instrument.symbol} size={18} className="mr-2 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-md font-semibold text-fw-text">{instrument.symbol}</span>

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Activity } from 'lucide-react';
 import { useAppStore } from '@/store/appStore';
-import { SymbolIcon } from '@/components/SymbolIcon';
+import SymbolLogo from '@/components/SymbolLogo';
 import { wsService } from '@/services/websocket';
 
 interface Tick {
@@ -68,7 +68,7 @@ export function TimeAndSales() {
           <span className="text-xs font-bold text-fw-text uppercase tracking-wide">Time & Sales</span>
           {activeSymbol && (
             <div className="flex items-center gap-1.5">
-              <SymbolIcon symbol={activeSymbol.symbol} size={16} />
+              <SymbolLogo symbol={activeSymbol.symbol} size={16} />
               <span className="text-xs text-fw-text-secondary">{activeSymbol.symbol}</span>
             </div>
           )}

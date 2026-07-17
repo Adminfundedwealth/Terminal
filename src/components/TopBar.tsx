@@ -5,7 +5,7 @@ import { useMarketStore } from '@/store/marketStore';
 import { cn, formatPrice } from '@/utils/helpers';
 import { AccountSelector } from './AccountSelector';
 import { useState, useEffect } from 'react';
-import { SymbolIcon } from '@/components/SymbolIcon';
+import SymbolLogo from '@/components/SymbolLogo';
 import { getMarginInfo, getRiskState, type RiskState } from '@/services/api';
 import type { Theme } from '@/types';
 
@@ -110,7 +110,7 @@ export function TopBar() {
             const up = (q?.changePercent || 0) >= 0;
             return (
               <div key={token} className="flex items-center gap-1.5">
-                <SymbolIcon symbol={symbol} size={16} />
+                <SymbolLogo symbol={symbol} size={16} />
                 <span className="text-[11px] font-semibold text-fw-text-muted tracking-wide">{symbol}</span>
                 {q ? (
                   <>

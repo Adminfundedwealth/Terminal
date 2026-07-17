@@ -11,7 +11,7 @@ import { ChartPanel } from './ChartPanel';
 import { OrderPanel } from './OrderPanel';
 import { BottomPanel } from './BottomPanel';
 import { Watchlist } from './Watchlist';
-import { SymbolIcon } from '@/components/SymbolIcon';
+import SymbolLogo from '@/components/SymbolLogo';
 import { ErrorBoundary } from './ErrorBoundary';
 import { useTradingStore } from '@/store/tradingStore';
 import { useMarketStore } from '@/store/marketStore';
