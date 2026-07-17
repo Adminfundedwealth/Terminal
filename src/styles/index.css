@@ -599,10 +599,27 @@ button, [role="button"] {
 /* Bottom tab — active full contrast + weight */
 .fw-tab-active {
   opacity: 1 !important;
-  font-weight: 600 !important;
+  font-weight: 700 !important;
   color: var(--fw-accent) !important;
   font-size: 14px !important;
   padding: 6px 10px !important;
+}
+
+/* Active pill for tab count — prominent badge */
+.fw-active-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 8px;
+  min-width: 28px;
+  height: 28px;
+  border-radius: 9999px;
+  background: var(--fw-accent);
+  color: #071124;
+  font-weight: 700;
+  font-size: 12px;
+  box-shadow: 0 6px 18px rgba(59,130,246,0.12);
+  transform: translateY(-2px);
 }
 
 /* Ticker price — semi-bold monospace numbers */

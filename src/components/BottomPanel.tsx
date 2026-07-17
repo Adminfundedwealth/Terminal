@@ -128,8 +128,10 @@ export function BottomPanel() {
             {tab.label}
             {tab.count > 0 && (
               <span className={cn(
-                'ml-2 px-2 min-w-[20px] text-center text-[12px] rounded-full font-mono inline-block',
-                bottomTab === tab.id ? 'bg-fw-accent/20 text-fw-accent' : 'bg-fw-border text-fw-text-secondary'
+                'ml-2 inline-block',
+                bottomTab === tab.id
+                  ? 'fw-active-pill'
+                  : 'px-2 min-w-[20px] text-[12px] rounded-full font-mono bg-fw-border text-fw-text-secondary'
               )}>
                 {tab.count}
               </span>
