@@ -191,7 +191,7 @@ export default function App() {
               TERMINAL
             </span>
           </div>
-          <div className="flex items-center gap-2 text-fw-text-muted text-[13px]">
+          <div className="flex items-center gap-2 text-fw-text-muted text-[14px]">
             <div className="w-3 h-3 border-2 border-fw-accent border-t-transparent rounded-full animate-spin" />
             Connecting...
           </div>
@@ -222,7 +222,7 @@ export default function App() {
 
   return (
     <ToastProvider>
-    <div className="h-screen w-screen flex bg-fw-bg overflow-hidden text-[13px]">
+    <div className="h-screen w-screen flex bg-fw-bg overflow-hidden text-[14px]">
       {/* Left Sidebar Rail */}
       <Sidebar />
 
