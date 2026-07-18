@@ -165,6 +165,17 @@ export class AccountService {
         return { id: 'dev-account', accountCode: 'FW-DEV', clientId: 'FW-DEV', name: 'Dev Trader', balance: 1000000, peakBalance: 1000000, availableMargin: 1000000, usedMargin: 0, totalPnl: 0, status: 'active', brokerProvider: 'angelone' };
       }
       const ch = ta.challenge_accounts;
+      
+      // Plan-level rule defaults (matching main site product catalog)
+      const planDefaults = {
+        flash: { profitTargetPct: 0, dailyLossLimitPct: 2, maxDrawdownPct: 4 },
+        instant: { profitTargetPct: 0, dailyLossLimitPct: 3, maxDrawdownPct: 5 },
+        '1step': { profitTargetPct: 10, dailyLossLimitPct: 3, maxDrawdownPct: 6 },
+        '2step': { profitTargetPct: 8, dailyLossLimitPct: 3, maxDrawdownPct: 8 },
+      };
+      const planKey = ch?.plan?.toLowerCase() || 'flash';
+      const defaults = planDefaults[planKey] || planDefaults.flash;
+      
       return {
         id: ta.id,
         accountCode: ta.account_code,
@@ -187,9 +198,10 @@ export class AccountService {
           status: ch.status,
           startedAt: ch.started_at,
           expiresAt: ch.expires_at,
-          profitTargetPct: parseFloat(ch.profit_target_pct) || 10,
-          dailyLossLimitPct: parseFloat(ch.daily_loss_limit_pct) || 5,
-          maxDrawdownPct: parseFloat(ch.max_drawdown_pct) || 10,
+          // Use explicit null/undefined check instead of falsy operator (0 is a valid value for Flash)
+          profitTargetPct: ch.profit_target_pct !== null && ch.profit_target_pct !== undefined ? parseFloat(ch.profit_target_pct) : defaults.profitTargetPct,
+          dailyLossLimitPct: ch.daily_loss_limit_pct !== null && ch.daily_loss_limit_pct !== undefined ? parseFloat(ch.daily_loss_limit_pct) : defaults.dailyLossLimitPct,
+          maxDrawdownPct: ch.max_drawdown_pct !== null && ch.max_drawdown_pct !== undefined ? parseFloat(ch.max_drawdown_pct) : defaults.maxDrawdownPct,
         } : null,
       };
     }
@@ -197,11 +209,56 @@ export class AccountService {
     if (!supabase) {
       return null;
     }
-    const { data, error } = await supabase.from('trading_accounts').select('*').eq('id', accountId).single();
-    if (error || !data) {
+    // Query trading_accounts with challenge_accounts relation
+    const { data: ta, error } = await supabase
+      .from('trading_accounts')
+      .select('*, challenge_accounts!inner(id, type, plan, initial_balance, current_balance, peak_balance, profit_target_pct, daily_loss_limit_pct, max_drawdown_pct, status, started_at, expires_at)')
+      .eq('id', accountId)
+      .single();
+    
+    if (error || !ta) {
       return null;
     }
-    return data;
+
+    const ch = ta.challenge_accounts;
+    
+    // Plan-level rule defaults (matching main site product catalog)
+    const planDefaults = {
+      flash: { profitTargetPct: 0, dailyLossLimitPct: 2, maxDrawdownPct: 4 },
+      instant: { profitTargetPct: 0, dailyLossLimitPct: 3, maxDrawdownPct: 5 },
+      '1step': { profitTargetPct: 10, dailyLossLimitPct: 3, maxDrawdownPct: 6 },
+      '2step': { profitTargetPct: 8, dailyLossLimitPct: 3, maxDrawdownPct: 8 },
+    };
+    const planKey = ch?.plan?.toLowerCase() || 'flash';
+    const defaults = planDefaults[planKey] || planDefaults.flash;
+    
+    return {
+      id: ta.id,
+      accountCode: ta.account_code,
+      clientId: ta.broker_client_id || ta.account_code,
+      name: ta.trader_name || 'Trader',
+      brokerProvider: ta.broker_provider,
+      balance: parseFloat(ta.balance) || 0,
+      peakBalance: parseFloat(ch?.peak_balance) || parseFloat(ta.balance) || 0,
+      availableMargin: parseFloat(ta.available_margin) || 0,
+      usedMargin: parseFloat(ta.used_margin) || 0,
+      totalPnl: 0,
+      status: ta.status,
+      lockedReason: ta.locked_reason || null,
+      challenge: ch ? {
+        id: ch.id,
+        type: ch.type,
+        plan: ch.plan,
+        initialBalance: parseFloat(ch.initial_balance) || 0,
+        status: ch.status,
+        startedAt: ch.started_at,
+        expiresAt: ch.expires_at,
+        // Use explicit null/undefined check instead of falsy operator (0 is a valid value for Flash)
+        profitTargetPct: ch.profit_target_pct !== null && ch.profit_target_pct !== undefined ? parseFloat(ch.profit_target_pct) : defaults.profitTargetPct,
+        dailyLossLimitPct: ch.daily_loss_limit_pct !== null && ch.daily_loss_limit_pct !== undefined ? parseFloat(ch.daily_loss_limit_pct) : defaults.dailyLossLimitPct,
+        maxDrawdownPct: ch.max_drawdown_pct !== null && ch.max_drawdown_pct !== undefined ? parseFloat(ch.max_drawdown_pct) : defaults.maxDrawdownPct,
+      } : null,
+    };
   }
 
   async getPositions(accountId) {
