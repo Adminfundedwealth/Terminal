@@ -64,18 +64,15 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
       const { RiskEngine } = await import('../services/riskEngine.js');
       const { AccountRepository } = await import('../repositories/account.repository.js');
       const { PositionRepository } = await import('../repositories/position.repository.js');
-      const { RiskRulesRepository } = await import('../repositories/risk-rules.repository.js');
       const { TradeRepository } = await import('../repositories/trade.repository.js');
 
       const accountRepo = new AccountRepository();
       const positionRepo = new PositionRepository();
-      const riskRulesRepo = new RiskRulesRepository();
       const tradeRepo = new TradeRepository();
 
       const account = await accountRepo.getWithChallenge(realId);
       if (!account) return res.json({ error: 'Account not found' });
 
-      const rules = await riskRulesRepo.getRulesMap(realId);
       const challenge = account.challenge;
       const balance = parseFloat(account.balance) || 0;
       const initialBalance = challenge ? parseFloat(challenge.initial_balance) : balance;
@@ -93,24 +90,30 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
       const currentEquity = balance + unrealizedPnl;
       const pnlFromStart = currentEquity - initialBalance;
 
+      // Read rule percentages from challenge_accounts (source of truth from main site)
+      // These values are provisioned from @workspace/products and synced via challenge_accounts
+      const dailyLossPct = challenge?.daily_loss_limit_pct !== null && challenge?.daily_loss_limit_pct !== undefined 
+        ? parseFloat(challenge.daily_loss_limit_pct) 
+        : 0.05; // Generic fallback only if challenge is missing
+      const maxDrawdownPct = challenge?.max_drawdown_pct !== null && challenge?.max_drawdown_pct !== undefined 
+        ? parseFloat(challenge.max_drawdown_pct) 
+        : 0.10; // Generic fallback only if challenge is missing
+      const profitTargetPct = challenge?.profit_target_pct !== null && challenge?.profit_target_pct !== undefined 
+        ? parseFloat(challenge.profit_target_pct) 
+        : 0.10; // Generic fallback only if challenge is missing
+
       // Daily loss consumed
-      const dailyLossLimit = rules.daily_loss_limit
-        ? (rules.daily_loss_limit.amount || (rules.daily_loss_limit.percent / 100) * initialBalance)
-        : initialBalance * 0.05;
+      const dailyLossLimit = (dailyLossPct / 100) * initialBalance;
       const dailyLoss = totalDailyPnl < 0 ? Math.abs(totalDailyPnl) : 0;
       const dailyLossUsedPct = dailyLossLimit > 0 ? (dailyLoss / dailyLossLimit) * 100 : 0;
 
       // Max drawdown consumed
-      const maxDrawdownLimit = rules.max_drawdown
-        ? (rules.max_drawdown.amount || (rules.max_drawdown.percent / 100) * initialBalance)
-        : initialBalance * 0.10;
+      const maxDrawdownLimit = (maxDrawdownPct / 100) * initialBalance;
       const drawdown = Math.max(0, peakBalance - currentEquity);
       const maxDrawdownUsedPct = maxDrawdownLimit > 0 ? (drawdown / maxDrawdownLimit) * 100 : 0;
 
       // Profit target progress
-      const profitTargetAmount = rules.profit_target
-        ? (rules.profit_target.amount || (rules.profit_target.percent / 100) * initialBalance)
-        : initialBalance * 0.10;
+      const profitTargetAmount = (profitTargetPct / 100) * initialBalance;
       const targetProgressPct = profitTargetAmount > 0 ? Math.max(0, (pnlFromStart / profitTargetAmount) * 100) : 0;
 
       // Today's trade count
