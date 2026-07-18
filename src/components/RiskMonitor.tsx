@@ -10,6 +10,7 @@ import { useEffect, useRef } from 'react';
 import { useTradingStore } from '@/store/tradingStore';
 import { useToast } from '@/components/ToastProvider';
 import { getRiskState } from '@/services/api';
+import { getChallengeRulePct } from '@/utils/helpers';
 
 export function RiskMonitor() {
   const { showToast } = useToast();
@@ -46,8 +47,8 @@ export function RiskMonitor() {
         // Fallback: derive from account challenge config or hardcoded defaults
         const balance = account.balance ?? 0;
         const initialBalance = account.challenge?.initialBalance ?? balance;
-        const dailyLossPct = account.challenge?.dailyLossLimitPct ?? 5;
-        const maxDDPct = account.challenge?.maxDrawdownPct ?? 10;
+        const dailyLossPct = getChallengeRulePct(account.challenge?.dailyLossLimitPct, account.challenge?.plan, 'dailyLossLimitPct');
+        const maxDDPct = getChallengeRulePct(account.challenge?.maxDrawdownPct, account.challenge?.plan, 'maxDrawdownPct');
 
         dailyLimit = initialBalance * (dailyLossPct / 100);
         maxDrawdownLimit = initialBalance * (maxDDPct / 100);

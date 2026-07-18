@@ -27,6 +27,58 @@ export function formatNumber(num: number): string {
   return num.toFixed(2);
 }
 
+export type ChallengeRuleKey = 'profitTargetPct' | 'dailyLossLimitPct' | 'maxDrawdownPct';
+
+export interface ChallengeRuleDefaults {
+  profitTargetPct: number;
+  dailyLossLimitPct: number;
+  maxDrawdownPct: number;
+}
+
+const CHALLENGE_RULE_DEFAULTS: Record<'flash' | 'instant' | '1step' | '2step' | 'default', ChallengeRuleDefaults> = {
+  flash:   { profitTargetPct: 0, dailyLossLimitPct: 2, maxDrawdownPct: 4 },
+  instant: { profitTargetPct: 0, dailyLossLimitPct: 3, maxDrawdownPct: 5 },
+  1step:   { profitTargetPct: 10, dailyLossLimitPct: 3, maxDrawdownPct: 6 },
+  2step:   { profitTargetPct: 8, dailyLossLimitPct: 3, maxDrawdownPct: 8 },
+  default: { profitTargetPct: 10, dailyLossLimitPct: 3, maxDrawdownPct: 8 },
+};
+
+export function getChallengeRuleDefaults(plan?: string | null): ChallengeRuleDefaults {
+  const normalized = (plan || '').toLowerCase().trim();
+  if (/flash/.test(normalized)) return CHALLENGE_RULE_DEFAULTS.flash;
+  if (/instant/.test(normalized)) return CHALLENGE_RULE_DEFAULTS.instant;
+  if (/1[-_ ]?step/.test(normalized)) return CHALLENGE_RULE_DEFAULTS['1step'];
+  if (/2[-_ ]?step/.test(normalized)) return CHALLENGE_RULE_DEFAULTS['2step'];
+  return CHALLENGE_RULE_DEFAULTS.default;
+}
+
+export function getChallengeRulePct(
+  value: number | undefined | null,
+  plan: string | undefined | null,
+  key: ChallengeRuleKey,
+): number {
+  return value != null ? value : getChallengeRuleDefaults(plan)[key];
+}
+
+export function formatChallengePhase(plan?: string | null, type?: string | null): string {
+  const normalizedPlan = (plan || '').toLowerCase().trim();
+  const normalizedType = (type || '').toLowerCase().trim();
+  const planLabel = normalizedPlan === 'flash' ? 'Flash'
+    : normalizedPlan === 'instant' ? 'Instant'
+    : /1[-_ ]?step/.test(normalizedPlan) ? '1-Step'
+    : /2[-_ ]?step/.test(normalizedPlan) ? '2-Step'
+    : normalizedPlan || '';
+
+  if (normalizedType.includes('funded')) {
+    return planLabel ? `${planLabel} Funded` : 'Funded';
+  }
+  if (normalizedType.includes('evaluation_phase1')) return 'Phase 1';
+  if (normalizedType.includes('evaluation_phase2')) return 'Phase 2';
+  if (normalizedType.includes('evaluation')) return 'Phase 1';
+  if (planLabel) return planLabel;
+  return 'Phase 1';
+}
+
 export function formatPnl(pnl: number): string {
   const sign = pnl >= 0 ? '+' : '';
   return `${sign}₹${formatPrice(Math.abs(pnl))}`;

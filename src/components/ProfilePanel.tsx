@@ -8,7 +8,7 @@
 import { X, User, Shield, TrendingUp, LogOut, Copy, CheckCircle } from 'lucide-react';
 import { useTradingStore } from '@/store/tradingStore';
 import { logout } from '@/hooks/useAuth';
-import { cn } from '@/utils/helpers';
+import { cn, getChallengeRulePct } from '@/utils/helpers';
 import { useState } from 'react';
 
 interface ProfilePanelProps {
@@ -143,17 +143,17 @@ export function ProfilePanel({ onClose }: ProfilePanelProps) {
             <div className="grid grid-cols-3 gap-3">
               <ChallengeMetric
                 label="Daily Loss"
-                value={`${account.challenge.dailyLossLimitPct ?? 5}%`}
+                value={`${getChallengeRulePct(account.challenge.dailyLossLimitPct, account.challenge.plan, 'dailyLossLimitPct')}%`}
                 color="text-red-400"
               />
               <ChallengeMetric
                 label="Max Drawdown"
-                value={`${account.challenge.maxDrawdownPct ?? 10}%`}
+                value={`${getChallengeRulePct(account.challenge.maxDrawdownPct, account.challenge.plan, 'maxDrawdownPct')}%`}
                 color="text-orange-400"
               />
               <ChallengeMetric
                 label="Profit Target"
-                value={`${account.challenge.profitTargetPct ?? 10}%`}
+                value={`${getChallengeRulePct(account.challenge.profitTargetPct, account.challenge.plan, 'profitTargetPct')}%`}
                 color="text-emerald-400"
               />
             </div>

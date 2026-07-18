@@ -1,6 +1,6 @@
 ﻿import { useState, useEffect } from 'react';
 import { useTradingStore } from '@/store/tradingStore';
-import { cn } from '@/utils/helpers';
+import { cn, getChallengeRulePct, formatChallengePhase } from '@/utils/helpers';
 import { Shield, Zap, TrendingDown, TrendingUp, Target, AlertTriangle, Lock, Activity } from 'lucide-react';
 import { getRiskState, type RiskState } from '@/services/api';
 
@@ -19,29 +19,33 @@ export function RiskWidget() {
     try { const rs = await getRiskState(); setRiskState(rs); } catch {}
   }
 
-  const balance = riskState?.balance || account?.balance || 0;
-  const equity = riskState?.currentEquity || balance;
-  const initialBalance = riskState?.initialBalance || account?.challenge?.initialBalance || balance || 1000000;
-  const dailyLossLimit = riskState?.dailyLossLimit || initialBalance * 0.05;
-  const maxDrawdownLimit = riskState?.maxDrawdownLimit || initialBalance * 0.10;
-  const profitTargetAmount = riskState?.profitTargetAmount || initialBalance * 0.10;
+  const balance = riskState?.balance ?? account?.balance ?? 0;
+  const equity = riskState?.currentEquity ?? balance;
+  const initialBalance = riskState?.initialBalance ?? account?.challenge?.initialBalance ?? balance ?? 1000000;
+  const challengePlan = account?.challenge?.plan;
+  const dailyLossLimitPct = getChallengeRulePct(account?.challenge?.dailyLossLimitPct, challengePlan, 'dailyLossLimitPct');
+  const maxDrawdownPct = getChallengeRulePct(account?.challenge?.maxDrawdownPct, challengePlan, 'maxDrawdownPct');
+  const profitTargetPct = getChallengeRulePct(account?.challenge?.profitTargetPct, challengePlan, 'profitTargetPct');
+  const dailyLossLimit = riskState?.dailyLossLimit ?? initialBalance * (dailyLossLimitPct / 100);
+  const maxDrawdownLimit = riskState?.maxDrawdownLimit ?? initialBalance * (maxDrawdownPct / 100);
+  const profitTargetAmount = riskState?.profitTargetAmount ?? initialBalance * (profitTargetPct / 100);
 
-  const dailyLoss = riskState?.dailyLoss || 0;
+  const dailyLoss = riskState?.dailyLoss ?? 0;
   const dailyLossRemaining = riskState?.dailyLossRemaining ?? Math.max(0, dailyLossLimit - dailyLoss);
-  const dailyPct = riskState?.dailyLossUsedPct || (dailyLossLimit > 0 ? (dailyLoss / dailyLossLimit) * 100 : 0);
+  const dailyPct = riskState?.dailyLossUsedPct ?? (dailyLossLimit > 0 ? (dailyLoss / dailyLossLimit) * 100 : 0);
 
-  const drawdown = riskState?.drawdown || 0;
+  const drawdown = riskState?.drawdown ?? 0;
   const ddRemaining = riskState?.maxDrawdownRemaining ?? Math.max(0, maxDrawdownLimit - drawdown);
-  const ddPct = riskState?.maxDrawdownUsedPct || (maxDrawdownLimit > 0 ? (drawdown / maxDrawdownLimit) * 100 : 0);
+  const ddPct = riskState?.maxDrawdownUsedPct ?? (maxDrawdownLimit > 0 ? (drawdown / maxDrawdownLimit) * 100 : 0);
 
-  const targetPct = riskState?.targetProgressPct || 0;
+  const targetPct = riskState?.targetProgressPct ?? 0;
   const targetRemaining = riskState?.targetRemaining ?? profitTargetAmount;
 
   const totalMTM = positions.reduce((s, p) => s + (p.mtm || p.pnl || 0), 0);
-  const todayPnl = riskState?.totalDailyPnl || totalMTM;
-  const todayTrades = riskState?.todayTradeCount || 0;
+  const todayPnl = riskState?.totalDailyPnl ?? totalMTM;
+  const todayTrades = riskState?.todayTradeCount ?? 0;
 
-  const phase = riskState?.challengeType === 'evaluation_phase1' ? 'Phase 1' : riskState?.challengeType === 'evaluation_phase2' ? 'Phase 2' : riskState?.challengeType === 'funded' ? 'Funded' : account?.challenge?.type === 'evaluation_phase1' ? 'Phase 1' : 'Phase 1';
+  const phase = formatChallengePhase(account?.challenge?.plan, account?.challenge?.type || riskState?.challengeType);
   const status = riskState?.accountStatus || account?.status || 'active';
   const isLocked = status === 'locked' || status === 'breached';
 

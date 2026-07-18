@@ -1,6 +1,6 @@
 ﻿import { useTradingStore } from '@/store/tradingStore';
 import { useJournalStore } from '@/store/journalStore';
-import { cn } from '@/utils/helpers';
+import { cn, getChallengeRulePct } from '@/utils/helpers';
 import { ShieldAlert, TrendingDown, Target, AlertTriangle, BarChart3, Activity } from 'lucide-react';
 
 export function RiskPanel() {
@@ -15,6 +15,7 @@ export function RiskPanel() {
   const peakBalance = account?.peakBalance || Math.max(balance, initialBalance);
   const availableMargin = account?.availableMargin || balance;
   const usedMargin = account?.usedMargin || 0;
+  const challengePlan = account?.challenge?.plan;
 
   // Position-based risk metrics
   const totalMTM = positions.reduce((sum, p) => sum + (p.mtm || 0), 0);
@@ -30,9 +31,12 @@ export function RiskPanel() {
   const netExposure = longExposure - shortExposure;
 
   // Risk limits (challenge-based or standard prop firm rules)
-  const dailyLossLimit = initialBalance * 0.05; // 5% daily loss limit
-  const maxDrawdownLimit = initialBalance * 0.10; // 10% max drawdown
-  const profitTarget = initialBalance * 0.10; // 10% target
+  const dailyLossLimitPct = getChallengeRulePct(account?.challenge?.dailyLossLimitPct, challengePlan, 'dailyLossLimitPct');
+  const maxDrawdownPct = getChallengeRulePct(account?.challenge?.maxDrawdownPct, challengePlan, 'maxDrawdownPct');
+  const profitTargetPct = getChallengeRulePct(account?.challenge?.profitTargetPct, challengePlan, 'profitTargetPct');
+  const dailyLossLimit = initialBalance * (dailyLossLimitPct / 100);
+  const maxDrawdownLimit = initialBalance * (maxDrawdownPct / 100);
+  const profitTarget = initialBalance * (profitTargetPct / 100);
   const maxPositionSize = initialBalance * 0.20; // 20% max single position
 
   // Current daily loss

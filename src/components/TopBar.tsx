@@ -2,7 +2,7 @@
 import { useAppStore } from '@/store/appStore';
 import { useTradingStore } from '@/store/tradingStore';
 import { useMarketStore } from '@/store/marketStore';
-import { cn, formatPrice } from '@/utils/helpers';
+import { cn, formatPrice, getChallengeRulePct, formatChallengePhase } from '@/utils/helpers';
 import { AccountSelector } from './AccountSelector';
 import { useState, useEffect } from 'react';
 import { getMarginInfo, getRiskState, type RiskState } from '@/services/api';
@@ -43,22 +43,23 @@ export function TopBar() {
     try { const rs = await getRiskState(); setRiskState(rs); } catch {}
   }
 
-  const balance = riskState?.balance || account?.balance || 0;
-  const initialBalance = riskState?.initialBalance || account?.challenge?.initialBalance || balance || 1000000;
-  const dailyLossLimitPct = account?.challenge?.dailyLossLimitPct || 5;
-  const maxDDPct = account?.challenge?.maxDrawdownPct || 10;
-  const profitTargetPct = account?.challenge?.profitTargetPct || 10;
+  const balance = riskState?.balance ?? account?.balance ?? 0;
+  const initialBalance = riskState?.initialBalance ?? account?.challenge?.initialBalance ?? balance ?? 1000000;
+  const challengePlan = account?.challenge?.plan;
+  const dailyLossLimitPct = getChallengeRulePct(account?.challenge?.dailyLossLimitPct, challengePlan, 'dailyLossLimitPct');
+  const maxDDPct = getChallengeRulePct(account?.challenge?.maxDrawdownPct, challengePlan, 'maxDrawdownPct');
+  const profitTargetPct = getChallengeRulePct(account?.challenge?.profitTargetPct, challengePlan, 'profitTargetPct');
   const totalMTM = positions.reduce((sum, p) => sum + (p.pnl || p.mtm || 0), 0);
-  const equity = riskState?.currentEquity || (balance + totalMTM);
-  const dailyLossLimit = riskState?.dailyLossLimit || (initialBalance * (dailyLossLimitPct / 100));
-  const maxDDLimit = riskState?.maxDrawdownLimit || (initialBalance * (maxDDPct / 100));
-  const profitTarget = riskState?.profitTargetAmount || (initialBalance * (profitTargetPct / 100));
-  const dailyLoss = riskState?.dailyLoss || (totalMTM < 0 ? Math.abs(totalMTM) : 0);
+  const equity = riskState?.currentEquity ?? (balance + totalMTM);
+  const dailyLossLimit = riskState?.dailyLossLimit ?? (initialBalance * (dailyLossLimitPct / 100));
+  const maxDDLimit = riskState?.maxDrawdownLimit ?? (initialBalance * (maxDDPct / 100));
+  const profitTarget = riskState?.profitTargetAmount ?? (initialBalance * (profitTargetPct / 100));
+  const dailyLoss = riskState?.dailyLoss ?? (totalMTM < 0 ? Math.abs(totalMTM) : 0);
   const dailyLossRemaining = riskState?.dailyLossRemaining ?? Math.max(0, dailyLossLimit - dailyLoss);
-  const ddRemaining = riskState?.maxDrawdownRemaining ?? Math.max(0, maxDDLimit - Math.max(0, (account?.peakBalance || balance) - equity));
+  const ddRemaining = riskState?.maxDrawdownRemaining ?? Math.max(0, maxDDLimit - Math.max(0, (account?.peakBalance ?? balance) - equity));
   const targetPct = riskState?.targetProgressPct ?? (profitTarget > 0 ? Math.min(100, (Math.max(0, equity - initialBalance) / profitTarget) * 100) : 0);
-  const pnlValue = riskState?.totalDailyPnl || account?.totalPnl || totalMTM;
-  const phase = riskState?.challengeType === 'evaluation_phase1' ? 'Phase 1' : riskState?.challengeType === 'evaluation_phase2' ? 'Phase 2' : riskState?.challengeType === 'funded' ? 'Funded' : account?.challenge?.type === 'evaluation_phase1' ? 'Phase 1' : 'Phase 1';
+  const pnlValue = riskState?.totalDailyPnl ?? account?.totalPnl ?? totalMTM;
+  const phase = formatChallengePhase(account?.challenge?.plan, account?.challenge?.type || riskState?.challengeType);
 
   const riskLevel = dailyLoss > dailyLossLimit * 0.7 ? 'HIGH' : dailyLoss > dailyLossLimit * 0.4 ? 'CAUTION' : 'SAFE';
   const riskColor = riskLevel === 'HIGH' ? 'text-red' : riskLevel === 'CAUTION' ? 'text-orange-400' : 'text-emerald-400';
@@ -162,7 +163,6 @@ export function TopBar() {
           <MetricInline label="Balance" value={`₹${formatCompact(balance)}`} />
           <MetricInline label="Equity" value={`₹${formatCompact(equity)}`} className={equity >= balance ? 'text-emerald-400' : 'text-red-400'} />
           <MetricInline label="Margin" value={`₹${formatCompact(marginInfo?.usedMargin || 0)}`} className="text-orange-400" />
-          <MetricInline label="Free" value={`₹${formatCompact(marginInfo?.availableMargin || balance)}`} className="text-emerald-400" />
           <div className="flex items-center gap-1">
             <span className="text-fw-text-muted">P&L</span>
             {pnlValue >= 0 ? <TrendingUp size={10} className="text-green" /> : <TrendingDown size={10} className="text-red" />}

@@ -20,10 +20,14 @@ export function AccountSummaryBar() {
   const equity = balance + totalMTM;
   const dayPnl = account?.totalPnl || totalMTM;
   const totalPnl = account?.totalPnl || (balance - initialBalance + totalMTM);
+  const challengePlan = account?.challenge?.plan;
 
   // Risk metrics
-  const dailyLimit = balance * 0.05;
-  const maxDrawdownLimit = balance * 0.10;
+  const dailyLimitPct = getChallengeRulePct(account?.challenge?.dailyLossLimitPct, challengePlan, 'dailyLossLimitPct');
+  const maxDrawdownLimitPct = getChallengeRulePct(account?.challenge?.maxDrawdownPct, challengePlan, 'maxDrawdownPct');
+  const profitTargetPct = getChallengeRulePct(account?.challenge?.profitTargetPct, challengePlan, 'profitTargetPct');
+  const dailyLimit = initialBalance * (dailyLimitPct / 100);
+  const maxDrawdownLimit = initialBalance * (maxDrawdownLimitPct / 100);
   const dailyLoss = totalMTM < 0 ? Math.abs(totalMTM) : 0;
   const dailyUsedPct = dailyLimit > 0 ? (dailyLoss / dailyLimit) * 100 : 0;
 
@@ -31,11 +35,11 @@ export function AccountSummaryBar() {
   const drawdown = peakBalance - equity;
   const drawdownPct = maxDrawdownLimit > 0 ? (Math.max(0, drawdown) / maxDrawdownLimit) * 100 : 0;
 
-  const profitTarget = initialBalance * 0.10;
+  const profitTarget = initialBalance * (profitTargetPct / 100);
   const profitAchieved = equity - initialBalance;
   const targetPct = profitTarget > 0 ? (Math.max(0, profitAchieved) / profitTarget) * 100 : 0;
 
-  const phase = account?.challenge?.type || 'Phase 1';
+  const phase = formatChallengePhase(account?.challenge?.plan, account?.challenge?.type);
 
   return (
     <div className="h-[30px] min-h-[30px] bg-fw-surface-2 border-b border-fw-border flex items-center px-3 gap-0 select-none overflow-x-auto scrollbar-none">
