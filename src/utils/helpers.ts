@@ -38,8 +38,8 @@ export interface ChallengeRuleDefaults {
 const CHALLENGE_RULE_DEFAULTS: Record<'flash' | 'instant' | '1step' | '2step' | 'default', ChallengeRuleDefaults> = {
   flash:   { profitTargetPct: 0, dailyLossLimitPct: 2, maxDrawdownPct: 4 },
   instant: { profitTargetPct: 0, dailyLossLimitPct: 3, maxDrawdownPct: 5 },
-  1step:   { profitTargetPct: 10, dailyLossLimitPct: 3, maxDrawdownPct: 6 },
-  2step:   { profitTargetPct: 8, dailyLossLimitPct: 3, maxDrawdownPct: 8 },
+  '1step':   { profitTargetPct: 10, dailyLossLimitPct: 3, maxDrawdownPct: 6 },
+  '2step':   { profitTargetPct: 8, dailyLossLimitPct: 3, maxDrawdownPct: 8 },
   default: { profitTargetPct: 10, dailyLossLimitPct: 3, maxDrawdownPct: 8 },
 };
 
@@ -69,12 +69,20 @@ export function formatChallengePhase(plan?: string | null, type?: string | null)
     : /2[-_ ]?step/.test(normalizedPlan) ? '2-Step'
     : normalizedPlan || '';
 
+  // If already funded, show funded label (include plan when available)
   if (normalizedType.includes('funded')) {
     return planLabel ? `${planLabel} Funded` : 'Funded';
   }
+
+  // For plan-branded products (Flash / Instant) prefer the plan label
+  // over generic 'Phase 1' even when type contains 'evaluation'.
+  if (planLabel === 'Flash' || planLabel === 'Instant') return planLabel;
+
+  // Otherwise fall back to phase-based labels derived from type
   if (normalizedType.includes('evaluation_phase1')) return 'Phase 1';
   if (normalizedType.includes('evaluation_phase2')) return 'Phase 2';
   if (normalizedType.includes('evaluation')) return 'Phase 1';
+
   if (planLabel) return planLabel;
   return 'Phase 1';
 }

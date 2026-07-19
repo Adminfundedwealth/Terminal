@@ -652,7 +652,7 @@ export function ChartPanel() {
     if (!chartRef.current || !activeSymbol) return;
     liveBarRef.current = null; // reset live candle tracking on symbol/tf change
     loadChartData();
-  }, [activeSymbol?.token, timeframe, chartType]);
+  }, [activeSymbol?.token, activeSymbol?.exchange, timeframe, chartType]);
 
   // Apply indicators whenever data or indicator config changes
   useEffect(() => {
@@ -664,7 +664,7 @@ export function ChartPanel() {
     setIsLoading(true);
     setNoData(false);
     try {
-      const data = await getHistoricalData(activeSymbol.token, timeframe);
+      const data = await getHistoricalData(activeSymbol.token, timeframe, activeSymbol.exchange);
       if (data && data.length > 0) {
         rawDataRef.current = data;
         updateChartSeries(data);

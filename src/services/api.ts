@@ -174,8 +174,10 @@ export const closeAllPositions = () =>
   });
 
 // Market Data
-export const getHistoricalData = (token: string, timeframe: string, from?: number, to?: number) =>
-  request<OHLC[]>(`/market/history?token=${token}&tf=${timeframe}${from ? `&from=${from}` : ''}${to ? `&to=${to}` : ''}`);
+export const getHistoricalData = (token: string, timeframe: string, exchange?: string, from?: number, to?: number) =>
+  request<OHLC[]>(
+    `/market/history?token=${token}&tf=${timeframe}${exchange ? `&exchange=${encodeURIComponent(exchange)}` : ''}${from ? `&from=${from}` : ''}${to ? `&to=${to}` : ''}`
+  );
 
 export const getOptionChain = (symbol: string, expiry: string) =>
   request<OptionChainEntry[]>(`/market/option-chain?symbol=${symbol}&expiry=${expiry}`);

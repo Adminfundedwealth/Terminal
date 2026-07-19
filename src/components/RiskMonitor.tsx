@@ -22,6 +22,7 @@ export function RiskMonitor() {
 
   useEffect(() => {
     if (!account) return;
+    const currentAccount = account;
 
     let cancelled = false;
 
@@ -39,23 +40,23 @@ export function RiskMonitor() {
         dailyLimit = rs.dailyLossLimit;
         maxDrawdownLimit = rs.maxDrawdownLimit;
         dailyLoss = rs.dailyLoss ?? 0;
-        const equity = rs.currentEquity ?? (account.balance ?? 0);
-        const peak = rs.peakEquity ?? (account.peakBalance ?? account.balance ?? 0);
+        const equity = rs.currentEquity ?? (currentAccount.balance ?? 0);
+        const peak = rs.peakBalance ?? (currentAccount.peakBalance ?? currentAccount.balance ?? 0);
         drawdown = Math.max(0, peak - equity);
       } catch {
         if (cancelled) return;
         // Fallback: derive from account challenge config or hardcoded defaults
-        const balance = account.balance ?? 0;
-        const initialBalance = account.challenge?.initialBalance ?? balance;
-        const dailyLossPct = getChallengeRulePct(account.challenge?.dailyLossLimitPct, account.challenge?.plan, 'dailyLossLimitPct');
-        const maxDDPct = getChallengeRulePct(account.challenge?.maxDrawdownPct, account.challenge?.plan, 'maxDrawdownPct');
+        const balance = currentAccount.balance ?? 0;
+        const initialBalance = currentAccount.challenge?.initialBalance ?? balance;
+        const dailyLossPct = getChallengeRulePct(currentAccount.challenge?.dailyLossLimitPct, currentAccount.challenge?.plan, 'dailyLossLimitPct');
+        const maxDDPct = getChallengeRulePct(currentAccount.challenge?.maxDrawdownPct, currentAccount.challenge?.plan, 'maxDrawdownPct');
 
         dailyLimit = initialBalance * (dailyLossPct / 100);
         maxDrawdownLimit = initialBalance * (maxDDPct / 100);
 
         const totalMTM = positions.reduce((sum, p) => sum + (p.pnl || p.mtm || 0), 0);
         dailyLoss = totalMTM < 0 ? Math.abs(totalMTM) : 0;
-        const peak = Math.max(balance, account.peakBalance ?? initialBalance);
+        const peak = Math.max(balance, currentAccount.peakBalance ?? initialBalance);
         drawdown = Math.max(0, peak - (balance + totalMTM));
       }
 

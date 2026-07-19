@@ -1,5 +1,5 @@
 ﻿import { useTradingStore } from '@/store/tradingStore';
-import { cn } from '@/utils/helpers';
+import { cn, formatChallengePhase, getChallengeRulePct } from '@/utils/helpers';
 
 function formatCompact(val: number): string {
   if (val == null || isNaN(val)) return '—';

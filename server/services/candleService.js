@@ -79,7 +79,14 @@ export class CandleService {
    * Get historical OHLCV candles from Angel One.
    * Returns array of { time (unix seconds), open, high, low, close, volume }
    */
-  async getHistoricalCandles(token, timeframe, fromTimestamp, toTimestamp) {
+  async getHistoricalCandles(token, timeframe, exchangeOrFromTimestamp, fromTimestamp, toTimestamp) {
+    let exchange = undefined;
+    if (typeof exchangeOrFromTimestamp === 'string') {
+      exchange = exchangeOrFromTimestamp;
+    } else {
+      fromTimestamp = exchangeOrFromTimestamp;
+    }
+
     if (!this.jwtToken) {
       // Try to get a token via refresh callback
       if (this._refreshCallback) {
@@ -93,7 +100,7 @@ export class CandleService {
     const interval = TF_MAP[timeframe];
     if (!interval) return [];
 
-    const exchange = this.tokenExchangeCache.get(token) || 'NSE';
+    const resolvedExchange = exchange || this.tokenExchangeCache.get(token) || 'NSE';
 
     // Format dates for Angel One API (yyyy-MM-dd HH:mm)
     const fromDate = this._formatDate(fromTimestamp ? new Date(fromTimestamp * 1000) : this._getDefaultFrom(timeframe));
@@ -103,7 +110,7 @@ export class CandleService {
       const resp = await axios.post(
         `${ANGEL_API_BASE}/rest/secure/angelbroking/historical/v1/getCandleData`,
         {
-          exchange,
+          exchange: resolvedExchange,
           symboltoken: token,
           interval,
           fromdate: fromDate,

@@ -541,24 +541,30 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
   });
 
   router.get('/market/history', async (req, res) => {
-    const { token, tf, from, to } = req.query;
+    const { token, tf, from, to, exchange } = req.query;
     if (!token || !tf) return res.status(400).json({ message: 'token and tf required' });
 
     // Use CandleService for historical data from Angel One API
     if (candleService) {
       try {
         const candles = await candleService.getHistoricalCandles(
-          token, tf,
-          from ? parseInt(from) : undefined,
-          to ? parseInt(to) : undefined
+          token,
+          tf,
+          exchange ? String(exchange) : undefined,
+          from ? parseInt(String(from), 10) : undefined,
+          to ? parseInt(String(to), 10) : undefined
         );
         if (candles.length > 0) return res.json(candles);
 
-        // If no candles returned, try to trigger a fresh Angel One login
-        // (handles case where server restarted but Angel Feed hasn't reconnected yet)
-        console.warn(`[API] /market/history returned 0 candles for ${token}/${tf} — candleService may lack auth token`);
+        const currentCandle = candleService.getCurrentCandle(token, String(tf));
+        if (currentCandle) {
+          console.warn(`[API] /market/history returned 0 candles for ${token}/${tf}, returning current live candle fallback`);
+          return res.json([currentCandle]);
+        }
+
+        console.warn(`[API] /market/history returned 0 candles for ${token}/${tf} — candleService may lack auth token or market data`);
       } catch (err) {
-        console.error('[API] /market/history error:', err.message);
+        console.error('[API] /market/history error:', err.message || err);
       }
     }
 
