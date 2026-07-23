@@ -166,33 +166,6 @@ export function OrderPanel() {
         </div>
       )}
 
-      {/* BUY / SELL Toggle — Prominent at top */}
-      <div className="grid grid-cols-2 flex-shrink-0">
-        <button
-          onClick={() => setOrderForm({ side: 'BUY' })}
-          className={cn(
-            'py-3 text-[14px] font-black tracking-wide transition-all relative',
-            orderForm.side === 'BUY'
-              ? 'bg-gradient-to-b from-[var(--fw-green)] to-[#1a9d50] text-white shadow-[inset_0_-2px_0_rgba(0,0,0,0.2)]'
-              : 'bg-[#0a0c12] text-fw-text-secondary hover:text-green hover:bg-[#0d1a14]'
-          )}
-        >
-          BUY
-          {orderForm.side === 'BUY' && <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-white/20" />}
-        </button>
-        <button
-          onClick={() => setOrderForm({ side: 'SELL' })}
-          className={cn(
-            'py-3 text-[14px] font-black tracking-wide transition-all relative',
-            orderForm.side === 'SELL'
-              ? 'bg-gradient-to-b from-[var(--fw-red)] to-[#c0292e] text-white shadow-[inset_0_-2px_0_rgba(0,0,0,0.2)]'
-              : 'bg-[#0a0c12] text-fw-text-secondary hover:text-red hover:bg-[#1a0d0d]'
-          )}
-        >
-          SELL
-          {orderForm.side === 'SELL' && <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-white/20" />}
-        </button>
-      </div>
 
       {/* Order Type Pills — Compact */}
       <div className="px-3 py-2 flex-shrink-0">
