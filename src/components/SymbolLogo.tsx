@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BarChart3 } from 'lucide-react';
 import { resolveSymbolIconMeta } from '@/utils/symbolIconRegistry';
 
 interface SymbolLogoProps {
@@ -9,86 +8,117 @@ interface SymbolLogoProps {
   title?: string;
 }
 
-const CACHE_KEY = 'fw-symbol-logo-cache-v1';
+const CACHE_KEY = 'fw-symbol-logo-v2';
 
-function getCachedLogo(key: string): string | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = window.localStorage.getItem(`${CACHE_KEY}:${key}`);
-    return raw || null;
-  } catch {
-    return null;
-  }
+function getCached(key: string): string | null {
+  try { return window.localStorage.getItem(`${CACHE_KEY}:${key}`) || null; } catch { return null; }
+}
+function setCache(key: string, url: string) {
+  try { window.localStorage.setItem(`${CACHE_KEY}:${key}`, url); } catch { /* ignore */ }
 }
 
-function setCachedLogo(key: string, url: string) {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(`${CACHE_KEY}:${key}`, url);
-  } catch {
-    // ignore
-  }
-}
+// Index abbreviation labels shown inside the colored chip
+const INDEX_LABELS: Record<string, string> = {
+  NIFTY50: 'N50', NIFTY: 'N50', BANKNIFTY: 'BNK', FINNIFTY: 'FIN',
+  MIDCPNIFTY: 'MID', SENSEX: 'SX', NIFTYIT: 'IT', NIFTYPHARMA: 'PHR',
+  NIFTYAUTO: 'AUT', USDINR: '$₹', EURINR: '€₹', GBPINR: '£₹', JPYINR: '¥₹',
+};
 
 export function SymbolLogo({ symbol, size = 20, className = '', title }: SymbolLogoProps) {
   const meta = useMemo(() => resolveSymbolIconMeta(symbol), [symbol]);
-  const [logoFailed, setLogoFailed] = useState(false);
-  const [logoSrc, setLogoSrc] = useState<string | null>(() => getCachedLogo(meta.cacheKey));
+  const [src, setSrc] = useState<string | null>(null);
+  const [stage, setStage] = useState<'primary' | 'fallback' | 'initial'>('primary');
 
   useEffect(() => {
-    if (!meta.logoSrc) {
-      setLogoSrc(null);
-      setLogoFailed(false);
+    // Reset on symbol change
+    setStage('primary');
+    setSrc(null);
+
+    if (meta.kind === 'index' || meta.kind === 'fallback' || !meta.logoSrc) {
+      setSrc(null);
       return;
     }
 
-    const cached = getCachedLogo(meta.cacheKey);
-    if (cached) {
-      setLogoSrc(cached);
-      setLogoFailed(false);
+    // Check localStorage cache first
+    const cached = getCached(meta.cacheKey);
+    if (cached === '') {
+      // Previously confirmed failed — go straight to fallback
+      if (meta.logoFallback) { setSrc(meta.logoFallback); setStage('fallback'); }
+      else setStage('initial');
       return;
     }
+    if (cached) { setSrc(cached); return; }
 
-    setLogoSrc(meta.logoSrc);
-    setLogoFailed(false);
-  }, [meta.cacheKey, meta.logoSrc]);
+    setSrc(meta.logoSrc);
+  }, [meta.cacheKey, meta.logoSrc, meta.logoFallback, meta.kind]);
 
+  // ── Index chip ────────────────────────────────────────────────────────────
   if (meta.kind === 'index') {
+    const label = INDEX_LABELS[meta.normalized] || meta.initial;
+    const fontSize = size <= 16 ? size * 0.38 : size * 0.32;
     return (
       <div
         title={title || meta.symbol}
-        className={`inline-flex items-center justify-center rounded ${className}`}
-        style={{ width: size, height: size, minWidth: size, minHeight: size, backgroundColor: `${meta.accent}18` }}
+        className={`inline-flex items-center justify-center rounded font-black text-white flex-shrink-0 ${className}`}
+        style={{
+          width: size, height: size, minWidth: size, minHeight: size,
+          background: `linear-gradient(135deg, ${meta.accent}dd, ${meta.accent}99)`,
+          fontSize: Math.max(7, fontSize),
+          letterSpacing: '-0.03em',
+          boxShadow: `0 0 0 1px ${meta.accent}40`,
+        }}
       >
-        <BarChart3 size={Math.max(10, size * 0.62)} className="text-white/90" />
+        {label}
       </div>
     );
   }
 
-  if (meta.kind === 'logo' && logoSrc && !logoFailed) {
+  // ── Logo image (primary or fallback) ─────────────────────────────────────
+  if (src && stage !== 'initial') {
     return (
       <img
-        src={logoSrc}
+        src={src}
         alt={meta.symbol}
         title={title || meta.symbol}
-        className={`object-contain ${className}`}
-        style={{ width: size, height: size, minWidth: size, minHeight: size, padding: 2 }}
+        className={`object-contain rounded flex-shrink-0 ${className}`}
+        style={{ width: size, height: size, minWidth: size, minHeight: size }}
         onError={() => {
-          setLogoFailed(true);
-          if (logoSrc) setCachedLogo(meta.cacheKey, '');
+          if (stage === 'primary') {
+            // Primary failed — try local SVG fallback
+            setCache(meta.cacheKey, '');
+            if (meta.logoFallback) {
+              setSrc(meta.logoFallback);
+              setStage('fallback');
+            } else {
+              setStage('initial');
+              setSrc(null);
+            }
+          } else {
+            // Fallback also failed — show initial
+            setStage('initial');
+            setSrc(null);
+          }
+        }}
+        onLoad={() => {
+          // Cache the working URL so we skip fetching next time
+          if (stage === 'primary' && src) setCache(meta.cacheKey, src);
         }}
       />
     );
   }
 
-  // Only use fallback when no local logo exists or it failed to load.
+  // ── Colored initial circle fallback ──────────────────────────────────────
   return (
     <div
       title={title || meta.symbol}
-      className={`inline-flex items-center justify-center rounded-full font-black uppercase text-white ${className}`}
-      style={{ width: size, height: size, minWidth: size, minHeight: size, backgroundColor: meta.accent }}
+      className={`inline-flex items-center justify-center rounded-full font-black uppercase text-white flex-shrink-0 ${className}`}
+      style={{
+        width: size, height: size, minWidth: size, minHeight: size,
+        background: `linear-gradient(135deg, ${meta.accent}ee, ${meta.accent}99)`,
+        fontSize: Math.max(8, size * 0.48),
+      }}
     >
-      <span style={{ fontSize: Math.max(10, size * 0.55) }}>{meta.initial}</span>
+      {meta.initial}
     </div>
   );
 }
