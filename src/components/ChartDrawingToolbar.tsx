@@ -221,7 +221,12 @@ export function ChartDrawingToolbar({
         {/* ── Actions ────────────────────────────────────────── */}
         <ToolGroup>
           <ToolBtn
-            def={{ mode: 'none', icon: <Eraser size={16} strokeWidth={1.5} />, label: 'Erase last', description: 'Remove last drawing' }}
+            def={{
+              mode: 'none',
+              icon: <Eraser size={16} strokeWidth={1.5} />,
+              label: 'Erase last',
+              description: drawingCount > 0 ? 'Remove last drawing' : 'No drawings to erase',
+            }}
             active={false}
             onClick={onClearLast}
             disabled={drawingCount === 0}
@@ -232,7 +237,7 @@ export function ChartDrawingToolbar({
               mode: 'none',
               icon: <Trash2 size={16} strokeWidth={1.5} />,
               label: drawingCount > 0 ? `Clear all (${drawingCount})` : 'Clear all',
-              description: 'Delete all drawings',
+              description: drawingCount > 0 ? 'Delete all drawings' : 'No drawings to clear',
             }}
             active={false}
             onClick={onClearAll}
@@ -325,8 +330,8 @@ function ToolBtn({
 
   return (
     <button
-      onClick={onClick}
-      disabled={disabled}
+      onClick={disabled ? undefined : onClick}
+      disabled={!danger && disabled}
       aria-label={def.label}
       aria-pressed={isToggle ? active : undefined}
       className={cn(
@@ -337,10 +342,11 @@ function ToolBtn({
         active  && (ACCENT[accent ?? 'blue']),
         // normal inactive
         !active && !danger && !disabled && 'text-[#6b7280] hover:text-[#c4c9d4] hover:bg-white/[0.07]',
-        // danger
+        // danger — full red when there's something to act on, muted-but-visible when empty
         danger  && !disabled && 'text-red-500/50 hover:text-red-400 hover:bg-red-500/10',
-        // disabled
-        disabled && 'opacity-20 cursor-default pointer-events-none',
+        danger  && disabled  && 'text-[#6b7280]/40 cursor-not-allowed',
+        // non-danger disabled
+        !danger && disabled  && 'opacity-30 cursor-default pointer-events-none',
       )}
     >
       {def.icon}

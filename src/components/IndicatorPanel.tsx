@@ -6,7 +6,7 @@
  */
 
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { TrendingUp, Settings, X, Check, Search } from 'lucide-react';
+import { TrendingUp, Settings, X, Check, Search, Trash2 } from 'lucide-react';
 import { cn } from '@/utils/helpers';
 
 export type IndicatorType =
@@ -105,9 +105,10 @@ interface IndicatorPanelProps {
   indicators: IndicatorConfig[];
   onToggle: (id: string) => void;
   onUpdatePeriod: (id: string, period: number) => void;
+  onDisableAll?: () => void;
 }
 
-export function IndicatorPanel({ indicators, onToggle, onUpdatePeriod }: IndicatorPanelProps) {
+export function IndicatorPanel({ indicators, onToggle, onUpdatePeriod, onDisableAll }: IndicatorPanelProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -219,6 +220,19 @@ export function IndicatorPanel({ indicators, onToggle, onUpdatePeriod }: Indicat
                 </>
               )}
             </div>
+
+            {/* Footer — Clear All */}
+            {activeCount > 0 && onDisableAll && (
+              <div className="border-t border-fw-border/50 p-2 flex-shrink-0">
+                <button
+                  onClick={() => { onDisableAll(); setIsOpen(false); }}
+                  className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded text-[13px] font-medium text-red-400 hover:bg-red-500/10 transition-colors"
+                >
+                  <Trash2 size={10} />
+                  Remove all ({activeCount})
+                </button>
+              </div>
+            )}
           </div>
         </>
       )}

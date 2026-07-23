@@ -229,8 +229,8 @@
 
 - [x] Write integration tests for order flow: entry → risk check → broker → position update → UI refresh
 - [x] Write integration tests for WebSocket lifecycle: connect → subscribe → data → disconnect → reconnect → resubscribe
-- [-] Write integration tests for layout persistence: save → reload → verify restoration
+- [ ] Write integration tests for layout persistence: save → reload → verify restoration
 - [x] Write integration tests for kill switch: trigger → positions closed → accounts locked → UI blocked
 - [x] Write property-based tests for position sizing (fast-check): qty × risk_per_unit ≤ max_risk for all valid inputs
 - [ ] Write property-based tests for risk engine: approved orders keep account within all limits
-- [~] Write property-based tests for DOM ladder: exactly N levels, one LTP marker, descending prices
+- [ ] Write property-based tests for DOM ladder: exactly N levels, one LTP marker, descending prices

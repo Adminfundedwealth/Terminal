@@ -89,6 +89,12 @@ export function ChartPanel() {
   // Highlighted drawing id (from Layers panel)
   const [highlightedId, setHighlightedId] = useState<number | null>(null);
 
+  // Right-click context menu
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; drawingId: number } | null>(null);
+
+  // Stable ref for clearLastDrawing — needed by keyboard handler registered at mount
+  const clearLastDrawingRef = useRef<() => void>(() => {});
+
   // Refs that mirror state so chart click handler always reads current values (no stale closure)
   const drawingModeRef = useRef<DrawingMode>('none');
   const drawingsRef = useRef<any[]>([]);
@@ -219,6 +225,9 @@ export function ChartPanel() {
         // Toggles — G=Magnet, L=Lock
         case 'g': setMagnetActive(prev => !prev); break;
         case 'l': setLockActive(prev => !prev); break;
+        // Delete / Backspace — remove last drawing
+        case 'delete':
+        case 'backspace': clearLastDrawingRef.current(); break;
       }
     };
     window.addEventListener('keydown', handleKey);
@@ -645,7 +654,12 @@ export function ChartPanel() {
     setDrawings(updated);
     saveDrawings(activeSymbol.token, updated);
     applyOverlayDrawings(updated);
+    // Also clean up brush paths if last drawing was a brush
+    setBrushPaths(prev => prev.filter(p => updated.some((d: any) => d.id === p.id)));
   }
+
+  // Keep clearLastDrawing ref in sync so keyboard handler (registered once at mount) always calls latest version
+  useEffect(() => { clearLastDrawingRef.current = clearLastDrawing; });
 
   // Load chart data when symbol/timeframe/chartType changes
   useEffect(() => {
@@ -1068,6 +1082,10 @@ export function ChartPanel() {
     setIndicators(prev => prev.map(i => i.id === id ? { ...i, period, label: `${i.type.toUpperCase()} ${period}` } : i));
   }, []);
 
+  const handleDisableAllIndicators = useCallback(() => {
+    setIndicators(prev => prev.map(i => ({ ...i, enabled: false })));
+  }, []);
+
   // ── Emoji placement callback ─────────────────────────────────────────────
   const handleEmojiSelect = useCallback((emoji: string) => {
     if (!emojiPicker) return;
@@ -1083,6 +1101,66 @@ export function ChartPanel() {
     setEmojiPicker(null);
     setDrawingModeSync('none');
   }, [emojiPicker]);
+
+  // ── Right-click context menu: find nearest drawing at cursor position ────
+  const handleChartContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!chartRef.current || !seriesRef.current || drawingsRef.current.length === 0) return;
+
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    const py = e.clientY - rect.top;
+
+    // Convert pixel coords to chart price+time
+    const clickTime = chartRef.current.timeScale().coordinateToTime(px) as number | null;
+    const clickPrice = (seriesRef.current as any).coordinateToPrice(py) as number | null;
+    if (clickTime == null || clickPrice == null) return;
+
+    // Find the closest drawing by measuring distance in pixel-space
+    let bestId: number | null = null;
+    let bestDist = 30; // px threshold — must be within 30px to show menu
+
+    for (const d of drawingsRef.current) {
+      if (d.hidden) continue;
+
+      if (d.type === 'hline') {
+        const lineY = (seriesRef.current as any).priceToCoordinate(d.price);
+        if (lineY != null && Math.abs(py - lineY) < bestDist) {
+          bestDist = Math.abs(py - lineY);
+          bestId = d.id;
+        }
+      } else if (d.type === 'vline') {
+        const lineX = chartRef.current.timeScale().timeToCoordinate(d.time as any);
+        if (lineX != null && Math.abs(px - lineX) < bestDist) {
+          bestDist = Math.abs(px - lineX);
+          bestId = d.id;
+        }
+      } else if (d.type === 'trendline' || d.type === 'arrow' || d.type === 'ray' || d.type === 'fibonacci' || d.type === 'rectangle' || d.type === 'measure') {
+        // Check proximity to either endpoint
+        for (const pt of (d.points || [])) {
+          const ex = chartRef.current.timeScale().timeToCoordinate(pt.time as any);
+          const ey = (seriesRef.current as any).priceToCoordinate(pt.price);
+          if (ex != null && ey != null) {
+            const dist = Math.hypot(px - ex, py - ey);
+            if (dist < bestDist) { bestDist = dist; bestId = d.id; }
+          }
+        }
+      } else if (d.type === 'text' || d.type === 'vline' || d.type === 'emoji') {
+        const ex = chartRef.current.timeScale().timeToCoordinate(d.time as any);
+        const ey = d.price != null ? (seriesRef.current as any).priceToCoordinate(d.price) : null;
+        if (ex != null && ey != null) {
+          const dist = Math.hypot(px - ex, py - ey);
+          if (dist < bestDist) { bestDist = dist; bestId = d.id; }
+        }
+      } else if (d.type === 'brush') {
+        // Brush: skip proximity check, just offer via Layers panel
+      }
+    }
+
+    if (bestId !== null) {
+      setCtxMenu({ x: e.clientX, y: e.clientY, drawingId: bestId });
+    }
+  }, []);
 
   const separatePaneIndicators = indicators.filter(i => i.enabled && i.pane === 'separate');
   const spread = quote ? (quote.high - quote.low) : 0;
@@ -1138,7 +1216,7 @@ export function ChartPanel() {
         ))}
         <div className="w-px h-4 bg-fw-border/40 mx-1" />
         {/* Indicators Dropdown */}
-        <IndicatorPanel indicators={indicators} onToggle={handleToggleIndicator} onUpdatePeriod={handleUpdatePeriod} />
+        <IndicatorPanel indicators={indicators} onToggle={handleToggleIndicator} onUpdatePeriod={handleUpdatePeriod} onDisableAll={handleDisableAllIndicators} />
         <div className="flex-1" />
         <button onClick={() => setIsFullscreen(!isFullscreen)} className="p-1 rounded text-fw-text-muted hover:text-fw-text hover:bg-fw-hover transition-colors" title="Fullscreen">
           <Maximize2 size={12} />
@@ -1171,7 +1249,7 @@ export function ChartPanel() {
 
         {/* Chart + sub-panes */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex-1 relative" ref={chartContainerRef}>
+          <div className="flex-1 relative" ref={chartContainerRef} onContextMenu={handleChartContextMenu}>
             {isLoading && (
               <div className="absolute inset-0 flex items-center justify-center bg-[#0d0f15]/80 z-10">
                 <div className="w-4 h-4 border-2 border-fw-accent border-t-transparent rounded-full animate-spin" />
@@ -1206,12 +1284,14 @@ export function ChartPanel() {
               className={cn(
                 'absolute inset-0 w-full h-full z-[15]',
                 (drawingMode === 'brush' || drawingMode === 'zoom') ? 'cursor-crosshair' : 'pointer-events-none',
+                drawingMode === 'none' && drawings.length > 0 ? 'pointer-events-auto' : '',
               )}
               style={drawingMode === 'crosshair' ? { pointerEvents: 'none', cursor: 'crosshair' } : undefined}
               onMouseDown={overlayMouseDown}
               onMouseMove={overlayMouseMove}
               onMouseUp={overlayMouseUp}
               onMouseLeave={overlayMouseUp}
+              onContextMenu={handleChartContextMenu}
             >
               {/* Brush strokes */}
               {!eyeHidden && brushPaths.map(p => (
@@ -1274,6 +1354,12 @@ export function ChartPanel() {
                 {(drawingMode === 'trendline' || drawingMode === 'fibonacci' || drawingMode === 'rectangle') && `Click point ${drawClicksRef.current.length + 1} of 2`}
               </div>
             )}
+            {/* Pointer mode hint when drawings exist */}
+            {drawingMode === 'none' && drawings.length > 0 && (
+              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 px-2.5 py-0.5 rounded-full bg-[#1a1d28]/80 text-fw-text-muted text-[12px] pointer-events-none border border-fw-border/30">
+                Right-click drawing to delete · Del key removes last
+              </div>
+            )}
 
             {/* Layers panel — positioned inside chart area, left side */}
             {layersOpen && (
@@ -1284,6 +1370,54 @@ export function ChartPanel() {
                 onToggleVisibility={handleLayersToggleVisibility}
                 onDelete={handleLayersDelete}
               />
+            )}
+            {/* Right-click context menu for drawings */}
+            {ctxMenu && (
+              <>
+                {/* Backdrop to dismiss on outside click */}
+                <div
+                  className="fixed inset-0 z-[490]"
+                  onClick={() => setCtxMenu(null)}
+                  onContextMenu={(e) => { e.preventDefault(); setCtxMenu(null); }}
+                />
+                <div
+                  className="fixed z-[500] w-[160px] bg-[#14172e] border border-fw-border rounded-lg shadow-2xl overflow-hidden text-[13px]"
+                  style={{ left: Math.min(ctxMenu.x, window.innerWidth - 170), top: Math.min(ctxMenu.y, window.innerHeight - 110) }}
+                >
+                  <div className="px-3 py-1.5 border-b border-fw-border/50 text-fw-text-muted text-[12px] font-semibold uppercase tracking-wide">
+                    Drawing
+                  </div>
+                  <button
+                    className="w-full flex items-center gap-2 px-3 py-2 text-fw-text hover:bg-fw-hover transition-colors text-left"
+                    onClick={() => {
+                      handleLayersHighlight(ctxMenu.drawingId);
+                      setLayersOpen(true);
+                      setCtxMenu(null);
+                    }}
+                  >
+                    <span className="text-[11px]">🔍</span> Select in Layers
+                  </button>
+                  <button
+                    className="w-full flex items-center gap-2 px-3 py-2 text-fw-text hover:bg-fw-hover transition-colors text-left"
+                    onClick={() => {
+                      handleLayersToggleVisibility(ctxMenu.drawingId);
+                      setCtxMenu(null);
+                    }}
+                  >
+                    <span className="text-[11px]">👁</span>
+                    {drawings.find(d => d.id === ctxMenu.drawingId)?.hidden ? 'Show' : 'Hide'}
+                  </button>
+                  <button
+                    className="w-full flex items-center gap-2 px-3 py-2 text-red-400 hover:bg-red-500/10 transition-colors text-left border-t border-fw-border/30"
+                    onClick={() => {
+                      handleLayersDelete(ctxMenu.drawingId);
+                      setCtxMenu(null);
+                    }}
+                  >
+                    <span className="text-[11px]">🗑</span> Delete
+                  </button>
+                </div>
+              </>
             )}
           </div>
           {/* Sub-chart panes — one per enabled separate-pane indicator */}

@@ -100,9 +100,18 @@ function HDivider({ onDrag }: { onDrag: (dy: number) => void }) {
   return (
     <div
       onMouseDown={onMouseDown}
-      className="h-[3px] min-h-[3px] bg-fw-border/40 hover:bg-fw-accent/60 cursor-row-resize transition-colors z-10 flex-shrink-0"
-      title="Drag to resize"
-    />
+      className="group h-[8px] min-h-[8px] bg-fw-border/30 hover:bg-fw-accent/20 cursor-row-resize transition-colors z-10 flex-shrink-0 flex items-center justify-center"
+      title="Drag to resize depth panel"
+    >
+      {/* Visible grip dots */}
+      <div className="flex gap-[3px] pointer-events-none">
+        <div className="w-[3px] h-[3px] rounded-full bg-fw-text-muted/40 group-hover:bg-fw-accent/80 transition-colors" />
+        <div className="w-[3px] h-[3px] rounded-full bg-fw-text-muted/40 group-hover:bg-fw-accent/80 transition-colors" />
+        <div className="w-[3px] h-[3px] rounded-full bg-fw-text-muted/40 group-hover:bg-fw-accent/80 transition-colors" />
+        <div className="w-[3px] h-[3px] rounded-full bg-fw-text-muted/40 group-hover:bg-fw-accent/80 transition-colors" />
+        <div className="w-[3px] h-[3px] rounded-full bg-fw-text-muted/40 group-hover:bg-fw-accent/80 transition-colors" />
+      </div>
+    </div>
   );
 }
 
@@ -117,6 +126,7 @@ export default function App() {
   const [watchlistWidth, setWatchlistWidth] = useState(250);
   const [orderPanelWidth, setOrderPanelWidth] = useState(290);
   const [bottomPanelHeight, setBottomPanelHeight] = useState(180);
+  const [depthPanelHeight, setDepthPanelHeight] = useState(250);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   useHotkeys();
@@ -171,6 +181,10 @@ export default function App() {
 
   const handleBottomResize = useCallback((dy: number) => {
     setBottomPanelHeight((h) => Math.max(120, Math.min(400, h - dy)));
+  }, []);
+
+  const handleDepthResize = useCallback((dy: number) => {
+    setDepthPanelHeight((h) => Math.max(160, Math.min(520, h - dy)));
   }, []);
 
   if (isLoading) {
@@ -306,11 +320,14 @@ export default function App() {
                   </ErrorBoundary>
                 </div>
                 {panels.marketDepth && (
-                  <div className="border-t border-fw-border flex-shrink-0 min-h-[220px] max-h-[280px]">
-                    <ErrorBoundary fallbackTitle="Market Depth Error">
-                      <MarketDepthPanel />
-                    </ErrorBoundary>
-                  </div>
+                  <>
+                    <HDivider onDrag={handleDepthResize} />
+                    <div style={{ height: depthPanelHeight, minHeight: 160, maxHeight: 520 }} className="flex-shrink-0 overflow-hidden">
+                      <ErrorBoundary fallbackTitle="Market Depth Error">
+                        <MarketDepthPanel />
+                      </ErrorBoundary>
+                    </div>
+                  </>
                 )}
               </div>
             </>
