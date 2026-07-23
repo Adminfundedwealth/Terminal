@@ -21,25 +21,34 @@ export function RiskWidget() {
 
   const balance = riskState?.balance ?? account?.balance ?? 0;
   const equity = riskState?.currentEquity ?? balance;
-  const initialBalance = riskState?.initialBalance ?? account?.challenge?.initialBalance ?? balance ?? 1000000;
+
+  // initialBalance must be > 0 to avoid divide-by-zero in all limit calculations.
+  // Prefer the authoritative server value, then challenge config, then current balance —
+  // but only use balance as a fallback when it is actually non-zero.
+  const rawInitial = riskState?.initialBalance ?? account?.challenge?.initialBalance ?? (balance > 0 ? balance : null);
+  const initialBalance = rawInitial && rawInitial > 0 ? rawInitial : null;
+
   const challengePlan = account?.challenge?.plan;
   const dailyLossLimitPct = getChallengeRulePct(account?.challenge?.dailyLossLimitPct, challengePlan, 'dailyLossLimitPct');
   const maxDrawdownPct = getChallengeRulePct(account?.challenge?.maxDrawdownPct, challengePlan, 'maxDrawdownPct');
   const profitTargetPct = getChallengeRulePct(account?.challenge?.profitTargetPct, challengePlan, 'profitTargetPct');
-  const dailyLossLimit = riskState?.dailyLossLimit ?? initialBalance * (dailyLossLimitPct / 100);
-  const maxDrawdownLimit = riskState?.maxDrawdownLimit ?? initialBalance * (maxDrawdownPct / 100);
-  const profitTargetAmount = riskState?.profitTargetAmount ?? initialBalance * (profitTargetPct / 100);
+
+  // Limits: prefer server values; fall back only when initialBalance is known
+  const dailyLossLimit = riskState?.dailyLossLimit ?? (initialBalance ? initialBalance * (dailyLossLimitPct / 100) : null);
+  const maxDrawdownLimit = riskState?.maxDrawdownLimit ?? (initialBalance ? initialBalance * (maxDrawdownPct / 100) : null);
+  const profitTargetAmount = riskState?.profitTargetAmount ?? (initialBalance ? initialBalance * (profitTargetPct / 100) : null);
 
   const dailyLoss = riskState?.dailyLoss ?? 0;
-  const dailyLossRemaining = riskState?.dailyLossRemaining ?? Math.max(0, dailyLossLimit - dailyLoss);
-  const dailyPct = riskState?.dailyLossUsedPct ?? (dailyLossLimit > 0 ? (dailyLoss / dailyLossLimit) * 100 : 0);
+  // Remaining: only compute when we have a valid limit; otherwise show null (loading)
+  const dailyLossRemaining = riskState?.dailyLossRemaining ?? (dailyLossLimit != null ? Math.max(0, dailyLossLimit - dailyLoss) : null);
+  const dailyPct = riskState?.dailyLossUsedPct ?? (dailyLossLimit != null && dailyLossLimit > 0 ? Math.min(100, (dailyLoss / dailyLossLimit) * 100) : null);
 
   const drawdown = riskState?.drawdown ?? 0;
-  const ddRemaining = riskState?.maxDrawdownRemaining ?? Math.max(0, maxDrawdownLimit - drawdown);
-  const ddPct = riskState?.maxDrawdownUsedPct ?? (maxDrawdownLimit > 0 ? (drawdown / maxDrawdownLimit) * 100 : 0);
+  const ddRemaining = riskState?.maxDrawdownRemaining ?? (maxDrawdownLimit != null ? Math.max(0, maxDrawdownLimit - drawdown) : null);
+  const ddPct = riskState?.maxDrawdownUsedPct ?? (maxDrawdownLimit != null && maxDrawdownLimit > 0 ? Math.min(100, (drawdown / maxDrawdownLimit) * 100) : null);
 
   const targetPct = riskState?.targetProgressPct ?? 0;
-  const targetRemaining = riskState?.targetRemaining ?? profitTargetAmount;
+  const targetRemaining = riskState?.targetRemaining ?? (profitTargetAmount ?? 0);
 
   const totalMTM = positions.reduce((s, p) => s + (p.mtm || p.pnl || 0), 0);
   const todayPnl = riskState?.totalDailyPnl ?? totalMTM;
@@ -49,7 +58,7 @@ export function RiskWidget() {
   const status = riskState?.accountStatus || account?.status || 'active';
   const isLocked = status === 'locked' || status === 'breached';
 
-  const overallRisk = Math.max(dailyPct, ddPct);
+  const overallRisk = Math.max(dailyPct ?? 0, ddPct ?? 0);
   const riskLevel = overallRisk > 80 ? 'CRITICAL' : overallRisk > 60 ? 'HIGH' : overallRisk > 30 ? 'CAUTION' : 'SAFE';
 
   return (
@@ -116,7 +125,7 @@ export function RiskWidget() {
           label="Profit Target"
           pct={targetPct}
           remaining={targetRemaining}
-          limit={profitTargetAmount}
+          limit={profitTargetAmount ?? 0}
           color="green"
           isTarget
         />
@@ -126,12 +135,29 @@ export function RiskWidget() {
 }
 
 function RiskRow({ icon, label, pct, remaining, limit, color, isTarget }: {
-  icon: React.ReactNode; label: string; pct: number; remaining: number; limit: number; color: 'red' | 'orange' | 'green'; isTarget?: boolean;
+  icon: React.ReactNode;
+  label: string;
+  pct: number | null;
+  remaining: number | null;
+  limit: number | null;
+  color: 'red' | 'orange' | 'green';
+  isTarget?: boolean;
 }) {
   const barColor = color === 'red' ? 'bg-red-500' : color === 'orange' ? 'bg-orange-500' : 'bg-emerald-500';
   const textColor = color === 'red' ? 'text-red-400' : color === 'orange' ? 'text-orange-400' : 'text-emerald-400';
   const bgTint = color === 'red' ? 'bg-red-500/6' : color === 'orange' ? 'bg-orange-500/6' : 'bg-emerald-500/6';
   const iconColor = color === 'red' ? 'text-red-400/70' : color === 'orange' ? 'text-orange-400/70' : 'text-emerald-400/70';
+
+  // Not yet loaded — render a neutral placeholder row
+  const isLoading = pct == null || remaining == null || limit == null;
+
+  const safePct = isLoading ? 0 : Math.min(pct!, 100);
+  const pctLabel = isLoading ? '—' : `${pct!.toFixed(0)}%`;
+  const remainingLabel = isLoading
+    ? '—'
+    : isTarget
+      ? `₹${fmtRisk(Math.max(0, limit! - remaining!))} / ₹${fmtRisk(limit!)}`
+      : `₹${fmtRisk(remaining!)} left`;
 
   return (
     <div>
@@ -142,15 +168,21 @@ function RiskRow({ icon, label, pct, remaining, limit, color, isTarget }: {
         </div>
         <div className="flex items-center gap-2">
           <span className="text-[13px] text-fw-text-muted font-mono tabular-nums">
-            {isTarget ? `₹${fmtRisk(Math.max(0, limit - remaining))} / ₹${fmtRisk(limit)}` : `₹${fmtRisk(remaining)} left`}
+            {remainingLabel}
           </span>
-          <span className={cn('text-[14px] font-mono font-black tabular-nums min-w-[28px] text-right', textColor)}>
-            {pct.toFixed(0)}%
+          <span className={cn(
+            'text-[14px] font-mono font-black tabular-nums min-w-[28px] text-right',
+            isLoading ? 'text-fw-text-muted' : textColor,
+          )}>
+            {pctLabel}
           </span>
         </div>
       </div>
       <div className={cn('h-[5px] rounded-full overflow-hidden', bgTint)}>
-        <div className={cn('h-full rounded-full transition-all duration-700', barColor)} style={{ width: `${Math.min(pct, 100)}%` }} />
+        <div
+          className={cn('h-full rounded-full transition-all duration-700', isLoading ? 'bg-fw-border/40' : barColor)}
+          style={{ width: `${safePct}%` }}
+        />
       </div>
     </div>
   );

@@ -38,26 +38,37 @@ export function TopBar() {
     return () => clearInterval(interval);
   }, [account?.id]);
 
+  // Re-fetch immediately when the user switches accounts
+  useEffect(() => {
+    function onAccountSwitched() { fetchData(); }
+    window.addEventListener('fw:account-switched', onAccountSwitched);
+    return () => window.removeEventListener('fw:account-switched', onAccountSwitched);
+  }, []);
+
   async function fetchData() {
     try { const info = await getMarginInfo(); setMarginInfo(info); } catch {}
     try { const rs = await getRiskState(); setRiskState(rs); } catch {}
   }
 
   const balance = riskState?.balance ?? account?.balance ?? 0;
-  const initialBalance = riskState?.initialBalance ?? account?.challenge?.initialBalance ?? balance ?? 1000000;
   const challengePlan = account?.challenge?.plan;
   const dailyLossLimitPct = getChallengeRulePct(account?.challenge?.dailyLossLimitPct, challengePlan, 'dailyLossLimitPct');
   const maxDDPct = getChallengeRulePct(account?.challenge?.maxDrawdownPct, challengePlan, 'maxDrawdownPct');
   const profitTargetPct = getChallengeRulePct(account?.challenge?.profitTargetPct, challengePlan, 'profitTargetPct');
   const totalMTM = positions.reduce((sum, p) => sum + (p.pnl || p.mtm || 0), 0);
   const equity = riskState?.currentEquity ?? (balance + totalMTM);
-  const dailyLossLimit = riskState?.dailyLossLimit ?? (initialBalance * (dailyLossLimitPct / 100));
-  const maxDDLimit = riskState?.maxDrawdownLimit ?? (initialBalance * (maxDDPct / 100));
-  const profitTarget = riskState?.profitTargetAmount ?? (initialBalance * (profitTargetPct / 100));
-  const dailyLoss = riskState?.dailyLoss ?? (totalMTM < 0 ? Math.abs(totalMTM) : 0);
-  const dailyLossRemaining = riskState?.dailyLossRemaining ?? Math.max(0, dailyLossLimit - dailyLoss);
-  const ddRemaining = riskState?.maxDrawdownRemaining ?? Math.max(0, maxDDLimit - Math.max(0, (account?.peakBalance ?? balance) - equity));
-  const targetPct = riskState?.targetProgressPct ?? (profitTarget > 0 ? Math.min(100, (Math.max(0, equity - initialBalance) / profitTarget) * 100) : 0);
+
+  // initialBalance must be > 0; never fall back to 0 or it produces divide-by-zero / bogus limits
+  const rawInitial = riskState?.initialBalance ?? account?.challenge?.initialBalance ?? (balance > 0 ? balance : null);
+  const initialBalance = rawInitial && rawInitial > 0 ? rawInitial : null;
+
+  const dailyLossLimit = riskState?.dailyLossLimit ?? (initialBalance ? initialBalance * (dailyLossLimitPct / 100) : 0);
+  const maxDDLimit     = riskState?.maxDrawdownLimit ?? (initialBalance ? initialBalance * (maxDDPct / 100) : 0);
+  const profitTarget   = riskState?.profitTargetAmount ?? (initialBalance ? initialBalance * (profitTargetPct / 100) : 0);
+  const dailyLoss      = riskState?.dailyLoss ?? (totalMTM < 0 ? Math.abs(totalMTM) : 0);
+  const dailyLossRemaining = riskState?.dailyLossRemaining ?? (dailyLossLimit > 0 ? Math.max(0, dailyLossLimit - dailyLoss) : 0);
+  const ddRemaining    = riskState?.maxDrawdownRemaining ?? (maxDDLimit > 0 ? Math.max(0, maxDDLimit - Math.max(0, (account?.peakBalance ?? balance) - equity)) : 0);
+  const targetPct      = riskState?.targetProgressPct ?? (profitTarget > 0 && initialBalance ? Math.min(100, (Math.max(0, equity - initialBalance) / profitTarget) * 100) : 0);
   const pnlValue = riskState?.totalDailyPnl ?? account?.totalPnl ?? totalMTM;
   const phase = formatChallengePhase(account?.challenge?.plan, account?.challenge?.type || riskState?.challengeType);
 

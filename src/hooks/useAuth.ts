@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { getAccount } from '@/services/api';
+import { getAccount, getAccounts } from '@/services/api';
 import { useTradingStore } from '@/store/tradingStore';
 
 const DASHBOARD_URL = import.meta.env.VITE_FW_DASHBOARD_URL || 'https://fundedwealth.com';
@@ -27,7 +27,7 @@ export function useAuth(): AuthState {
     isLoading: true,
     error: null,
   });
-  const { setAccount } = useTradingStore();
+  const { setAccount, setAccounts } = useTradingStore();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -40,6 +40,10 @@ export function useAuth(): AuthState {
       const account = await getAccount(signal);
       if (signal?.aborted) return;
       setAccount(account);
+      // Load all accounts for the multi-account switcher (fire-and-forget, non-blocking)
+      getAccounts().then((all) => {
+        if (!signal?.aborted && all?.length > 0) setAccounts(all);
+      }).catch(() => { /* single-account mode is fine */ });
       setState({ isAuthenticated: true, isLoading: false, error: null });
     } catch (err: any) {
       if (signal?.aborted || err?.name === 'AbortError') return;
