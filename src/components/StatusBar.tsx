@@ -10,7 +10,7 @@ type WsState = 'connected' | 'connecting' | 'reconnecting' | 'disconnected';
 
 export function StatusBar() {
   const marketStatus = useMarketStore((s) => s.marketStatus);
-  const { activeWorkspace, activeSymbol } = useAppStore();
+  const { activeSymbol } = useAppStore();
   const [wsState, setWsState] = useState<WsState>('disconnected');
   const [latency, setLatency] = useState<number | null>(null);
 
@@ -97,19 +97,13 @@ export function StatusBar() {
 
       <div className="flex-1" />
 
-      {/* Workspace + Symbol */}
-      <span className="text-fw-text-secondary">
-        <span className="text-fw-text-secondary uppercase font-medium">{activeWorkspace}</span>
-        {activeSymbol && (
-          <div className="ml-2 flex items-center gap-1.5">
-            <SymbolLogo symbol={activeSymbol.symbol} size={14} />
-            <span className="text-fw-text-secondary font-mono">{activeSymbol.symbol}</span>
-          </div>
-        )}
-      </span>
-
-      {/* Version */}
-      <span className="text-fw-text-secondary/60 font-mono">v1.0</span>
+      {/* Active Symbol */}
+      {activeSymbol && (
+        <div className="flex items-center gap-1.5">
+          <SymbolLogo symbol={activeSymbol.symbol} size={14} />
+          <span className="text-fw-text-secondary font-mono">{activeSymbol.symbol}</span>
+        </div>
+      )}
     </div>
   );
 }
