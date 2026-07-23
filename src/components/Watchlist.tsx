@@ -5,6 +5,7 @@ import { useMarketStore } from '@/store/marketStore';
 import { useTradingStore } from '@/store/tradingStore';
 import { cn, formatPrice, getChangeColor } from '@/utils/helpers';
 import { searchInstruments } from '@/services/api';
+import { SymbolLogo } from '@/components/SymbolLogo';
 import type { WatchlistItem } from '@/types';
 
 export function Watchlist() {
@@ -271,6 +272,7 @@ function WatchlistRow({ item, isSelected, isPinned, onSelect, onRemove, onPin }:
       {/* Symbol */}
       <div className="flex items-center gap-1.5 min-w-0">
         {isPinned && <Star size={8} className="text-fw-accent flex-shrink-0 fill-fw-accent" />}
+        <SymbolLogo symbol={item.symbol} size={20} className="flex-shrink-0" />
         <div className="flex flex-col min-w-0">
           <span className={cn('text-[13px] font-bold truncate leading-tight', isSelected ? 'text-fw-text' : 'text-fw-text/90')}>
             {item.symbol}

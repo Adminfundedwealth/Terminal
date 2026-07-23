@@ -71,11 +71,12 @@ export function TopBar() {
       <div className="flex items-center px-3 h-[38px]">
         {/* Brand */}
         <div data-brand className="flex items-center gap-2 mr-3 flex-shrink-0">
-          <div className="relative">
-            <div className="absolute -inset-0.5 rounded-md bg-gradient-to-br from-[#00D4FF]/10 via-[#4F46E5]/8 to-[#7C3AED]/10 blur-sm opacity-60" />
-            <div className="relative w-6 h-6 rounded-md bg-gradient-to-br from-[#0a0a0a] to-[#1a1a2e] border border-white/10 flex items-center justify-center">
-              <img src="/logo.png" alt="FW" className="w-4 h-4 object-contain" onError={(e) => { const el = e.target as HTMLImageElement; el.style.display = 'none'; el.parentElement!.innerHTML = '<span class="text-[7px] font-black bg-gradient-to-br from-[#00D4FF] via-[#4F46E5] to-[#7C3AED] bg-clip-text text-transparent">FW</span>'; }} />
-            </div>
+          <div className="w-8 h-8 rounded-lg overflow-hidden bg-white flex items-center justify-center flex-shrink-0" style={{ boxShadow: '0 0 10px rgba(139,92,246,0.4)' }}>
+            <img
+              src="/logo.png"
+              alt="FW"
+              className="w-7 h-7 object-contain"
+            />
           </div>
           <div className="flex flex-col leading-none items-center">
             <span className="text-[13px] font-extrabold tracking-wide bg-gradient-to-r from-[#00D4FF] via-[#4F46E5] to-[#7C3AED] bg-clip-text text-transparent">FUNDEDWEALTH</span>

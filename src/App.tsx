@@ -193,8 +193,8 @@ export default function App() {
         <div className="flex flex-col items-center gap-4">
           <div className="relative">
             <div className="absolute -inset-2 rounded-xl bg-gradient-to-br from-[#00D4FF]/20 via-[#4F46E5]/15 to-[#7C3AED]/20 blur-lg opacity-60 animate-pulse" />
-            <div className="relative w-12 h-12 rounded-xl bg-gradient-to-br from-[#0a0a0a] to-[#1a1a2e] border border-white/10 flex items-center justify-center">
-              <img src="/logo.png" alt="FW" className="w-9 h-9 object-contain" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+            <div className="relative w-16 h-16 rounded-xl bg-white flex items-center justify-center overflow-hidden" style={{ boxShadow: '0 0 20px rgba(139,92,246,0.5)' }}>
+              <img src="/logo.png" alt="FW" className="w-14 h-14 object-contain" />
             </div>
           </div>
           <div className="flex flex-col items-center gap-1">

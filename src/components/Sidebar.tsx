@@ -32,21 +32,13 @@ export function Sidebar() {
     <div className="w-[48px] min-w-[48px] h-full bg-[#08090e] border-r border-fw-border/60 flex flex-col items-center py-2 select-none flex-shrink-0">
       {/* Brand Icon */}
       <div className="mb-2 pb-2 border-b border-fw-border/30 w-full flex justify-center">
-        <div className="relative">
-          <div className="absolute -inset-1 rounded-lg bg-gradient-to-br from-[#00D4FF]/12 via-[#4F46E5]/8 to-[#7C3AED]/12 blur-md opacity-50" />
-          <div className="relative w-7 h-7 rounded-lg bg-gradient-to-br from-[#0a0a0a] to-[#1a1a2e] border border-white/8 flex items-center justify-center overflow-hidden">
+        <div className="w-8 h-8 rounded-lg overflow-hidden bg-white flex items-center justify-center flex-shrink-0" style={{ boxShadow: '0 0 10px rgba(139,92,246,0.4)' }}>
             <img
               src="/logo.png"
               alt="FW"
-              className="w-5 h-5 object-contain"
-              onError={(e) => {
-                const el = e.target as HTMLImageElement;
-                el.style.display = 'none';
-                el.parentElement!.innerHTML = '<span class="text-[13px] font-black bg-gradient-to-br from-[#00D4FF] via-[#4F46E5] to-[#7C3AED] bg-clip-text text-transparent">FW</span>';
-              }}
+              className="w-7 h-7 object-contain"
             />
           </div>
-        </div>
       </div>
 
       {/* Dashboard */}
