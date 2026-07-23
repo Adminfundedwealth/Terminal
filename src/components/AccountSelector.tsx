@@ -142,11 +142,10 @@ export function AccountSelector() {
         onClick={() => { setIsOpen((v) => !v); setSwitchError(null); }}
         disabled={isSwitching}
         className={cn(
-          'flex items-center gap-1.5 px-2 py-1 rounded transition-colors',
-          hasMultiple ? 'hover:bg-fw-hover cursor-pointer' : 'cursor-default',
+          'flex items-center gap-1.5 px-2 py-1 rounded transition-colors cursor-pointer hover:bg-fw-hover',
           isOpen && 'bg-fw-hover',
         )}
-        title={hasMultiple ? 'Switch account' : 'Active account'}
+        title="Switch account"
       >
         {isSwitching ? (
           <Loader2 size={11} className="text-fw-accent animate-spin flex-shrink-0" />

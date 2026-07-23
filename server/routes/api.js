@@ -75,8 +75,16 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
 
       const challenge = account.challenge;
       const balance = parseFloat(account.balance) || 0;
-      const initialBalance = challenge ? parseFloat(challenge.initial_balance) : balance;
-      const peakBalance = parseFloat(account.peak_balance || challenge?.peak_balance || balance);
+
+      // initialBalance: must be a positive number. If challenge.initial_balance is null/0
+      // (fresh account not yet provisioned), fall back to current balance so that
+      // all limit calculations remain valid and never produce divide-by-zero.
+      const rawInitial = challenge ? parseFloat(challenge.initial_balance) : null;
+      const initialBalance = (rawInitial && rawInitial > 0) ? rawInitial : balance;
+
+      // peakBalance: never less than initialBalance so drawdown is always >= 0
+      const rawPeak = parseFloat(account.peak_balance || challenge?.peak_balance || 0);
+      const peakBalance = rawPeak > 0 ? Math.max(rawPeak, initialBalance) : initialBalance;
 
       // Today's realized P&L
       let todayRealizedPnl = 0;
@@ -90,31 +98,31 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
       const currentEquity = balance + unrealizedPnl;
       const pnlFromStart = currentEquity - initialBalance;
 
-      // Read rule percentages from challenge_accounts (source of truth from main site)
-      // These values are provisioned from @workspace/products and synced via challenge_accounts
-      const dailyLossPct = challenge?.daily_loss_limit_pct !== null && challenge?.daily_loss_limit_pct !== undefined 
-        ? parseFloat(challenge.daily_loss_limit_pct) 
-        : 0.05; // Generic fallback only if challenge is missing
-      const maxDrawdownPct = challenge?.max_drawdown_pct !== null && challenge?.max_drawdown_pct !== undefined 
-        ? parseFloat(challenge.max_drawdown_pct) 
-        : 0.10; // Generic fallback only if challenge is missing
-      const profitTargetPct = challenge?.profit_target_pct !== null && challenge?.profit_target_pct !== undefined 
-        ? parseFloat(challenge.profit_target_pct) 
-        : 0.10; // Generic fallback only if challenge is missing
+      // Read rule percentages — DB stores as whole numbers: 8 = 8%, 5 = 5%, 10 = 10%
+      // Fallback values are also whole numbers.
+      const dailyLossPct = (challenge?.daily_loss_limit_pct !== null && challenge?.daily_loss_limit_pct !== undefined)
+        ? parseFloat(challenge.daily_loss_limit_pct)
+        : 5;   // 5% fallback
+      const maxDrawdownPct = (challenge?.max_drawdown_pct !== null && challenge?.max_drawdown_pct !== undefined)
+        ? parseFloat(challenge.max_drawdown_pct)
+        : 10;  // 10% fallback
+      const profitTargetPct = (challenge?.profit_target_pct !== null && challenge?.profit_target_pct !== undefined)
+        ? parseFloat(challenge.profit_target_pct)
+        : 10;  // 10% fallback
 
       // Daily loss consumed
       const dailyLossLimit = (dailyLossPct / 100) * initialBalance;
       const dailyLoss = totalDailyPnl < 0 ? Math.abs(totalDailyPnl) : 0;
-      const dailyLossUsedPct = dailyLossLimit > 0 ? (dailyLoss / dailyLossLimit) * 100 : 0;
+      const dailyLossUsedPct = dailyLossLimit > 0 ? Math.min(100, (dailyLoss / dailyLossLimit) * 100) : 0;
 
       // Max drawdown consumed
       const maxDrawdownLimit = (maxDrawdownPct / 100) * initialBalance;
       const drawdown = Math.max(0, peakBalance - currentEquity);
-      const maxDrawdownUsedPct = maxDrawdownLimit > 0 ? (drawdown / maxDrawdownLimit) * 100 : 0;
+      const maxDrawdownUsedPct = maxDrawdownLimit > 0 ? Math.min(100, (drawdown / maxDrawdownLimit) * 100) : 0;
 
       // Profit target progress
       const profitTargetAmount = (profitTargetPct / 100) * initialBalance;
-      const targetProgressPct = profitTargetAmount > 0 ? Math.max(0, (pnlFromStart / profitTargetAmount) * 100) : 0;
+      const targetProgressPct = profitTargetAmount > 0 ? Math.min(100, Math.max(0, (pnlFromStart / profitTargetAmount) * 100)) : 0;
 
       // Today's trade count
       let todayTradeCount = 0;
@@ -299,7 +307,7 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
         .from('trading_accounts')
         .select('*, challenge_accounts(id, type, plan, initial_balance, peak_balance, profit_target_pct, daily_loss_limit_pct, max_drawdown_pct, status, started_at, expires_at)')
         .eq('trader_id', req.user.userId)
-        .in('status', ['active'])
+        .in('status', ['active', 'funded', 'evaluation', 'completed'])
         .order('created_at', { ascending: false });
 
       if (error || !rows) return res.json([]);
