@@ -29,6 +29,7 @@ import { TradeRepository } from '../repositories/trade.repository.js';
 import { OrderRepository } from '../repositories/order.repository.js';
 import { eventBus } from '../events/index.js';
 import { supabase } from '../db/client.js';
+import { MainSiteSyncClient } from '../clients/main-site-sync.client.js';
 
 const positionRepo = new PositionRepository();
 const tradeRepo = new TradeRepository();
@@ -313,6 +314,18 @@ export class OrderExecutionService {
       }
     }
 
+    // ── Step 8: Sync to Main Site (Dashboard / Accounts / Analytics) ────────
+    MainSiteSyncClient.onTradeFilled(accountId, {
+      tradeId: `${orderId}-${Date.now()}`,
+      symbol: orderParams.symbol,
+      side: orderParams.side,
+      price: fillPrice,
+      exitPrice: fillPrice,
+      qty: filledQty,
+      quantity: filledQty,
+      executedAt: new Date().toISOString(),
+    }).catch(() => {});
+
     return { orderId, status: 'FILLED', brokerOrderId, avgPrice: fillPrice, filledQty };
   }
 
@@ -400,6 +413,18 @@ export class OrderExecutionService {
       };
       await RiskEngine.postTradeCheck(accountId, quoteProvider);
     } catch (e) { /* non-blocking */ }
+
+    // Sync to Main Site (Dashboard / Accounts / Analytics)
+    MainSiteSyncClient.onTradeFilled(accountId, {
+      tradeId: `${orderId}-broker-fill-${Date.now()}`,
+      symbol: order?.symbol || '',
+      side: order?.side || '',
+      price: avgPrice,
+      exitPrice: avgPrice,
+      qty: filledQty,
+      quantity: filledQty,
+      executedAt: new Date().toISOString(),
+    }).catch(() => {});
   }
 
   /**
