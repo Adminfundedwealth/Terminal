@@ -212,13 +212,26 @@ export class OptionChainService {
   }
 
   /**
+   * Sleep helper to avoid hammering Angel One API with rapid-fire batch requests.
+   * @param {number} ms
+   */
+  _sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
    * Batch quote option tokens.
+   * Sends up to 50 tokens per call with a 250ms gap between batches to stay
+   * within Angel One's rate limits.
    */
   async _batchQuote(tokens) {
     const quotes = new Map();
     const batchSize = 50;
 
     for (let i = 0; i < tokens.length; i += batchSize) {
+      // Brief pause between batches (skip before first batch)
+      if (i > 0) await this._sleep(250);
+
       const batch = tokens.slice(i, i + batchSize);
 
       const makeRequest = async () => {

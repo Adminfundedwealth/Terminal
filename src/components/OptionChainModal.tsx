@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef, useMemo } from 'react';
+﻿import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useAppStore } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
 import { getOptionChain, getExpiries } from '@/services/api';
@@ -24,8 +24,10 @@ export function OptionChainModal() {
   const [error, setError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isMountedRef = useRef(true);
-
+  // Tracks when rate-limit window expires so we can show countdown
+  const rateLimitedUntilRef = useRef<number>(0);
   // Auto-sync symbol from activeSymbol if it's an index
   useEffect(() => {
     if (activeSymbol) {
@@ -63,14 +65,38 @@ export function OptionChainModal() {
 
   useEffect(() => {
     isMountedRef.current = true;
-    return () => { isMountedRef.current = false; if (retryTimerRef.current) clearTimeout(retryTimerRef.current); };
+    return () => {
+      isMountedRef.current = false;
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    };
   }, []);
 
   useEffect(() => { loadExpiries(); }, [symbol]);
-  useEffect(() => { if (selectedExpiry) loadChain(); }, [symbol, selectedExpiry]);
+
+  // Debounce chain loading: wait 400ms after symbol/expiry change before firing.
+  // This prevents back-to-back requests when user rapidly clicks through symbols.
+  useEffect(() => {
+    if (!selectedExpiry) return;
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    debounceTimerRef.current = setTimeout(() => {
+      if (isMountedRef.current) loadChain();
+    }, 400);
+    return () => { if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current); };
+  }, [symbol, selectedExpiry]);
 
   const loadChain = async () => {
     if (!selectedExpiry) return;
+
+    // If we're still in a rate-limit window, show message instead of hammering server
+    const now = Date.now();
+    if (rateLimitedUntilRef.current > now) {
+      const secsLeft = Math.ceil((rateLimitedUntilRef.current - now) / 1000);
+      setError(`Rate limited — please wait ${secsLeft}s before switching pairs again.`);
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
     try {
@@ -80,8 +106,6 @@ export function OptionChainModal() {
         setChain(data);
         setRetryCount(0);
       } else {
-        // Empty response — might be market closed, invalid expiry, or feed not ready.
-        // Auto-retry up to 3 times with backoff.
         setChain([]);
         if (retryCount < 3) {
           const delay = (retryCount + 1) * 5000; // 5s, 10s, 15s
@@ -91,7 +115,6 @@ export function OptionChainModal() {
               loadChain();
             }
           }, delay);
-          // Set a soft message so user knows it's retrying, not stuck
           setError(null);
         } else {
           setError('No option chain data returned. Market may be closed or the expiry has no contracts.');
@@ -100,8 +123,24 @@ export function OptionChainModal() {
     } catch (err: any) {
       if (!isMountedRef.current) return;
       setChain([]);
+
+      // 429 rate limit — don't auto-retry, just tell the user to wait
+      const isRateLimit =
+        err?.status === 429 ||
+        err?.response?.status === 429 ||
+        (typeof err?.message === 'string' && err.message.includes('429')) ||
+        (typeof err?.message === 'string' && err.message.toLowerCase().includes('rate limit'));
+
+      if (isRateLimit) {
+        // Back off for 30 seconds
+        rateLimitedUntilRef.current = Date.now() + 30_000;
+        setError('Too many requests — wait ~30s before loading another pair.');
+        setIsLoading(false);
+        return;
+      }
+
       setError(err.message || 'Failed to load option chain');
-      // Auto-retry on error with backoff
+      // Auto-retry on non-rate-limit errors with backoff
       if (retryCount < 3) {
         const delay = (retryCount + 1) * 5000;
         retryTimerRef.current = setTimeout(() => {
@@ -141,7 +180,9 @@ export function OptionChainModal() {
   const handleManualRetry = () => {
     setRetryCount(0);
     setError(null);
+    rateLimitedUntilRef.current = 0; // Clear any rate-limit hold on manual retry
     if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     loadChain();
   };
 
