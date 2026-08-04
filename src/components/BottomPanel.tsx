@@ -1,7 +1,7 @@
 ﻿import { useState, useEffect } from 'react';
 import { useTradingStore } from '@/store/tradingStore';
 import { useAppStore } from '@/store/appStore';
-import { getPositions, getOrders, getTrades, exitPosition, partialClosePosition, reversePosition, cancelOrder, placeOrder, closeAllPositions, breakEvenPosition, attachStopLoss, attachTakeProfit } from '@/services/api';
+import { getPositions, getOrders, getTrades, exitPosition, partialClosePosition, reversePosition, cancelOrder, placeOrder, closeAllPositions, breakEvenPosition, attachStopLoss, attachTakeProfit, adminCheckAccess } from '@/services/api';
 import { cn, formatPrice, formatPnl, getChangeColor } from '@/utils/helpers';
 import { RefreshCw, X, RotateCcw, Plus, Edit, TrendingUp, Shield, Target, StopCircle, Activity } from 'lucide-react';
 import { useToast } from '@/components/ToastProvider';
@@ -13,6 +13,7 @@ import { AIPanel } from '@/components/AIPanel';
 import { AccountManager } from '@/components/AccountManager';
 import { ActivityPanel } from '@/components/ActivityPanel';
 import { ScannerPanel } from '@/components/ScannerPanel';
+import { AdminPanel } from '@/components/AdminPanel';
 import type { Position, Order, Trade } from '@/types';
 
 type OrderFilter = 'all' | 'open' | 'filled' | 'cancelled' | 'rejected';
@@ -25,6 +26,14 @@ export function BottomPanel() {
   const [orderFilter, setOrderFilter] = useState<OrderFilter>('all');
   const [tradeFilter, setTradeFilter] = useState<TradeFilter>('today');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isFounder, setIsFounder] = useState(false);
+
+  // Check founder access once on mount
+  useEffect(() => {
+    adminCheckAccess()
+      .then(r => setIsFounder(r.isFounder))
+      .catch(() => setIsFounder(false));
+  }, []);
 
   const refreshData = async () => {
     setIsRefreshing(true);
@@ -106,6 +115,7 @@ export function BottomPanel() {
     { id: 'accounts' as const, label: 'Accounts', count: 0 },
     { id: 'activity' as const, label: 'Activity', count: 0 },
     { id: 'scanner' as const, label: 'Scanner', count: 0 },
+    ...(isFounder ? [{ id: 'admin' as const, label: '⚙ Admin', count: 0 }] : []),
   ];
 
   return (
@@ -226,6 +236,7 @@ export function BottomPanel() {
         {bottomTab === 'accounts' && <AccountManager />}
         {bottomTab === 'activity' && <ActivityPanel />}
         {bottomTab === 'scanner' && <ScannerPanel />}
+        {bottomTab === 'admin' && isFounder && <AdminPanel />}
       </div>
     </div>
   );

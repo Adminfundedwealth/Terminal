@@ -434,6 +434,7 @@ export class OrderExecutionService {
       orderType: 'MARKET',
       productType: position.product_type,
       qty: closeQty,
+      isCloseOrder: true, // bypass all risk rule checks — closing always allowed
     };
 
     // Insert order into database

@@ -235,3 +235,71 @@ export const apiService = {
   put: <T = any>(url: string, data?: any) => request<T>(url, { method: 'PUT', body: data ? JSON.stringify(data) : undefined }),
   delete: <T = any>(url: string) => request<T>(url, { method: 'DELETE' }),
 };
+
+// ─── Admin API ──────────────────────────────────────────────────────────────
+
+export interface AdminAccount {
+  id: string;
+  account_code: string;
+  broker_provider: string;
+  balance: number;
+  available_margin: number;
+  used_margin: number;
+  status: 'active' | 'locked' | 'breached' | 'completed';
+  locked_reason: string | null;
+  locked_at: string | null;
+  unlocked_at: string | null;
+  created_at: string;
+  trader_id: string;
+  terminal_traders: {
+    id: string;
+    email: string;
+    display_name: string;
+    status: string;
+  } | null;
+}
+
+export interface AdminAccountDetail extends AdminAccount {
+  challenge: any;
+  trader: { id: string; email: string; display_name: string; status: string; external_id: string } | null;
+  positions: Array<{ id: string; symbol: string; side: string; qty: number; product_type: string; is_open: boolean; opened_at: string }>;
+}
+
+export const adminCheckAccess = () =>
+  request<{ isFounder: boolean }>('/admin/check');
+
+export const adminListAccounts = (params?: { search?: string; status?: string; page?: number; limit?: number }) => {
+  const q = new URLSearchParams();
+  if (params?.search) q.set('search', params.search);
+  if (params?.status) q.set('status', params.status);
+  if (params?.page) q.set('page', String(params.page));
+  if (params?.limit) q.set('limit', String(params.limit));
+  return request<{ success: boolean; accounts: AdminAccount[]; pagination: { page: number; limit: number; total: number; pages: number } }>(
+    `/admin/accounts${q.toString() ? '?' + q.toString() : ''}`
+  );
+};
+
+export const adminGetAccount = (id: string) =>
+  request<{ success: boolean } & AdminAccountDetail>(`/admin/accounts/${id}`);
+
+export const adminFreezeAccount = (id: string, reason: string) =>
+  request<{ success: boolean; message: string; status: string }>(`/admin/accounts/${id}/freeze`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
+
+export const adminUnfreezeAccount = (id: string) =>
+  request<{ success: boolean; message: string; status: string; previousStatus: string }>(`/admin/accounts/${id}/unfreeze`, {
+    method: 'POST',
+  });
+
+export const adminClosePositions = (id: string) =>
+  request<{ success: boolean; message: string; closed: number; positions: any[] }>(`/admin/accounts/${id}/close-positions`, {
+    method: 'POST',
+  });
+
+export const adminGetPositions = (id: string) =>
+  request<{ success: boolean; positions: any[] }>(`/admin/accounts/${id}/positions`);
+
+export const adminGetRiskEvents = (id: string) =>
+  request<{ success: boolean; events: any[] }>(`/admin/accounts/${id}/risk-events`);

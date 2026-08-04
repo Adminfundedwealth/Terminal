@@ -38,6 +38,7 @@ import { createAIRouter } from './routes/ai.routes.js';
 import { createCopyTradingRouter } from './routes/copytrading.routes.js';
 import { createAlertsRouter } from './routes/alerts.routes.js';
 import { createPayoutRouter } from './routes/payout.routes.js';
+import { createAdminRouter } from './routes/admin.routes.js';
 import { setupWebSocket } from './routes/websocket.js';
 import { requireAuth as authMiddleware } from './middleware/auth.js';
 import { verifySessionJWT as verifyJWT } from './services/auth.service.js';
@@ -252,6 +253,9 @@ app.use('/api', createAlertsRouter());
 
 // Payout routes (eligibility, request, admin approval)
 app.use('/api', createPayoutRouter());
+
+// Admin routes (account freeze/unfreeze, force-close positions)
+app.use('/api', createAdminRouter());
 
 // Serve frontend static files in production
 if (process.env.NODE_ENV === 'production') {

@@ -53,7 +53,15 @@ export class RiskEngine {
       return { allowed: false, reason: `Account is ${account.status}. Trading disabled.` };
     }
 
-    // Check each rule
+    // ── Close/exit orders bypass ALL trading rules ──────────────────────────
+    // Closing a position REDUCES risk — it must never be blocked by risk rules
+    // like daily loss limit, max positions, trading hours, etc.
+    // Only the hard account-status check above applies to close orders.
+    if (orderParams.isCloseOrder) {
+      return { allowed: true };
+    }
+
+    // Check each rule (new positions only)
     const checks = [
       () => this.checkMarketHoliday(),
       () => this.checkWeekend(),
