@@ -516,11 +516,26 @@ async function connectAngelFeed() {
     // Initial propagation
     propagateToken(angelFeed.session);
 
-    // Pre-warm the instrument master in the background so the first option chain
-    // request is fast (the master is ~10 MB and takes a few seconds to download).
-    optionChainService.refreshInstrumentMaster().catch(e =>
-      console.warn('[OptionChain] Instrument master pre-warm failed:', e.message)
-    );
+    // Pre-warm option chains for all 5 index pairs in the background.
+    // This runs after login so the first user request hits the cache instantly.
+    const WARMUP_SYMBOLS = ['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'MIDCPNIFTY', 'SENSEX'];
+    (async () => {
+      console.log('[OptionChain] Starting startup warmup for all index pairs...');
+      for (const sym of WARMUP_SYMBOLS) {
+        try {
+          const expiries = await optionChainService.getExpiries(sym);
+          if (expiries && expiries.length > 0) {
+            await optionChainService.getOptionChain(sym, expiries[0]);
+            console.log(`[OptionChain] Warmup done: ${sym} ${expiries[0]}`);
+          }
+        } catch (e) {
+          console.warn(`[OptionChain] Warmup failed for ${sym}:`, e.message);
+        }
+        // Small gap between symbols to avoid rate limiting
+        await new Promise(r => setTimeout(r, 1000));
+      }
+      console.log('[OptionChain] Startup warmup complete.');
+    })().catch(e => console.warn('[OptionChain] Warmup error:', e.message));
 
     // Wire refresh callbacks so services can self-heal on 403
     const refreshFn = async () => {

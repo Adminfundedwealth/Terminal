@@ -627,9 +627,19 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
     res.json([]);
   });
 
-  router.get('/market/expiries', (req, res) => {
+  router.get('/market/expiries', async (req, res) => {
     const { symbol } = req.query;
     if (!symbol) return res.status(400).json({ message: 'symbol required' });
+    // Use optionChainService to discover real expiries via searchScrip scan
+    // Falls back to instrumentService if optionChainService not available
+    if (optionChainService) {
+      try {
+        const expiries = await optionChainService.getExpiries(symbol);
+        if (expiries && expiries.length > 0) return res.json(expiries);
+      } catch (err) {
+        console.error('[Expiries] optionChainService failed:', err.message);
+      }
+    }
     res.json(instrumentService.getExpiries(symbol));
   });
 

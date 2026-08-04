@@ -1,370 +1,255 @@
 /**
- * OPTION CHAIN SERVICE  —  v2 (Instrument Master approach)
+ * OPTION CHAIN SERVICE  —  v3 (Smart expiry discovery + server-side cache)
  *
- * Permanent fix for "Too many requests" and empty chain issues.
+ * How it works:
+ *   1. getExpiries(symbol) — scans forward dates via searchScrip to find real
+ *      expiry dates. Results cached 6 hours.  Returns ISO date strings.
  *
- * Strategy:
- *   1. Download Angel One's public instrument master JSON once per day
- *      (no auth required). This gives every NFO token locally.
- *   2. Filter locally by symbol + expiry → no searchScrip API call at all.
- *   3. Batch-quote the tokens in groups of 50 with 250 ms gaps between
- *      batches so Angel One's rate limit is never hit.
- *   4. Fall back to searchScrip only if the master download fails.
+ *   2. getOptionChain(symbol, expiry) — calls searchScrip for the exact
+ *      symbol+expiry term, batch-quotes all tokens (50/batch, 200ms gap),
+ *      builds and returns the chain.  Results cached 30 seconds so switching
+ *      between pairs is instant on repeat visits.
  *
- * The instrument master is refreshed:
- *   • On first call of the day
- *   • After 6 hours (TTL)
- *   • Manually via refreshInstrumentMaster()
+ * No instrument master download. No external file fetch.
+ * Works for all 5 index pairs regardless of whether they have weekly or monthly expiries.
  */
 
 import axios from 'axios';
 import https from 'https';
 import { config } from 'dotenv';
-
 config();
 
 const ANGEL_API_BASE = 'https://apiconnect.angelone.in';
-// Angel One public instrument master — no auth needed
-const INSTRUMENT_MASTER_URL =
-  'https://margincalculator.angelone.in/OpenAPI_File/files/OpenAPIScripMaster.json';
-
 const IPV4_AGENT = new https.Agent({ family: 4 });
 
-// How long to keep the instrument master in memory (6 hours)
-const MASTER_TTL_MS = 6 * 60 * 60 * 1000;
+// How many forward days to scan when discovering expiries
+const EXPIRY_SCAN_DAYS = 120;
+// Expiry list TTL: refresh every 6 hours
+const EXPIRY_TTL_MS = 6 * 60 * 60 * 1000;
+// Chain data TTL: 30 seconds (fresh enough for trading, instant for pair-switching)
+const CHAIN_TTL_MS = 30 * 1000;
+
+const MONTHS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
 
 export class OptionChainService {
   constructor() {
     this.jwtToken = null;
     this._refreshCallback = null;
 
-    // Instrument master cache
-    this._masterInstruments = null;   // full array after download
-    this._masterLoadedAt = 0;         // epoch ms of last successful load
-    this._masterLoading = null;       // Promise while loading (prevents concurrent fetches)
-
-    // Per-symbol:expiry instrument list (built from master, cached 10 min)
-    this._instrumentCache = new Map();
+    // expiry cache: symbol → { expiries: string[], loadedAt: number }
+    this._expiryCache = new Map();
+    // chain cache: `symbol:expiry` → { chain: [], loadedAt: number }
+    this._chainCache = new Map();
+    // in-flight promises to prevent duplicate concurrent requests
+    this._expiryLoading = new Map();
+    this._chainLoading = new Map();
   }
 
-  setAuthToken(token) {
-    this.jwtToken = token;
-  }
+  setAuthToken(token) { this.jwtToken = token; }
+  setRefreshCallback(fn) { this._refreshCallback = fn; }
 
-  setRefreshCallback(fn) {
-    this._refreshCallback = fn;
-  }
-
-  // ─── Public API ─────────────────────────────────────────────────────────────
+  // ── Public: expiry list ───────────────────────────────────────────────────
 
   /**
-   * Get live option chain for an underlying.
-   * @param {string} symbol   e.g. "NIFTY", "BANKNIFTY"
-   * @param {string} expiry   ISO date "2026-08-05" or Angel fmt "05AUG26"
-   * @returns {Promise<Array>}
+   * Returns actual available expiry dates for a symbol as ISO strings.
+   * Scans forward via searchScrip to find real dates — no hardcoded day-of-week.
    */
-  async getOptionChain(symbol, expiry) {
-    // Ensure we have a fresh JWT
-    if (!this.jwtToken && this._refreshCallback) {
-      try { this.jwtToken = await this._refreshCallback(); } catch (_) {}
+  async getExpiries(symbol) {
+    const sym = symbol.toUpperCase();
+
+    // Serve from cache if fresh
+    const cached = this._expiryCache.get(sym);
+    if (cached && (Date.now() - cached.loadedAt) < EXPIRY_TTL_MS) {
+      return cached.expiries;
     }
-    if (!this.jwtToken) {
-      console.log('[OptionChain] No JWT token — cannot quote');
+
+    // Deduplicate concurrent requests
+    if (this._expiryLoading.has(sym)) return this._expiryLoading.get(sym);
+
+    const promise = this._discoverExpiries(sym).then(expiries => {
+      this._expiryCache.set(sym, { expiries, loadedAt: Date.now() });
+      this._expiryLoading.delete(sym);
+      return expiries;
+    }).catch(err => {
+      this._expiryLoading.delete(sym);
+      console.error(`[OptionChain] Expiry discovery failed for ${sym}:`, err.message);
       return [];
-    }
-
-    const formattedExpiry = this._formatExpiry(expiry);
-    console.log(`[OptionChain] Request: ${symbol} expiry=${expiry} → ${formattedExpiry}`);
-
-    try {
-      // Step 1: Get instruments from master (no API call if cached)
-      const instruments = await this._getInstruments(symbol, formattedExpiry);
-      console.log(`[OptionChain] Instruments found: ${instruments.length}`);
-      if (instruments.length === 0) return [];
-
-      // Step 2: Batch-quote all tokens
-      const tokens = instruments.map(i => i.symboltoken);
-      const quotes = await this._batchQuote(tokens);
-      console.log(`[OptionChain] Quotes fetched: ${quotes.size}`);
-
-      // Step 3: Build option chain
-      const chain = this._buildChain(instruments, quotes);
-      console.log(`[OptionChain] Final chain: ${chain.length} strikes`);
-      return chain;
-    } catch (err) {
-      console.error(`[OptionChain] Failed for ${symbol}/${formattedExpiry}:`, err.message);
-      return [];
-    }
-  }
-
-  /** Force a fresh instrument master download (useful after market open) */
-  async refreshInstrumentMaster() {
-    this._masterInstruments = null;
-    this._masterLoadedAt = 0;
-    return this._loadMaster();
-  }
-
-  // ─── Instrument Master ───────────────────────────────────────────────────────
-
-  /**
-   * Download and cache the Angel One instrument master.
-   * Returns the full array of NFO instruments.
-   */
-  async _loadMaster() {
-    // Return cached copy if still fresh
-    if (this._masterInstruments && (Date.now() - this._masterLoadedAt) < MASTER_TTL_MS) {
-      return this._masterInstruments;
-    }
-
-    // Prevent concurrent downloads
-    if (this._masterLoading) return this._masterLoading;
-
-    this._masterLoading = (async () => {
-      try {
-        console.log('[OptionChain] Downloading instrument master...');
-        const resp = await axios.get(INSTRUMENT_MASTER_URL, {
-          httpsAgent: IPV4_AGENT,
-          timeout: 30000,
-          // The file is large (~10 MB) — stream it
-          responseType: 'json',
-        });
-
-        const all = Array.isArray(resp.data) ? resp.data : [];
-        // Keep only NFO options to save memory
-        this._masterInstruments = all.filter(
-          r => r.exch_seg === 'NFO' && (r.instrumenttype === 'OPTIDX' || r.instrumenttype === 'OPTSTK')
-        );
-        this._masterLoadedAt = Date.now();
-        console.log(`[OptionChain] Master loaded: ${this._masterInstruments.length} NFO option instruments`);
-        return this._masterInstruments;
-      } catch (err) {
-        console.error('[OptionChain] Master download failed:', err.message);
-        // Return whatever we had before (could be stale or null)
-        return this._masterInstruments || [];
-      } finally {
-        this._masterLoading = null;
-      }
-    })();
-
-    return this._masterLoading;
-  }
-
-  /**
-   * Get instruments for a specific symbol + expiry.
-   * Uses instrument master first; falls back to searchScrip if master is empty.
-   */
-  async _getInstruments(symbol, formattedExpiry) {
-    const cacheKey = `${symbol}:${formattedExpiry}`;
-    if (this._instrumentCache.has(cacheKey)) {
-      return this._instrumentCache.get(cacheKey);
-    }
-
-    // --- Primary: instrument master ---
-    let instruments = await this._getFromMaster(symbol, formattedExpiry);
-
-    // --- Fallback: searchScrip ---
-    if (instruments.length === 0) {
-      console.log(`[OptionChain] Master returned 0 for ${symbol}/${formattedExpiry} — trying searchScrip`);
-      instruments = await this._findOptionInstruments(symbol, formattedExpiry);
-    }
-
-    if (instruments.length > 0) {
-      // Cache for 10 minutes
-      this._instrumentCache.set(cacheKey, instruments);
-      setTimeout(() => this._instrumentCache.delete(cacheKey), 10 * 60 * 1000);
-    }
-
-    return instruments;
-  }
-
-  /**
-   * Filter instruments from the downloaded master for a symbol + expiry.
-   *
-   * Angel One master fields relevant here:
-   *   symbol      e.g. "NIFTY05AUG2624000CE"
-   *   name        e.g. "NIFTY"
-   *   expiry      e.g. "05AUG2026" or "05-AUG-2026"
-   *   strike      e.g. "24000.000000" or 24000
-   *   optiontype  e.g. "CE" or "PE"
-   *   token       e.g. "12345678"
-   *   instrumenttype e.g. "OPTIDX"
-   *   exch_seg    e.g. "NFO"
-   */
-  async _getFromMaster(symbol, formattedExpiry) {
-    // formattedExpiry is "05AUG26" (DDMMMYY).
-    // Master expiry field is typically "05AUG2026" (DDMMMYYYY) — try both.
-    const expiry4 = this._expandYear(formattedExpiry); // "05AUG2026"
-
-    const master = await this._loadMaster();
-    if (!master || master.length === 0) return [];
-
-    const symUpper = symbol.toUpperCase();
-
-    const matches = master.filter(r => {
-      // Match underlying name
-      const rName = (r.name || '').toUpperCase();
-      if (rName !== symUpper) return false;
-
-      // Match expiry — master stores "05AUG2026" or "05-AUG-2026"
-      const rExpiry = (r.expiry || '').replace(/-/g, '').toUpperCase();
-      return rExpiry === expiry4.toUpperCase() || rExpiry === formattedExpiry.toUpperCase();
     });
 
-    if (matches.length === 0) {
-      // Try matching via the trading symbol prefix as last resort
-      const prefix = `${symUpper}${formattedExpiry}`;
-      const bySymbol = master.filter(r => {
-        const ts = (r.symbol || '').toUpperCase();
-        return ts.startsWith(prefix);
-      });
-      if (bySymbol.length > 0) {
-        console.log(`[OptionChain] Master prefix match (${prefix}): ${bySymbol.length} instruments`);
-        return this._mapMasterInstruments(bySymbol, symUpper, formattedExpiry);
-      }
+    this._expiryLoading.set(sym, promise);
+    return promise;
+  }
+
+  // ── Public: option chain ─────────────────────────────────────────────────
+
+  /**
+   * Returns the option chain for a symbol+expiry.
+   * Cached 30 seconds — instant on repeat calls.
+   */
+  async getOptionChain(symbol, expiry) {
+    await this._ensureToken();
+    if (!this.jwtToken) {
+      console.log('[OptionChain] No JWT token');
       return [];
     }
 
-    return this._mapMasterInstruments(matches, symUpper, formattedExpiry);
+    const sym = symbol.toUpperCase();
+    const angelExpiry = this._toAngelExpiry(expiry);  // e.g. "11AUG26"
+    const cacheKey = `${sym}:${angelExpiry}`;
+
+    // Serve from 30-second cache
+    const cached = this._chainCache.get(cacheKey);
+    if (cached && (Date.now() - cached.loadedAt) < CHAIN_TTL_MS) {
+      console.log(`[OptionChain] Cache hit: ${cacheKey} (${cached.chain.length} strikes)`);
+      return cached.chain;
+    }
+
+    // Deduplicate concurrent requests
+    if (this._chainLoading.has(cacheKey)) return this._chainLoading.get(cacheKey);
+
+    const promise = this._fetchChain(sym, angelExpiry).then(chain => {
+      if (chain.length > 0) {
+        this._chainCache.set(cacheKey, { chain, loadedAt: Date.now() });
+      }
+      this._chainLoading.delete(cacheKey);
+      return chain;
+    }).catch(err => {
+      this._chainLoading.delete(cacheKey);
+      console.error(`[OptionChain] Chain fetch failed ${cacheKey}:`, err.message);
+      return [];
+    });
+
+    this._chainLoading.set(cacheKey, promise);
+    return promise;
   }
 
-  _mapMasterInstruments(rows, symbol, formattedExpiry) {
-    const prefix = `${symbol}${formattedExpiry}`;
-    return rows
-      .map(r => {
-        const ts = (r.symbol || r.tradingsymbol || '').toUpperCase();
-        // Parse strike + option type from the trading symbol
-        let strike = null;
-        let optionType = null;
+  // ── Expiry discovery ─────────────────────────────────────────────────────
 
-        // Try direct fields first (master usually has these)
-        if (r.strike !== undefined && r.optiontype) {
-          strike = parseFloat(r.strike) || parseInt(r.strike);
-          optionType = r.optiontype.toUpperCase();
-        } else {
-          // Fallback: parse from symbol "NIFTY05AUG2624000CE"
-          let suffix = ts;
-          if (ts.startsWith(prefix)) suffix = ts.slice(prefix.length);
-          const m = suffix.match(/^(\d+(?:\.\d+)?)(CE|PE)$/);
-          if (!m) return null;
-          strike = parseFloat(m[1]);
-          optionType = m[2];
+  async _discoverExpiries(sym) {
+    await this._ensureToken();
+    if (!this.jwtToken) return [];
+
+    console.log(`[OptionChain] Discovering expiries for ${sym}...`);
+    const expiries = [];
+    const now = new Date();
+
+    for (let i = 0; i <= EXPIRY_SCAN_DAYS; i++) {
+      const date = new Date(now);
+      date.setDate(date.getDate() + i);
+      const iso = date.toISOString().split('T')[0];
+      const angelFmt = this._isoToAngel(iso);
+      const term = `${sym}${angelFmt}`;
+
+      try {
+        const r = await this._searchScrip(term);
+        if (r && r.length > 0) {
+          expiries.push(iso);
+          console.log(`[OptionChain] Found expiry: ${term} (${date.toLocaleDateString('en', { weekday: 'short' })}) — ${r.length} instruments`);
+          // Once we have 5 expiries, stop scanning
+          if (expiries.length >= 5) break;
         }
+      } catch (_) { /* skip */ }
 
-        if (!strike || !optionType) return null;
+      // Small delay every 5 requests to avoid rate limiting
+      if (i > 0 && i % 5 === 0) await this._sleep(200);
+    }
 
-        return {
-          symboltoken: String(r.token),
-          tradingsymbol: ts,
-          strike: Math.round(strike), // normalise e.g. 24000.0 → 24000
-          optionType,
-        };
-      })
-      .filter(Boolean);
+    console.log(`[OptionChain] Expiries for ${sym}: ${expiries.join(', ')}`);
+    return expiries;
   }
 
-  // ─── searchScrip Fallback ─────────────────────────────────────────────────
+  // ── Chain fetch ───────────────────────────────────────────────────────────
 
-  async _findOptionInstruments(symbol, expiry) {
-    const searchTerm = `${symbol}${expiry}`;
-    console.log(`[OptionChain] searchScrip: exchange=NFO, searchscrip="${searchTerm}"`);
+  async _fetchChain(sym, angelExpiry) {
+    const term = `${sym}${angelExpiry}`;
+    console.log(`[OptionChain] Fetching chain: ${term}`);
 
-    const makeRequest = async () =>
-      axios.post(
-        `${ANGEL_API_BASE}/rest/secure/angelbroking/order/v1/searchScrip`,
-        { exchange: 'NFO', searchscrip: searchTerm },
-        { httpsAgent: IPV4_AGENT, timeout: 10000, headers: this._headers() }
-      );
+    const instruments = await this._searchScrip(term);
+    if (!instruments || instruments.length === 0) {
+      console.log(`[OptionChain] No instruments for ${term}`);
+      return [];
+    }
+    console.log(`[OptionChain] ${instruments.length} instruments for ${term}`);
+
+    // Parse strike + type from trading symbol
+    const parsed = instruments.map(inst => {
+      const ts = inst.tradingsymbol || '';
+      let suffix = ts;
+      if (ts.startsWith(term)) suffix = ts.slice(term.length);
+      const m = suffix.match(/^(\d+(?:\.\d+)?)(CE|PE)$/);
+      if (!m) return null;
+      return {
+        symboltoken: inst.symboltoken,
+        tradingsymbol: ts,
+        strike: Math.round(parseFloat(m[1])),
+        optionType: m[2],
+      };
+    }).filter(Boolean);
+
+    // Batch-quote all tokens
+    const tokens = parsed.map(p => p.symboltoken);
+    const quotes = await this._batchQuote(tokens);
+    console.log(`[OptionChain] Quotes: ${quotes.size}`);
+
+    return this._buildChain(parsed, quotes);
+  }
+
+  // ── searchScrip wrapper ───────────────────────────────────────────────────
+
+  async _searchScrip(term) {
+    const makeReq = () => axios.post(
+      `${ANGEL_API_BASE}/rest/secure/angelbroking/order/v1/searchScrip`,
+      { exchange: 'NFO', searchscrip: term },
+      { httpsAgent: IPV4_AGENT, timeout: 10000, headers: this._headers() }
+    );
 
     let resp;
     try {
-      resp = await makeRequest();
+      resp = await makeReq();
     } catch (err) {
-      if ((err.response?.status === 403 || err.response?.status === 401) && this._refreshCallback) {
-        console.log(`[OptionChain] ${err.response.status} — refreshing token`);
-        try {
-          this.jwtToken = await this._refreshCallback();
-          resp = await makeRequest();
-        } catch (retryErr) {
-          console.error('[OptionChain] Retry failed:', retryErr.response?.data?.message || retryErr.message);
-          return [];
-        }
+      if ((err.response?.status === 401 || err.response?.status === 403) && this._refreshCallback) {
+        this.jwtToken = await this._refreshCallback();
+        resp = await makeReq();
       } else {
         throw err;
       }
     }
 
-    let instrumentsRaw = [];
-    if (Array.isArray(resp.data?.data)) {
-      instrumentsRaw = resp.data.data;
-    } else if (resp.data?.data && typeof resp.data.data === 'object') {
-      for (const key of Object.keys(resp.data.data)) {
-        if (Array.isArray(resp.data.data[key])) {
-          instrumentsRaw = instrumentsRaw.concat(resp.data.data[key]);
-        }
+    if (Array.isArray(resp.data?.data)) return resp.data.data;
+    if (resp.data?.data && typeof resp.data.data === 'object') {
+      const all = [];
+      for (const v of Object.values(resp.data.data)) {
+        if (Array.isArray(v)) all.push(...v);
       }
+      return all;
     }
-
-    if (instrumentsRaw.length === 0) {
-      console.log(`[OptionChain] searchScrip: no instruments (status=${resp.data?.status}, msg=${resp.data?.message})`);
-      return [];
-    }
-    console.log(`[OptionChain] searchScrip: ${instrumentsRaw.length} instruments`);
-
-    return instrumentsRaw.map(inst => {
-      const ts = inst.tradingsymbol || '';
-      let suffix = ts;
-      if (ts.startsWith(searchTerm)) suffix = ts.slice(searchTerm.length);
-      const m = suffix.match(/^(\d+)(CE|PE)$/);
-      if (!m) return null;
-      return {
-        symboltoken: inst.symboltoken,
-        tradingsymbol: ts,
-        strike: parseInt(m[1]),
-        optionType: m[2],
-      };
-    }).filter(Boolean);
+    return [];
   }
 
-  // ─── Batch Quote ──────────────────────────────────────────────────────────
+  // ── Batch quote ───────────────────────────────────────────────────────────
 
-  _sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-
-  /**
-   * Batch-quote option tokens via Angel One quote API.
-   * 50 tokens per request, 250 ms gap between batches.
-   */
   async _batchQuote(tokens) {
     const quotes = new Map();
     const batchSize = 50;
-
     for (let i = 0; i < tokens.length; i += batchSize) {
-      if (i > 0) await this._sleep(250);
+      if (i > 0) await this._sleep(200);
       const batch = tokens.slice(i, i + batchSize);
 
-      const makeRequest = async () =>
-        axios.post(
-          `${ANGEL_API_BASE}/rest/secure/angelbroking/market/v1/quote/`,
-          { mode: 'FULL', exchangeTokens: { NFO: batch } },
-          { httpsAgent: IPV4_AGENT, timeout: 10000, headers: this._headers() }
-        );
+      const makeReq = () => axios.post(
+        `${ANGEL_API_BASE}/rest/secure/angelbroking/market/v1/quote/`,
+        { mode: 'FULL', exchangeTokens: { NFO: batch } },
+        { httpsAgent: IPV4_AGENT, timeout: 10000, headers: this._headers() }
+      );
 
       try {
         let resp;
-        try {
-          resp = await makeRequest();
-        } catch (err) {
-          if ((err.response?.status === 403 || err.response?.status === 401) && this._refreshCallback) {
+        try { resp = await makeReq(); } catch (err) {
+          if ((err.response?.status === 401 || err.response?.status === 403) && this._refreshCallback) {
             this.jwtToken = await this._refreshCallback();
-            resp = await makeRequest();
-          } else {
-            throw err;
-          }
+            resp = await makeReq();
+          } else throw err;
         }
-
-        const fetched = resp.data?.data?.fetched || [];
-        for (const q of fetched) {
+        for (const q of (resp.data?.data?.fetched || [])) {
           const key = String(q.symbolToken || q.symboltoken || '');
           quotes.set(key, {
             ltp: q.ltp || 0,
@@ -373,111 +258,91 @@ export class OptionChainService {
             totalBuyQty: q.totBuyQuan || 0,
             totalSellQty: q.totSellQuan || 0,
             bidPrice: q.depth?.buy?.[0]?.price || 0,
-            bidQty: q.depth?.buy?.[0]?.quantity || 0,
             askPrice: q.depth?.sell?.[0]?.price || 0,
-            askQty: q.depth?.sell?.[0]?.quantity || 0,
           });
         }
       } catch (err) {
-        console.error(`[OptionChain] Batch quote failed:`, err.response?.data?.message || err.message);
+        console.error(`[OptionChain] Batch quote error:`, err.response?.data?.message || err.message);
       }
     }
-
     return quotes;
   }
 
-  // ─── Chain Builder ────────────────────────────────────────────────────────
+  // ── Chain builder ─────────────────────────────────────────────────────────
 
   _buildChain(instruments, quotes) {
     const strikeMap = new Map();
-
     for (const inst of instruments) {
-      if (!strikeMap.has(inst.strike)) {
-        strikeMap.set(inst.strike, { strike: inst.strike });
-      }
+      if (!strikeMap.has(inst.strike)) strikeMap.set(inst.strike, { strike: inst.strike });
       const entry = strikeMap.get(inst.strike);
-      // Quote map key may be uppercase or lowercase — try both
       const q = quotes.get(inst.symboltoken)
-              || quotes.get(inst.symboltoken.toUpperCase?.())
+              || quotes.get((inst.symboltoken || '').toUpperCase())
               || {};
-
       if (inst.optionType === 'CE') {
-        entry.callToken = inst.symboltoken;
-        entry.callSymbol = inst.tradingsymbol;
-        entry.callLtp = q.ltp || 0;
-        entry.callVolume = q.volume || 0;
-        entry.callOi = q.oi || 0;
-        entry.callBidQty = q.totalBuyQty || 0;
-        entry.callAskQty = q.totalSellQty || 0;
+        entry.callToken    = inst.symboltoken;
+        entry.callSymbol   = inst.tradingsymbol;
+        entry.callLtp      = q.ltp || 0;
+        entry.callVolume   = q.volume || 0;
+        entry.callOi       = q.oi || 0;
         entry.callBidPrice = q.bidPrice || 0;
         entry.callAskPrice = q.askPrice || 0;
       } else {
-        entry.putToken = inst.symboltoken;
-        entry.putSymbol = inst.tradingsymbol;
-        entry.putLtp = q.ltp || 0;
-        entry.putVolume = q.volume || 0;
-        entry.putOi = q.oi || 0;
-        entry.putBidQty = q.totalBuyQty || 0;
-        entry.putAskQty = q.totalSellQty || 0;
+        entry.putToken    = inst.symboltoken;
+        entry.putSymbol   = inst.tradingsymbol;
+        entry.putLtp      = q.ltp || 0;
+        entry.putVolume   = q.volume || 0;
+        entry.putOi       = q.oi || 0;
         entry.putBidPrice = q.bidPrice || 0;
         entry.putAskPrice = q.askPrice || 0;
       }
     }
-
     return Array.from(strikeMap.values()).sort((a, b) => a.strike - b.strike);
   }
 
-  // ─── Expiry Formatting ────────────────────────────────────────────────────
+  // ── Expiry format helpers ─────────────────────────────────────────────────
 
-  /**
-   * Convert any expiry format → "DDMMMYY" (Angel One searchScrip / trading symbol format)
-   * e.g. "2026-08-05" → "05AUG26"
-   *      "05AUG26"    → "05AUG26" (pass-through)
-   *      "05AUG2026"  → "05AUG26"
-   */
-  _formatExpiry(expiry) {
+  /** Convert any expiry format → Angel "DDMMMYY" e.g. "2026-08-11" → "11AUG26" */
+  _toAngelExpiry(expiry) {
     if (!expiry) return '';
-    const MONTHS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
-
     // Already DDMMMYY
-    if (/^\d{2}[A-Z]{3}\d{2}$/.test(expiry)) return expiry;
-
-    // DDMMMYYYY → DDMMMYY
+    if (/^\d{2}[A-Z]{3}\d{2}$/i.test(expiry)) return expiry.toUpperCase();
+    // DDMMMYYYY
     const m4 = expiry.match(/^(\d{2})([A-Z]{3})(\d{4})$/i);
     if (m4) return `${m4[1]}${m4[2].toUpperCase()}${m4[3].slice(-2)}`;
-
-    // ISO: YYYY-MM-DD
-    const iso = expiry.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (iso) {
-      const dd = iso[3].padStart(2, '0');
-      const mmm = MONTHS[parseInt(iso[2], 10) - 1];
-      const yy = iso[1].slice(-2);
-      return `${dd}${mmm}${yy}`;
-    }
-
-    // Last-resort generic parse
-    const d = new Date(expiry);
-    if (!isNaN(d.getTime())) {
-      const dd = String(d.getDate()).padStart(2, '0');
-      return `${dd}${MONTHS[d.getMonth()]}${String(d.getFullYear()).slice(-2)}`;
-    }
-
-    console.warn(`[OptionChain] Cannot parse expiry: ${expiry}`);
-    return expiry;
+    // ISO YYYY-MM-DD
+    return this._isoToAngel(expiry);
   }
 
-  /**
-   * Expand DDMMMYY → DDMMMYYYY for matching master expiry field.
-   * "05AUG26" → "05AUG2026"
-   */
-  _expandYear(ddmmmyy) {
-    const m = ddmmmyy.match(/^(\d{2})([A-Z]{3})(\d{2})$/i);
-    if (!m) return ddmmmyy;
-    const century = parseInt(m[3], 10) >= 50 ? '19' : '20';
-    return `${m[1]}${m[2].toUpperCase()}${century}${m[3]}`;
+  _isoToAngel(iso) {
+    const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return iso;
+    const dd  = m[3].padStart(2, '0');
+    const mmm = MONTHS[parseInt(m[2], 10) - 1];
+    const yy  = m[1].slice(-2);
+    return `${dd}${mmm}${yy}`;
   }
 
-  // ─── Auth Headers ─────────────────────────────────────────────────────────
+  /** Convert Angel "DDMMMYY" back to ISO "YYYY-MM-DD" */
+  _angelToIso(angelFmt) {
+    const m = angelFmt.match(/^(\d{2})([A-Z]{3})(\d{2})$/i);
+    if (!m) return angelFmt;
+    const dd   = m[1];
+    const mon  = m[2].toUpperCase();
+    const yy   = parseInt(m[3], 10);
+    const yyyy = yy >= 50 ? 1900 + yy : 2000 + yy;
+    const mm   = String(MONTHS.indexOf(mon) + 1).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  // ── Auth helpers ──────────────────────────────────────────────────────────
+
+  async _ensureToken() {
+    if (!this.jwtToken && this._refreshCallback) {
+      try { this.jwtToken = await this._refreshCallback(); } catch (_) {}
+    }
+  }
+
+  _sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
   _headers() {
     return {
