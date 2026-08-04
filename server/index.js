@@ -512,6 +512,12 @@ async function connectAngelFeed() {
     // Initial propagation
     propagateToken(angelFeed.session);
 
+    // Pre-warm the instrument master in the background so the first option chain
+    // request is fast (the master is ~10 MB and takes a few seconds to download).
+    optionChainService.refreshInstrumentMaster().catch(e =>
+      console.warn('[OptionChain] Instrument master pre-warm failed:', e.message)
+    );
+
     // Wire refresh callbacks so services can self-heal on 403
     const refreshFn = async () => {
       const token = await angelFeed.ensureValidToken();
