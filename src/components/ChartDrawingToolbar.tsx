@@ -41,6 +41,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Spline,
+  MousePointer,
 } from 'lucide-react';
 import { cn } from '@/utils/helpers';
 import type { DrawingMode } from './DrawingTools';
@@ -59,6 +60,7 @@ type ToolDef = {
 
 const CURSOR_TOOLS: ToolDef[] = [
   { mode: 'none',      icon: <MousePointer2 size={16} strokeWidth={1.5} />, label: 'Pointer',    shortcut: 'Esc', description: 'Select & move' },
+  { mode: 'select',    icon: <MousePointer  size={16} strokeWidth={1.5} />, label: 'Select',     shortcut: 'S',   description: 'Click drawing to select & delete' },
   { mode: 'crosshair', icon: <Crosshair     size={16} strokeWidth={1.5} />, label: 'Crosshair',  shortcut: 'C',   description: 'Crosshair cursor' },
 ];
 

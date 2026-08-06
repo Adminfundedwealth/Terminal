@@ -96,8 +96,16 @@ export function ChartPanel() {
   // Right-click context menu
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; drawingId: number } | null>(null);
 
+  // Selected drawing (select mode — click to select, shows floating delete bar)
+  const [selectedDrawingId, setSelectedDrawingId] = useState<number | null>(null);
+  const [selectedDrawingAnchor, setSelectedDrawingAnchor] = useState<{ x: number; y: number } | null>(null);
+  const selectedDrawingIdRef = useRef<number | null>(null);
+  useEffect(() => { selectedDrawingIdRef.current = selectedDrawingId; }, [selectedDrawingId]);
+
   // Stable ref for clearLastDrawing — needed by keyboard handler registered at mount
   const clearLastDrawingRef = useRef<() => void>(() => {});
+  // Stable ref for applyOverlayDrawings — needed by keyboard handler
+  const applyOverlayDrawingsRef = useRef<(drawings: any[]) => void>(() => {});
 
   // Refs that mirror state so chart click handler always reads current values (no stale closure)
   const drawingModeRef = useRef<DrawingMode>('none');
@@ -174,7 +182,90 @@ export function ChartPanel() {
 
     // Drawing click handler — uses refs so it always reads current mode/drawings
     chart.subscribeClick((param) => {
-      if (drawingModeRef.current === 'none' || drawingModeRef.current === 'crosshair' || !param.point || !param.time) return;
+      if (!param.point) return;
+      const mode = drawingModeRef.current;
+
+      // ── SELECT MODE: click to select nearest drawing ──────────────────────
+      if (mode === 'select') {
+        if (!seriesRef.current || drawingsRef.current.length === 0) return;
+        const px = param.point.x;
+        const py = param.point.y;
+
+        let bestId: number | null = null;
+        let bestDist = 20; // px hit tolerance
+
+        for (const d of drawingsRef.current) {
+          if (d.hidden) continue;
+
+          if (d.type === 'hline') {
+            const lineY = (seriesRef.current as any).priceToCoordinate(d.price);
+            if (lineY != null && Math.abs(py - lineY) < bestDist) {
+              bestDist = Math.abs(py - lineY); bestId = d.id;
+            }
+          } else if (d.type === 'vline') {
+            const lineX = chart.timeScale().timeToCoordinate(d.time as any);
+            if (lineX != null && Math.abs(px - lineX) < bestDist) {
+              bestDist = Math.abs(px - lineX); bestId = d.id;
+            }
+          } else if (d.points && d.points.length > 0) {
+            // Check proximity to endpoints AND midpoint of segment
+            const pts: { time: number; price: number }[] = d.points;
+            for (let i = 0; i < pts.length; i++) {
+              const ex = chart.timeScale().timeToCoordinate(pts[i].time as any);
+              const ey = (seriesRef.current as any).priceToCoordinate(pts[i].price);
+              if (ex != null && ey != null) {
+                const dist = Math.hypot(px - ex, py - ey);
+                if (dist < bestDist) { bestDist = dist; bestId = d.id; }
+              }
+              // Midpoint between consecutive points
+              if (i < pts.length - 1) {
+                const ex2 = chart.timeScale().timeToCoordinate(pts[i + 1].time as any);
+                const ey2 = (seriesRef.current as any).priceToCoordinate(pts[i + 1].price);
+                if (ex != null && ey != null && ex2 != null && ey2 != null) {
+                  const mx = (ex + ex2) / 2;
+                  const my = (ey + ey2) / 2;
+                  const distM = Math.hypot(px - mx, py - my);
+                  if (distM < bestDist) { bestDist = distM; bestId = d.id; }
+
+                  // Point on line segment (closest point)
+                  const dx = ex2 - ex; const dy = ey2 - ey;
+                  const lenSq = dx * dx + dy * dy;
+                  if (lenSq > 0) {
+                    const t = Math.max(0, Math.min(1, ((px - ex) * dx + (py - ey) * dy) / lenSq));
+                    const closestX = ex + t * dx;
+                    const closestY = ey + t * dy;
+                    const distSeg = Math.hypot(px - closestX, py - closestY);
+                    if (distSeg < bestDist) { bestDist = distSeg; bestId = d.id; }
+                  }
+                }
+              }
+            }
+          } else if ((d.type === 'text' || d.type === 'emoji') && d.time != null) {
+            const ex = chart.timeScale().timeToCoordinate(d.time as any);
+            const ey = d.price != null ? (seriesRef.current as any).priceToCoordinate(d.price) : null;
+            if (ex != null && ey != null) {
+              const dist = Math.hypot(px - ex, py - ey);
+              if (dist < bestDist) { bestDist = dist; bestId = d.id; }
+            }
+          }
+        }
+
+        if (bestId !== null) {
+          setSelectedDrawingId(bestId);
+          // Anchor the floating toolbar near the click
+          const rect = chartContainerRef.current?.getBoundingClientRect();
+          if (rect) {
+            setSelectedDrawingAnchor({ x: rect.left + px, y: rect.top + py });
+          }
+        } else {
+          // Clicked empty area — deselect
+          setSelectedDrawingId(null);
+          setSelectedDrawingAnchor(null);
+        }
+        return;
+      }
+
+      if (mode === 'none' || mode === 'crosshair' || !param.time) return;
       const price = seriesRef.current ? (seriesRef.current as any).coordinateToPrice(param.point.y) : 0;
       if (price == null || price === 0) return;
 
@@ -212,7 +303,12 @@ export function ChartPanel() {
     const handleKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       switch (e.key.toLowerCase()) {
-        case 'escape': setDrawingModeSync('none'); break;
+        case 'escape':
+          setDrawingModeSync('none');
+          setSelectedDrawingId(null);
+          setSelectedDrawingAnchor(null);
+          break;
+        case 's': setDrawingModeSync('select'); break;
         case 'c': setDrawingModeSync('crosshair'); break;
         case 't': setDrawingModeSync('trendline'); break;
         case 'a': setDrawingModeSync('arrow'); break;
@@ -222,17 +318,30 @@ export function ChartPanel() {
         case 'f': setDrawingModeSync('fibonacci'); break;
         case 'r': setDrawingModeSync('rectangle'); break;
         case 'n': setDrawingModeSync('text'); break;
-        // New shortcuts — B=Brush, E=Emoji, M=Measure, Z=Zoom
         case 'b': setDrawingModeSync('brush'); break;
         case 'e': setDrawingModeSync('emoji'); break;
         case 'm': setDrawingModeSync('measure'); break;
         case 'z': setDrawingModeSync('zoom'); break;
-        // Toggles — G=Magnet, L=Lock
         case 'g': setMagnetActive(prev => !prev); break;
         case 'l': setLockActive(prev => !prev); break;
-        // Delete / Backspace — remove last drawing
+        // Delete / Backspace — delete selected drawing first, else last
         case 'delete':
-        case 'backspace': clearLastDrawingRef.current(); break;
+        case 'backspace':
+          if (selectedDrawingIdRef.current !== null) {
+            // Delete the selected drawing
+            if (activeSymbolRef.current) {
+              const updated = drawingsRef.current.filter(d => d.id !== selectedDrawingIdRef.current);
+              drawingsRef.current = updated;
+              setDrawings(updated);
+              saveDrawings(activeSymbolRef.current.token, updated);
+              applyOverlayDrawingsRef.current(updated);
+            }
+            setSelectedDrawingId(null);
+            setSelectedDrawingAnchor(null);
+          } else {
+            clearLastDrawingRef.current();
+          }
+          break;
       }
     };
     window.addEventListener('keydown', handleKey);
@@ -665,6 +774,8 @@ export function ChartPanel() {
 
   // Keep clearLastDrawing ref in sync so keyboard handler (registered once at mount) always calls latest version
   useEffect(() => { clearLastDrawingRef.current = clearLastDrawing; });
+  // Keep applyOverlayDrawings ref in sync
+  useEffect(() => { applyOverlayDrawingsRef.current = applyOverlayDrawings; });
 
   // Load chart data when symbol/timeframe/chartType changes
   useEffect(() => {
@@ -1207,7 +1318,6 @@ export function ChartPanel() {
   const handleChartContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     if (!chartRef.current || !seriesRef.current || drawingsRef.current.length === 0) return;
-
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const px = e.clientX - rect.left;
     const py = e.clientY - rect.top;
@@ -1385,7 +1495,7 @@ export function ChartPanel() {
               className={cn(
                 'absolute inset-0 w-full h-full z-[15]',
                 (drawingMode === 'brush' || drawingMode === 'zoom') ? 'cursor-crosshair' : 'pointer-events-none',
-                drawingMode === 'none' && drawings.length > 0 ? 'pointer-events-auto' : '',
+                (drawingMode === 'none' || drawingMode === 'select') && drawings.length > 0 ? 'pointer-events-auto' : '',
               )}
               style={drawingMode === 'crosshair' ? { pointerEvents: 'none', cursor: 'crosshair' } : undefined}
               onMouseDown={overlayMouseDown}
@@ -1455,10 +1565,88 @@ export function ChartPanel() {
                 {(drawingMode === 'trendline' || drawingMode === 'fibonacci' || drawingMode === 'rectangle') && `Click point ${drawClicksRef.current.length + 1} of 2`}
               </div>
             )}
-            {/* Pointer mode hint when drawings exist */}
-            {drawingMode === 'none' && drawings.length > 0 && (
+            {/* Bottom hint — context-sensitive */}
+            {drawingMode === 'none' && drawings.length > 0 && !selectedDrawingId && (
               <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 px-2.5 py-0.5 rounded-full bg-[#1a1d28]/80 text-fw-text-muted text-[12px] pointer-events-none border border-fw-border/30">
-                Right-click drawing to delete · Del key removes last
+                Press <kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-mono text-[11px]">S</kbd> or click Select tool → click any drawing to delete &nbsp;·&nbsp; Right-click drawing for options
+              </div>
+            )}
+            {drawingMode === 'select' && !selectedDrawingId && (
+              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 px-3 py-1 rounded-full bg-fw-accent/20 text-fw-accent text-[12px] pointer-events-none border border-fw-accent/40 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-fw-accent animate-pulse" />
+                Click any drawing to select it
+              </div>
+            )}
+            {drawingMode === 'select' && selectedDrawingId && selectedDrawingAnchor && (
+              <div
+                className="fixed z-[520] flex items-center gap-1 bg-[#0d1117] border border-[#2962ff]/60 rounded-lg shadow-2xl px-1.5 py-1"
+                style={{
+                  left: Math.min(selectedDrawingAnchor.x - 10, window.innerWidth - 240),
+                  top: Math.max(selectedDrawingAnchor.y - 52, 60),
+                }}
+              >
+                {/* Drawing type label */}
+                <span className="px-2 text-[11px] text-[#6b7280] border-r border-[#262a36] pr-2 mr-0.5 capitalize">
+                  {drawings.find(d => d.id === selectedDrawingId)?.type ?? 'Drawing'}
+                </span>
+
+                {/* Hide/Show */}
+                <button
+                  title="Hide / Show"
+                  className="flex items-center gap-1 px-2 py-1 rounded text-[12px] text-[#9ca3af] hover:bg-[#1e2330] hover:text-white transition-colors"
+                  onClick={() => {
+                    handleLayersToggleVisibility(selectedDrawingId);
+                  }}
+                >
+                  <span className="text-[13px]">
+                    {drawings.find(d => d.id === selectedDrawingId)?.hidden ? '👁' : '🙈'}
+                  </span>
+                  <span>{drawings.find(d => d.id === selectedDrawingId)?.hidden ? 'Show' : 'Hide'}</span>
+                </button>
+
+                {/* Duplicate */}
+                <button
+                  title="Duplicate drawing"
+                  className="flex items-center gap-1 px-2 py-1 rounded text-[12px] text-[#9ca3af] hover:bg-[#1e2330] hover:text-white transition-colors"
+                  onClick={() => {
+                    if (!activeSymbol) return;
+                    const src = drawings.find(d => d.id === selectedDrawingId);
+                    if (!src) return;
+                    const copy = { ...src, id: Date.now() + 1 };
+                    const updated = [...drawingsRef.current, copy];
+                    drawingsRef.current = updated;
+                    setDrawings(updated);
+                    saveDrawings(activeSymbol.token, updated);
+                    applyOverlayDrawings(updated);
+                    setSelectedDrawingId(copy.id);
+                  }}
+                >
+                  <span className="text-[13px]">⎘</span>
+                  <span>Duplicate</span>
+                </button>
+
+                {/* Delete — primary action */}
+                <button
+                  title="Delete drawing (Del)"
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded text-[12px] font-semibold bg-red-500/15 text-red-400 hover:bg-red-500/30 hover:text-red-300 transition-colors border border-red-500/20"
+                  onClick={() => {
+                    handleLayersDelete(selectedDrawingId);
+                    setSelectedDrawingId(null);
+                    setSelectedDrawingAnchor(null);
+                  }}
+                >
+                  <span className="text-[13px]">🗑</span>
+                  Delete
+                </button>
+
+                {/* Dismiss */}
+                <button
+                  title="Deselect (Esc)"
+                  className="ml-0.5 flex items-center justify-center w-6 h-6 rounded text-[#6b7280] hover:bg-[#1e2330] hover:text-white transition-colors text-[13px]"
+                  onClick={() => { setSelectedDrawingId(null); setSelectedDrawingAnchor(null); }}
+                >
+                  ✕
+                </button>
               </div>
             )}
 
@@ -1512,6 +1700,10 @@ export function ChartPanel() {
                     className="w-full flex items-center gap-2 px-3 py-2 text-red-400 hover:bg-red-500/10 transition-colors text-left border-t border-fw-border/30"
                     onClick={() => {
                       handleLayersDelete(ctxMenu.drawingId);
+                      if (selectedDrawingId === ctxMenu.drawingId) {
+                        setSelectedDrawingId(null);
+                        setSelectedDrawingAnchor(null);
+                      }
                       setCtxMenu(null);
                     }}
                   >

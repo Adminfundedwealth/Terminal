@@ -13,6 +13,7 @@ import { cn } from '@/utils/helpers';
 export type DrawingMode =
   | 'none'
   | 'crosshair'
+  | 'select'
   | 'trendline'
   | 'arrow'
   | 'ray'
