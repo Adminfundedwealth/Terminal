@@ -747,7 +747,11 @@ export function ChartPanel() {
     if (!chartRef.current) return;
     if (seriesRef.current) { chartRef.current.removeSeries(seriesRef.current); seriesRef.current = null; }
 
-    // Remove old volume series before recreating
+    // Debug: log first candle to verify volume field is present
+    if (data.length > 0) {
+      const sample = data[data.length - 5] || data[0];
+      console.log(`[ChartPanel] OHLCV sample — volume=${sample.volume}, close=${sample.close}`);
+    }
     if (volumeSeriesRef.current) {
       try { chartRef.current.removeSeries(volumeSeriesRef.current); } catch {}
       volumeSeriesRef.current = null;
@@ -771,14 +775,28 @@ export function ChartPanel() {
     }
 
     // ── Permanent volume bars (always visible, bottom 20% of main chart) ──
+    // In lightweight-charts v4, use priceScaleId: '' (overlay scale) and
+    // set scaleMargins on the series price scale directly.
     const vs = chartRef.current.addHistogramSeries({
       priceFormat: { type: 'volume' },
-      priceScaleId: 'volume',
+      priceScaleId: 'vol_overlay',
       lastValueVisible: false,
       priceLineVisible: false,
+      color: 'rgba(38,166,154,0.4)',
     });
-    vs.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 }, drawTicks: false, borderVisible: false });
-    vs.setData(extractVolume(data) as any);
+    vs.priceScale().applyOptions({
+      scaleMargins: { top: 0.85, bottom: 0 },
+      drawTicks: false,
+      borderVisible: false,
+      entireTextOnly: true,
+    });
+    const volData = extractVolume(data);
+    if (volData.length > 0) {
+      console.log(`[Volume] ${volData.length} bars, sample volumes:`, volData.slice(0, 3).map(v => v.value));
+      vs.setData(volData as any);
+    } else {
+      console.warn('[Volume] extractVolume returned empty array');
+    }
     volumeSeriesRef.current = vs;
 
     chartRef.current.timeScale().fitContent();
