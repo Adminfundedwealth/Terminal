@@ -30,16 +30,6 @@ export function Sidebar() {
   return (
     <>
     <div className="w-[48px] min-w-[48px] h-full bg-[#08090e] border-r border-fw-border/60 flex flex-col items-center py-2 select-none flex-shrink-0">
-      {/* Brand Icon */}
-      <div className="mb-2 pb-2 border-b border-fw-border/30 w-full flex justify-center">
-        <div className="w-8 h-8 rounded-lg overflow-hidden bg-white flex items-center justify-center flex-shrink-0" style={{ boxShadow: '0 0 10px rgba(139,92,246,0.4)' }}>
-            <img
-              src="/logo.png"
-              alt="FW"
-              className="w-7 h-7 object-contain"
-            />
-          </div>
-      </div>
 
       {/* Dashboard */}
       <SidebarBtn

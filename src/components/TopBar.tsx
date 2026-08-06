@@ -89,6 +89,10 @@ export function TopBar() {
               className="w-7 h-7 object-contain"
             />
           </div>
+          <div className="flex flex-col leading-none items-center">
+            <span className="text-[13px] font-extrabold tracking-wide bg-gradient-to-r from-[#00D4FF] via-[#4F46E5] to-[#7C3AED] bg-clip-text text-transparent">FUNDEDWEALTH</span>
+            <span className="text-[13px] font-bold tracking-[0.2em] text-fw-accent/80 drop-shadow-[0_0_6px_rgba(59,130,246,0.5)]">TERMINAL</span>
+          </div>
         </div>
 
         {/* Market + Feed Status */}
