@@ -1447,32 +1447,51 @@ export function ChartPanel() {
   const spread = quote ? (quote.high - quote.low) : 0;
   return (
     <div className={cn('h-full flex flex-col bg-[#0d0f15]', isFullscreen && 'fixed inset-0 z-50')}>
-      {/* Symbol Context Bar — Enhanced */}
+      {/* Symbol Context Bar — Institutional Header */}
       {activeSymbol && (
-        <div className="h-[30px] min-h-[30px] flex items-center px-3 gap-4 border-b border-fw-border/40 bg-[#10121a] text-[13px]">
-          <div className="flex items-center gap-2">
-            <span className="font-bold text-fw-text text-[13px]">{activeSymbol.symbol}</span>
-            <span className="text-[13px] text-fw-text-muted bg-[#141720] px-1.5 py-0.5 rounded font-medium">{activeSymbol.exchange}</span>
+        <div className="h-[34px] min-h-[34px] flex items-center px-3 gap-3 border-b border-fw-border/40 bg-[#10121a]">
+          {/* Symbol + Exchange — L3/L5 hierarchy */}
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <span className="tv-symbol-lg">{activeSymbol.symbol}</span>
+            <span className="tv-support bg-[#141720] px-1.5 py-[3px] rounded border border-fw-border/40">{activeSymbol.exchange}</span>
           </div>
           {quote && (
             <>
-              <span className={cn('font-mono font-black text-[14px] tabular-nums', quote.changePercent >= 0 ? 'text-green' : 'text-red')}>{formatPrice(quote.ltp)}</span>
-              <span className={cn('text-[14px] font-mono font-semibold px-1.5 py-0.5 rounded tabular-nums', quote.changePercent >= 0 ? 'text-green bg-green-dim' : 'text-red bg-red-dim')}>
+              {/* L1 — Current Price: largest, most important */}
+              <span className={cn('chart-ltp tv-smooth-value flex-shrink-0', quote.changePercent >= 0 ? 'text-green' : 'text-red')}>
+                {formatPrice(quote.ltp)}
+              </span>
+              {/* Change pill — L2 */}
+              <span className={cn('tv-change-pill flex-shrink-0', quote.changePercent >= 0 ? 'tv-change-pill-up' : 'tv-change-pill-down')}>
                 {quote.changePercent >= 0 ? '+' : ''}{quote.changePercent?.toFixed(2)}%
               </span>
-              <div className="w-px h-3.5 bg-fw-border/30" />
-              <div className="flex items-center gap-2.5 text-[14px]">
-                <span className="text-fw-text-muted">O <span className="font-mono tabular-nums text-fw-text-secondary font-medium">{formatPrice(quote.open || quote.ltp)}</span></span>
-                <span className="text-fw-text-muted">H <span className="font-mono tabular-nums text-green font-medium">{formatPrice(quote.high || quote.ltp)}</span></span>
-                <span className="text-fw-text-muted">L <span className="font-mono tabular-nums text-red font-medium">{formatPrice(quote.low || quote.ltp)}</span></span>
-                <span className="text-fw-text-muted">C <span className="font-mono tabular-nums text-fw-text-secondary font-medium">{formatPrice(quote.close || quote.ltp)}</span></span>
+              <div className="w-px h-4 bg-fw-border/30 flex-shrink-0" />
+              {/* OHLC — L4 label + L5 value pattern */}
+              <div className="flex items-center gap-3">
+                {[
+                  { l: 'O', v: quote.open || quote.ltp, cls: 'text-fw-text-secondary' },
+                  { l: 'H', v: quote.high || quote.ltp, cls: 'text-green' },
+                  { l: 'L', v: quote.low  || quote.ltp, cls: 'text-red' },
+                  { l: 'C', v: quote.close|| quote.ltp, cls: 'text-fw-text-secondary' },
+                ].map(({ l, v, cls }) => (
+                  <span key={l} className="flex items-baseline gap-0.5">
+                    <span className="chart-ohlc-label">{l}</span>
+                    <span className={cn('chart-ohlc-value', cls)}>{formatPrice(v)}</span>
+                  </span>
+                ))}
               </div>
-              <div className="w-px h-3.5 bg-fw-border/30" />
-              <span className="text-fw-text-muted text-[14px]">Vol <span className="font-mono tabular-nums text-fw-text-secondary font-medium">{quote.volume ? (quote.volume / 100000).toFixed(2) + 'L' : '—'}</span></span>
+              <div className="w-px h-4 bg-fw-border/30 flex-shrink-0" />
+              <span className="flex items-baseline gap-0.5 flex-shrink-0">
+                <span className="chart-ohlc-label">Vol</span>
+                <span className="chart-ohlc-value text-fw-text-secondary">{quote.volume ? (quote.volume / 100000).toFixed(2) + 'L' : '—'}</span>
+              </span>
               {spread > 0 && (
                 <>
-                  <div className="w-px h-3.5 bg-fw-border/30" />
-                  <span className="text-fw-text-muted text-[14px]">Spread <span className="font-mono tabular-nums text-fw-text-secondary font-medium">{formatPrice(spread)}</span></span>
+                  <div className="w-px h-4 bg-fw-border/30 flex-shrink-0" />
+                  <span className="flex items-baseline gap-0.5 flex-shrink-0">
+                    <span className="chart-ohlc-label">Spread</span>
+                    <span className="chart-ohlc-value text-fw-text-secondary">{formatPrice(spread)}</span>
+                  </span>
                 </>
               )}
             </>
@@ -1481,17 +1500,17 @@ export function ChartPanel() {
       )}
 
       {/* Toolbar */}
-      <div className="h-[32px] min-h-[32px] flex items-center px-2 gap-0.5 border-b border-fw-border/40 bg-[#10121a]">
+      <div className="h-[30px] min-h-[30px] flex items-center px-2 gap-0.5 border-b border-fw-border/40 bg-[#10121a]">
         {TIMEFRAMES.map((tf) => (
           <button key={tf} onClick={() => setTimeframe(tf)}
-            className={cn('px-1.5 py-0.5 text-[14px] rounded font-medium transition-all', timeframe === tf ? 'bg-fw-accent text-white' : 'text-fw-text-muted hover:text-fw-text hover:bg-fw-hover')}>
+            className={cn('px-1.5 py-0.5 text-[12px] font-semibold rounded transition-all', timeframe === tf ? 'bg-fw-accent text-white' : 'text-fw-text-muted hover:text-fw-text hover:bg-fw-hover')}>
             {timeframeToLabel(tf)}
           </button>
         ))}
         <div className="w-px h-4 bg-fw-border/40 mx-1" />
         {CHART_TYPES.map((ct) => (
           <button key={ct.value} onClick={() => setChartType(ct.value as ChartType)} title={ct.label}
-            className={cn('px-1.5 py-0.5 text-[13px] rounded font-medium transition-all', chartType === ct.value ? 'bg-fw-hover text-fw-text' : 'text-fw-text-muted hover:text-fw-text')}>
+            className={cn('px-1.5 py-0.5 text-[12px] font-medium rounded transition-all', chartType === ct.value ? 'bg-fw-hover text-fw-text' : 'text-fw-text-muted hover:text-fw-text')}>
             {ct.label}
           </button>
         ))}

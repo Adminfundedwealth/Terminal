@@ -112,24 +112,24 @@ export function TopBar() {
         </div>
 
         {/* Index Pulse Strip */}
-        <div className="flex items-center gap-5 mr-3 pr-3 border-r border-fw-border/30 flex-shrink-0 overflow-hidden">
+        <div className="flex items-center gap-4 mr-3 pr-3 border-r border-fw-border/30 flex-shrink-0 overflow-hidden">
           {PULSE_TOKENS.map(({ token, symbol }) => {
             const q = quotes[token];
             const up = (q?.changePercent || 0) >= 0;
             return (
               <div key={token} className="flex items-center gap-1.5">
-                <span className="text-[13px] font-semibold text-fw-text-muted tracking-wide">{symbol}</span>
+                <span className="pulse-symbol">{symbol}</span>
                 {q ? (
                   <>
-                    <span className={cn('ticker-price text-[14px]', up ? 'text-green' : 'text-red')}>
+                    <span className={cn('pulse-price tv-smooth-value', up ? 'text-green' : 'text-red')}>
                       {formatPrice(q.ltp)}
                     </span>
-                    <span className={cn('ticker-change', up ? 'ticker-change-up' : 'ticker-change-down')}>
+                    <span className={cn('tv-change-pill', up ? 'tv-change-pill-up' : 'tv-change-pill-down')}>
                       {up ? '+' : ''}{(q.changePercent || 0).toFixed(2)}%
                     </span>
                   </>
                 ) : (
-                  <span className="text-[13px] text-fw-text-muted/50 font-mono">—</span>
+                  <span className="text-[12px] text-fw-text-muted/50 font-mono">—</span>
                 )}
               </div>
             );
@@ -165,45 +165,45 @@ export function TopBar() {
       </div>
 
       {/* Row 2: Account Metrics + Challenge Context Strip */}
-      <div className="flex items-center px-3 h-[26px] border-t border-fw-border/20 bg-[#090b10]">
-        {/* Account Metrics */}
-        <div className="flex items-center gap-4 text-[14px] mr-4 pr-4 border-r border-fw-border/20">
+      <div className="flex items-center px-3 h-[28px] border-t border-fw-border/20 bg-[#090b10]">
+        {/* Account Metrics — stacked label/value pairs */}
+        <div className="flex items-center gap-5 mr-4 pr-4 border-r border-fw-border/20">
           <MetricInline label="Balance" value={`₹${formatCompact(balance)}`} />
           <MetricInline label="Equity" value={`₹${formatCompact(equity)}`} className={equity >= balance ? 'text-emerald-400' : 'text-red-400'} />
           <MetricInline label="Margin" value={`₹${formatCompact(marginInfo?.usedMargin || 0)}`} className="text-orange-400" />
-          <div className="flex items-center gap-1">
-            <span className="text-fw-text-muted">P&L</span>
+          <div className="flex items-center gap-1.5">
             {pnlValue >= 0 ? <TrendingUp size={10} className="text-green" /> : <TrendingDown size={10} className="text-red" />}
-            <span className={cn('font-mono font-bold tabular-nums', pnlValue >= 0 ? 'text-green' : 'text-red')}>
+            <span className="topbar-metric-label">P&amp;L</span>
+            <span className={cn('topbar-metric-value tv-smooth-value', pnlValue >= 0 ? 'text-green' : 'text-red')}>
               {pnlValue >= 0 ? '+' : ''}₹{formatCompact(Math.abs(pnlValue))}
             </span>
           </div>
         </div>
 
         {/* Challenge Risk Context */}
-        <div className="flex items-center gap-4 text-[14px]">
-          <div className="flex items-center gap-1">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1.5">
             <AlertTriangle size={9} className="text-red-400/70" />
-            <span className="text-fw-text-muted">Daily Left:</span>
-            <span className="font-mono font-bold text-red-400 tabular-nums">₹{formatCompact(dailyLossRemaining)}</span>
+            <span className="topbar-metric-label">Daily Left</span>
+            <span className="topbar-metric-value text-red-400 tabular-nums">₹{formatCompact(dailyLossRemaining)}</span>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
             <Activity size={9} className="text-orange-400/70" />
-            <span className="text-fw-text-muted">DD Left:</span>
-            <span className="font-mono font-bold text-orange-400 tabular-nums">₹{formatCompact(ddRemaining)}</span>
+            <span className="topbar-metric-label">DD Left</span>
+            <span className="topbar-metric-value text-orange-400 tabular-nums">₹{formatCompact(ddRemaining)}</span>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
             <Target size={9} className="text-emerald-400/70" />
-            <span className="text-fw-text-muted">Target:</span>
-            <span className="font-mono font-bold text-emerald-400 tabular-nums">{targetPct.toFixed(0)}%</span>
-            <div className="w-16 h-[4px] rounded-full bg-fw-border/30 overflow-hidden">
+            <span className="topbar-metric-label">Target</span>
+            <span className="topbar-metric-value text-emerald-400 tabular-nums">{targetPct.toFixed(0)}%</span>
+            <div className="w-16 h-[3px] rounded-full bg-fw-border/30 overflow-hidden">
               <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${targetPct}%` }} />
             </div>
           </div>
         </div>
 
         <div className="flex-1" />
-        <span className="text-[13px] text-fw-text-muted/50 font-mono">{new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+        <span className="tv-support text-fw-text-muted/50 font-mono">{new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
       </div>
     </header>
   );
@@ -211,9 +211,9 @@ export function TopBar() {
 
 function MetricInline({ label, value, className }: { label: string; value: string; className?: string }) {
   return (
-    <div className="flex items-center gap-1">
-      <span className="text-fw-text-muted">{label}</span>
-      <span className={cn('font-mono font-bold tabular-nums text-fw-text', className)}>{value}</span>
+    <div className="flex items-center gap-1.5">
+      <span className="topbar-metric-label">{label}</span>
+      <span className={cn('topbar-metric-value tabular-nums text-fw-text', className)}>{value}</span>
     </div>
   );
 }

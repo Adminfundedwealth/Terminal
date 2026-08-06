@@ -34,7 +34,24 @@ export default {
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
       },
       fontSize: {
+        // Legacy
         'xxs': '11px',
+        // ── Institutional Typography Scale ──────────────────────────────
+        // L1 — Primary Trading Values (price, P&L, equity)
+        'tv-l1':   ['22px', { lineHeight: '1.1', fontWeight: '700', letterSpacing: '-0.3px' }],
+        'tv-l1-lg':['24px', { lineHeight: '1.0', fontWeight: '700', letterSpacing: '-0.4px' }],
+        // L2 — Secondary Trading Values (bid/ask, qty, avg price)
+        'tv-l2':   ['15px', { lineHeight: '1.2', fontWeight: '600', letterSpacing: '-0.1px' }],
+        'tv-l2-lg':['17px', { lineHeight: '1.2', fontWeight: '600', letterSpacing: '-0.2px' }],
+        // L3 — Section Headings (WATCHLIST, POSITIONS, DEPTH)
+        'tv-l3':   ['13px', { lineHeight: '1.3', fontWeight: '600', letterSpacing: '0.4px' }],
+        'tv-l3-sm':['12px', { lineHeight: '1.3', fontWeight: '600', letterSpacing: '0.4px' }],
+        // L4 — Labels (muted, below values)
+        'tv-l4':   ['11px', { lineHeight: '1.3', fontWeight: '500', letterSpacing: '0.1px' }],
+        'tv-l4-sm':['10px', { lineHeight: '1.3', fontWeight: '500', letterSpacing: '0.1px' }],
+        // L5 — Supporting (exchange, timestamp, latency)
+        'tv-l5':   ['10px', { lineHeight: '1.2', fontWeight: '400' }],
+        'tv-l5-sm':['11px', { lineHeight: '1.2', fontWeight: '400' }],
       },
       animation: {
         'fade-in': 'fadeIn 0.15s ease-out',

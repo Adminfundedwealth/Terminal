@@ -41,13 +41,40 @@ export function Watchlist() {
   const handleSelectItem = (item: WatchlistItem) => {
     // Clear selected option contract when switching to a stock/index
     useTradingStore.getState().setSelectedContract(null);
+
+    // Resolve exchange correctly per segment so chart history uses the right exchange
+    let exchange: string;
+    let instrumentType: 'EQ' | 'FUT' | 'CE' | 'PE';
+    switch (item.segment) {
+      case 'NFO':
+        exchange = 'NFO';
+        instrumentType = item.symbol.endsWith(' FUT') || item.symbol.includes('FUT') ? 'FUT' : item.symbol.endsWith('CE') ? 'CE' : 'PE';
+        break;
+      case 'MCX':
+        exchange = 'MCX';
+        instrumentType = 'FUT';
+        break;
+      case 'CDS':
+        exchange = 'CDS';
+        instrumentType = 'FUT';
+        break;
+      case 'BSE':
+      case 'BFO':
+        exchange = item.segment;
+        instrumentType = 'EQ';
+        break;
+      default:
+        exchange = 'NSE';
+        instrumentType = 'EQ';
+    }
+
     setActiveSymbol({
       token: item.token,
       symbol: item.symbol,
       name: item.symbol,
       segment: item.segment,
-      instrumentType: item.segment === 'NFO' || item.segment === 'MCX' || item.segment === 'CDS' ? 'FUT' : 'EQ',
-      exchange: item.segment === 'MCX' ? 'MCX' : item.segment === 'BSE' ? 'BSE' : 'NSE',
+      instrumentType,
+      exchange,
       lotSize: 1,
       tickSize: 0.05,
     });
