@@ -18,7 +18,6 @@ export interface JournalEntry {
   tradePhase: 'before' | 'after' | 'during';
   createdAt: string;
   updatedAt: string;
-  /** true when this entry has been successfully persisted to the backend */
   synced?: boolean;
 }
 
@@ -41,9 +40,7 @@ export interface PriceAlert {
 interface JournalState {
   entries: JournalEntry[];
   alerts: PriceAlert[];
-  /** true when backend sync is available (set after first successful API call) */
   backendAvailable: boolean;
-  /** timestamp of last backend hydration */
   _lastHydrated: number;
 
   addEntry: (entry: Omit<JournalEntry, 'id' | 'createdAt' | 'updatedAt' | 'synced'>) => void;
@@ -66,7 +63,6 @@ export const useJournalStore = create<JournalState>()(
       backendAvailable: false,
       _lastHydrated: 0,
 
-      /** Fetch all journal entries from backend and merge with unsynced local ones */
       hydrateFromBackend: async () => {
         try {
           const serverEntries: any[] = await getJournalEntries();
@@ -75,7 +71,6 @@ export const useJournalStore = create<JournalState>()(
             return;
           }
 
-          // Map server entries to local format
           const mapped: JournalEntry[] = serverEntries.map((e: any) => ({
             id: e.id,
             date: e.date || new Date(e.created_at || e.createdAt).toISOString().split('T')[0],
@@ -95,14 +90,11 @@ export const useJournalStore = create<JournalState>()(
             synced: true,
           }));
 
-          // Merge: keep unsynced local entries, replace/add server entries
           const { entries: localEntries } = get();
           const unsyncedLocal = localEntries.filter(e => !e.synced);
           const serverIds = new Set(mapped.map(e => e.id));
-          // Remove local copies of server entries (will be replaced by server version)
           const mergedLocal = unsyncedLocal.filter(e => !serverIds.has(e.id));
 
-          // Combine: server entries + unsynced local-only entries, sort by date desc
           const merged = [...mapped, ...mergedLocal].sort(
             (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
           );
@@ -137,13 +129,10 @@ export const useJournalStore = create<JournalState>()(
           tags: newEntry.tags,
           screenshotUrls: newEntry.screenshotUrl ? [newEntry.screenshotUrl] : [],
         }).then((saved: any) => {
-          // Replace local ID with server ID if returned
           const serverId = saved?.id || saved?.data?.id;
           set((s) => ({
             entries: s.entries.map((e) =>
-              e.id === newEntry.id
-                ? { ...e, id: serverId || e.id, synced: true }
-                : e
+              e.id === newEntry.id ? { ...e, id: serverId || e.id, synced: true } : e
             ),
             backendAvailable: true,
           }));
@@ -172,166 +161,13 @@ export const useJournalStore = create<JournalState>()(
       },
 
       addAlert: (alert) => set((s) => ({
-        alerts: [
-          {
-            ...alert,
-            id: crypto.randomUUID(),
-            createdAt: new Date().toISOString(),
-            triggered: false,
-            active: true,
-          },
-          ...s.alerts,
-        ],
-      })),
-
-      triggerAlert: (id) => set((s) => ({
-        alerts: s.alerts.map((a) =>
-          a.id === id ? { ...a, triggered: true, triggeredAt: new Date().toISOString(), active: false } : a
-        ),
-      })),
-
-      deleteAlert: (id) => set((s) => ({ alerts: s.alerts.filter((a) => a.id !== id) })),
-
-      toggleAlert: (id) => set((s) => ({
-        alerts: s.alerts.map((a) => a.id === id ? { ...a, active: !a.active } : a),
-      })),
-
-      updateAlertLtp: (id, ltp) => set((s) => ({
-        alerts: s.alerts.map((a) => a.id === id ? { ...a, lastLtp: ltp } : a),
-      })),
-    }),
-    { name: 'fw-journal-v2' }
-  )
-);
-
-export interface JournalEntry {
-  id: string;
-  date: string;
-  symbol: string;
-  side: 'BUY' | 'SELL';
-  notes: string;
-  emotion: 'confident' | 'neutral' | 'fearful' | 'greedy' | 'disciplined';
-  rating: 1 | 2 | 3 | 4 | 5;
-  pnl?: number;
-  lessons?: string;
-  mistakes?: string;
-  tags?: string[];
-  screenshotUrl?: string;
-  tradePhase: 'before' | 'after' | 'during';
-  createdAt: string;
-  updatedAt: string;
-  /** true when this entry has been successfully persisted to the backend */
-  synced?: boolean;
-}
-
-export type AlertNotifyMethod = 'popup' | 'sound' | 'toast';
-
-export interface PriceAlert {
-  id: string;
-  symbol: string;
-  token: string;
-  condition: 'above' | 'below' | 'cross_above' | 'cross_below';
-  price: number;
-  triggered: boolean;
-  triggeredAt?: string;
-  createdAt: string;
-  active: boolean;
-  notifyVia: AlertNotifyMethod[];
-  lastLtp?: number;
-}
-
-interface JournalState {
-  entries: JournalEntry[];
-  alerts: PriceAlert[];
-  /** true when backend sync is available (set after first successful API call) */
-  backendAvailable: boolean;
-
-  addEntry: (entry: Omit<JournalEntry, 'id' | 'createdAt' | 'updatedAt' | 'synced'>) => void;
-  updateEntry: (id: string, update: Partial<JournalEntry>) => void;
-  deleteEntry: (id: string) => void;
-
-  addAlert: (alert: Omit<PriceAlert, 'id' | 'createdAt' | 'triggered' | 'active'>) => void;
-  triggerAlert: (id: string) => void;
-  deleteAlert: (id: string) => void;
-  toggleAlert: (id: string) => void;
-  updateAlertLtp: (id: string, ltp: number) => void;
-}
-
-export const useJournalStore = create<JournalState>()(
-  persist(
-    (set, get) => ({
-      entries: [],
-      alerts: [],
-      backendAvailable: false,
-
-      addEntry: (entry) => {
-        const newEntry: JournalEntry = {
-          ...entry,
+        alerts: [{
+          ...alert,
           id: crypto.randomUUID(),
           createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          synced: false,
-        };
-        // Optimistic local update first
-        set((s) => ({ entries: [newEntry, ...s.entries] }));
-
-        // Fire-and-forget backend sync — mark synced on success
-        saveJournalEntry({
-          symbol: newEntry.symbol,
-          side: newEntry.side,
-          date: newEntry.date,
-          pnl: newEntry.pnl,
-          emotion: newEntry.emotion,
-          rating: newEntry.rating,
-          tradePhase: newEntry.tradePhase,
-          notes: newEntry.notes,
-          lessons: newEntry.lessons,
-          mistakes: newEntry.mistakes,
-          tags: newEntry.tags,
-          screenshotUrls: newEntry.screenshotUrl ? [newEntry.screenshotUrl] : [],
-        }).then(() => {
-          set((s) => ({
-            entries: s.entries.map((e) => e.id === newEntry.id ? { ...e, synced: true } : e),
-            backendAvailable: true,
-          }));
-        }).catch(() => {
-          // Backend unavailable — entry stays in localStorage with synced: false
-        });
-      },
-
-      updateEntry: (id, update) => {
-        set((s) => ({
-          entries: s.entries.map((e) =>
-            e.id === id ? { ...e, ...update, updatedAt: new Date().toISOString(), synced: false } : e
-          ),
-        }));
-        // Sync to backend
-        updateJournalEntry(id, update).then(() => {
-          set((s) => ({
-            entries: s.entries.map((e) => e.id === id ? { ...e, synced: true } : e),
-            backendAvailable: true,
-          }));
-        }).catch(() => {});
-      },
-
-      deleteEntry: (id) => {
-        set((s) => ({ entries: s.entries.filter((e) => e.id !== id) }));
-        deleteJournalEntry(id).then(() => {
-          set({ backendAvailable: true });
-        }).catch(() => {});
-      },
-
-      addAlert: (alert) => set((s) => ({
-        alerts: [
-          {
-            ...alert,
-            id: crypto.randomUUID(),
-            createdAt: new Date().toISOString(),
-            triggered: false,
-            active: true,
-          },
-          ...s.alerts,
-        ],
+          triggered: false,
+          active: true,
+        }, ...s.alerts],
       })),
 
       triggerAlert: (id) => set((s) => ({
