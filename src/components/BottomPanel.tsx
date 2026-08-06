@@ -120,7 +120,7 @@ export function BottomPanel() {
             key={tab.id}
             onClick={() => setBottomTab(tab.id)}
             className={cn(
-              'px-3 py-2 text-[13px] border-b-2 transition-all relative',
+              'px-3 py-2 border-b-2 transition-all relative',
               bottomTab === tab.id
                 ? 'fw-tab-active border-fw-accent bg-fw-accent/[0.04]'
                 : 'fw-tab-inactive border-transparent hover:opacity-80 hover:bg-fw-hover/20'
@@ -140,24 +140,24 @@ export function BottomPanel() {
 
         <div className="flex-1" />
 
-        {/* Total P&L + Close All */}
+        {/* Total P&L summary — L1 value, L4 label */}
         {bottomTab === 'positions' && positions.length > 0 && (
-          <div className="flex items-center gap-3 mr-3">
-            <div className="flex items-center gap-1">
-              <span className="text-[13px] text-fw-text-secondary">MTM:</span>
-              <span className={cn('text-[14px] font-mono font-semibold tabular-nums', getChangeColor(totalMtm))}>
+          <div className="flex items-center gap-4 mr-3">
+            <div className="flex flex-col items-end gap-0">
+              <span className="topbar-metric-label">MTM</span>
+              <span className={cn('topbar-metric-value tabular-nums', getChangeColor(totalMtm))}>
                 {formatPnl(totalMtm)}
               </span>
             </div>
-            <div className="flex items-center gap-1">
-              <span className="text-[13px] text-fw-text-secondary">Total:</span>
-              <span className={cn('text-[14px] font-mono font-bold tabular-nums', getChangeColor(totalPnl))}>
+            <div className="flex flex-col items-end gap-0">
+              <span className="topbar-metric-label">Total P&amp;L</span>
+              <span className={cn('risk-value tabular-nums', getChangeColor(totalPnl))}>
                 {formatPnl(totalPnl)}
               </span>
             </div>
             <button
               onClick={handleCloseAll}
-              className="px-2.5 py-1 text-[14px] font-bold text-red-400 bg-red-900/20 border border-red-800/30 rounded hover:bg-red-900/40 transition-colors"
+              className="px-2.5 py-1 tv-label-sm font-bold text-red-400 bg-red-900/20 border border-red-800/30 rounded hover:bg-red-900/40 transition-colors uppercase tracking-wider"
               title="Close all open positions"
             >
               CLOSE ALL
@@ -173,7 +173,7 @@ export function BottomPanel() {
                 key={f}
                 onClick={() => setOrderFilter(f)}
                 className={cn(
-                  'px-2 py-1 text-[13px] rounded-md capitalize font-medium transition-colors',
+                  'px-2 py-1 text-[11px] rounded-md capitalize font-semibold transition-colors tracking-wide',
                   orderFilter === f ? 'bg-fw-accent text-white' : 'text-fw-text-secondary hover:text-fw-text hover:bg-fw-hover'
                 )}
               >
@@ -191,7 +191,7 @@ export function BottomPanel() {
                 key={f}
                 onClick={() => setTradeFilter(f)}
                 className={cn(
-                  'px-2 py-1 text-[13px] rounded-md capitalize font-medium transition-colors',
+                  'px-2 py-1 text-[11px] rounded-md capitalize font-semibold transition-colors tracking-wide',
                   tradeFilter === f ? 'bg-fw-accent text-white' : 'text-fw-text-secondary hover:text-fw-text hover:bg-fw-hover'
                 )}
               >
@@ -293,29 +293,38 @@ function PositionsTable({ positions, onExit, onPartialClose, onReverse }: {
 
           return (
             <tr key={pos.id} className="group">
+              {/* Symbol — L3 name + L5 product type badge */}
               <td>
                 <div className="flex items-center gap-2">
-                  <div className={cn('w-1.5 h-5 rounded-full', pos.qty > 0 ? 'bg-green' : 'bg-red')} />
+                  <div className={cn('w-1.5 h-5 rounded-full flex-shrink-0', pos.qty > 0 ? 'bg-green' : 'bg-red')} />
                   <div>
-                    <span className="font-semibold text-fw-text text-[13px]">{pos.symbol}</span>
-                    <span className="ml-2 text-[14px] text-fw-text-muted bg-fw-bg px-1 py-0.5 rounded">{pos.productType}</span>
+                    <span className="font-semibold text-fw-text text-[13px] tracking-wide">{pos.symbol}</span>
+                    <span className="ml-1.5 tv-support bg-fw-bg px-1 py-0.5 rounded border border-fw-border/40">{pos.productType}</span>
                   </div>
                 </div>
               </td>
+              {/* Side badge */}
               <td>
-                <span className={cn('text-[14px] font-semibold px-1.5 py-0.5 rounded', pos.qty > 0 ? 'text-green bg-green-dim' : 'text-red bg-red-dim')}>
+                <span className={cn('text-[11px] font-bold px-1.5 py-0.5 rounded tracking-wider uppercase', pos.qty > 0 ? 'text-green bg-green-dim' : 'text-red bg-red-dim')}>
                   {side}
                 </span>
               </td>
-              <td className={cn('font-mono font-medium tabular-nums', pos.qty > 0 ? 'text-green' : 'text-red')}>
+              {/* Qty — L2, colored by direction */}
+              <td className={cn('font-mono font-semibold tabular-nums text-[13px]', pos.qty > 0 ? 'text-green' : 'text-red')}>
                 {Math.abs(pos.qty)}
               </td>
-              <td className="font-mono tabular-nums">{formatPrice(pos.avgPrice)}</td>
-              <td className="font-mono font-medium tabular-nums">{formatPrice(pos.ltp)}</td>
-              <td className={cn('font-mono font-semibold tabular-nums', getChangeColor(pos.mtm))}>{formatPnl(pos.mtm)}</td>
-              <td className={cn('font-mono tabular-nums', getChangeColor(pos.pnl - unrealized))}>{formatPnl(pos.pnl - unrealized)}</td>
-              <td className={cn('font-mono tabular-nums', getChangeColor(unrealized))}>{formatPnl(unrealized)}</td>
-              <td className="font-mono tabular-nums text-fw-text-secondary">₹{formatPrice(marginUsed)}</td>
+              {/* Avg Price — L2 secondary */}
+              <td className="font-mono tabular-nums text-[13px] text-fw-text-secondary">{formatPrice(pos.avgPrice)}</td>
+              {/* LTP — L2, slightly prominent */}
+              <td className="font-mono font-semibold tabular-nums text-[13px] text-fw-text">{formatPrice(pos.ltp)}</td>
+              {/* MTM — L1 P&L: most important value, largest */}
+              <td className={cn('font-mono font-bold tabular-nums text-[14px] letter-spacing-[-0.1px]', getChangeColor(pos.mtm))}>{formatPnl(pos.mtm)}</td>
+              {/* Realized */}
+              <td className={cn('font-mono tabular-nums text-[12px]', getChangeColor(pos.pnl - unrealized))}>{formatPnl(pos.pnl - unrealized)}</td>
+              {/* Unrealized */}
+              <td className={cn('font-mono tabular-nums text-[12px]', getChangeColor(unrealized))}>{formatPnl(unrealized)}</td>
+              {/* Margin — L4 muted */}
+              <td className="font-mono tabular-nums text-[12px] text-fw-text-muted">₹{formatPrice(marginUsed)}</td>
               <td>
                 <div className="flex items-center gap-0.5 flex-wrap">
                   {/* ── TASK 3: Position Actions ──────────────────── */}
@@ -324,7 +333,7 @@ function PositionsTable({ positions, onExit, onPartialClose, onReverse }: {
                   <button
                     onClick={() => setExpandedId(isExpanded ? null : pos.id)}
                     className={cn(
-                      'px-1.5 py-1 rounded text-[13px] font-bold transition-colors',
+                      'px-1.5 py-1 rounded text-[11px] font-bold transition-colors',
                       isExpanded ? 'bg-fw-accent text-white' : 'bg-fw-bg border border-fw-border text-fw-text-secondary hover:text-fw-text hover:border-fw-accent'
                     )}
                     title="Partial Close"
@@ -342,14 +351,14 @@ function PositionsTable({ positions, onExit, onPartialClose, onReverse }: {
                     <RotateCcw size={12} />
                   </button>
 
-                  {/* Break Even */}
-                  <button onClick={() => handleBreakEven(pos.id)} className="px-1.5 py-0.5 rounded text-[13px] font-bold bg-fw-bg border border-fw-border text-fw-text-secondary hover:text-fw-accent hover:border-fw-accent transition-colors" title="Break Even — Set SL at entry price">BE</button>
+                  {/* BE / TP / SL action buttons */}
+                  <button onClick={() => handleBreakEven(pos.id)} className="px-1.5 py-0.5 rounded text-[11px] font-bold bg-fw-bg border border-fw-border text-fw-text-secondary hover:text-fw-accent hover:border-fw-accent transition-colors" title="Break Even — Set SL at entry price">BE</button>
 
                   {/* Take Profit */}
-                  <button onClick={() => setTpInput(tpInput?.id === pos.id ? null : { id: pos.id, price: '' })} className={cn('px-1.5 py-0.5 rounded text-[13px] font-bold bg-fw-bg border border-fw-border text-fw-text-secondary hover:text-green hover:border-green transition-colors', tpInput?.id === pos.id && 'border-green text-green')} title="Take Profit">TP</button>
+                  <button onClick={() => setTpInput(tpInput?.id === pos.id ? null : { id: pos.id, price: '' })} className={cn('px-1.5 py-0.5 rounded text-[11px] font-bold bg-fw-bg border border-fw-border text-fw-text-secondary hover:text-green hover:border-green transition-colors', tpInput?.id === pos.id && 'border-green text-green')} title="Take Profit">TP</button>
 
                   {/* Stop Loss */}
-                  <button onClick={() => setSlInput(slInput?.id === pos.id ? null : { id: pos.id, price: '' })} className={cn('px-1.5 py-0.5 rounded text-[13px] font-bold bg-fw-bg border border-fw-border text-fw-text-secondary hover:text-red hover:border-red transition-colors', slInput?.id === pos.id && 'border-red text-red')} title="Stop Loss">SL</button>
+                  <button onClick={() => setSlInput(slInput?.id === pos.id ? null : { id: pos.id, price: '' })} className={cn('px-1.5 py-0.5 rounded text-[11px] font-bold bg-fw-bg border border-fw-border text-fw-text-secondary hover:text-red hover:border-red transition-colors', slInput?.id === pos.id && 'border-red text-red')} title="Stop Loss">SL</button>
 
                   {/* Trailing Stop Loss — not yet implemented */}
                   <PosActionBtn label="TSL" title="Trailing Stop Loss — coming soon" className="opacity-40 cursor-not-allowed" />
@@ -386,7 +395,6 @@ function PositionsTable({ positions, onExit, onPartialClose, onReverse }: {
                     <Plus size={12} />
                   </button>
 
-                  {/* ── TASK 2: Partial Close row (expanded) ──── */}
                   {isExpanded && (
                     <div className="flex items-center gap-0.5 ml-1 pl-1.5 border-l border-fw-border">
                       {[25, 50, 75, 100].map((pct) => (
@@ -394,7 +402,7 @@ function PositionsTable({ positions, onExit, onPartialClose, onReverse }: {
                           key={pct}
                           onClick={() => { onPartialClose(pos.id, pct); setExpandedId(null); }}
                           className={cn(
-                            'px-1.5 py-0.5 text-[13px] font-bold rounded transition-colors',
+                            'px-1.5 py-0.5 text-[11px] font-bold rounded transition-colors',
                             pct === 100
                               ? 'bg-red-900/30 text-red-400 border border-red-800/40 hover:bg-red-900/50'
                               : 'bg-fw-bg border border-fw-border text-fw-text-secondary hover:text-fw-text hover:border-fw-accent'
@@ -410,16 +418,16 @@ function PositionsTable({ positions, onExit, onPartialClose, onReverse }: {
                   {/* SL Input */}
                   {slInput?.id === pos.id && (
                     <div className="flex items-center gap-1 ml-1 pl-1.5 border-l border-red-800/40">
-                      <input type="number" placeholder="SL Price" value={slInput.price} onChange={e => setSlInput({ ...slInput, price: e.target.value })} className="w-20 h-5 bg-fw-bg border border-red-800/40 rounded text-[14px] font-mono text-fw-text px-1.5 outline-none focus:border-red" autoFocus />
-                      <button onClick={() => handleSL(pos.id, slInput.price)} className="px-1.5 py-0.5 text-[13px] font-bold bg-red-900/30 text-red-400 border border-red-800/40 rounded">Set</button>
+                      <input type="number" placeholder="SL Price" value={slInput.price} onChange={e => setSlInput({ ...slInput, price: e.target.value })} className="w-20 h-5 bg-fw-bg border border-red-800/40 rounded text-[12px] font-mono text-fw-text px-1.5 outline-none focus:border-red" autoFocus />
+                      <button onClick={() => handleSL(pos.id, slInput.price)} className="px-1.5 py-0.5 text-[11px] font-bold bg-red-900/30 text-red-400 border border-red-800/40 rounded">Set</button>
                     </div>
                   )}
 
                   {/* TP Input */}
                   {tpInput?.id === pos.id && (
                     <div className="flex items-center gap-1 ml-1 pl-1.5 border-l border-green-800/40">
-                      <input type="number" placeholder="TP Price" value={tpInput.price} onChange={e => setTpInput({ ...tpInput, price: e.target.value })} className="w-20 h-5 bg-fw-bg border border-green-800/40 rounded text-[14px] font-mono text-fw-text px-1.5 outline-none focus:border-green" autoFocus />
-                      <button onClick={() => handleTP(pos.id, tpInput.price)} className="px-1.5 py-0.5 text-[13px] font-bold bg-green-900/30 text-green-400 border border-green-800/40 rounded">Set</button>
+                      <input type="number" placeholder="TP Price" value={tpInput.price} onChange={e => setTpInput({ ...tpInput, price: e.target.value })} className="w-20 h-5 bg-fw-bg border border-green-800/40 rounded text-[12px] font-mono text-fw-text px-1.5 outline-none focus:border-green" autoFocus />
+                      <button onClick={() => handleTP(pos.id, tpInput.price)} className="px-1.5 py-0.5 text-[11px] font-bold bg-green-900/30 text-green-400 border border-green-800/40 rounded">Set</button>
                     </div>
                   )}
                 </div>
@@ -437,7 +445,7 @@ function PosActionBtn({ label, title, className }: { label: string; title: strin
     <button
       title={title}
       className={cn(
-        'px-1.5 py-0.5 rounded text-[13px] font-bold bg-fw-bg border border-fw-border',
+        'px-1.5 py-0.5 rounded text-[11px] font-bold bg-fw-bg border border-fw-border',
         'text-fw-text-secondary hover:text-fw-text transition-colors',
         className
       )}
@@ -480,33 +488,41 @@ function OrdersTable({ orders, onCancel }: { orders: Order[]; onCancel: (id: str
 
           return (
             <tr key={order.id}>
-              <td className="text-fw-text-secondary font-mono text-[14px] tabular-nums">{new Date(order.timestamp).toLocaleTimeString()}</td>
-              <td className="font-semibold text-fw-text">{order.symbol}</td>
+              {/* Timestamp — L5 */}
+              <td className="text-fw-text-muted font-mono text-[11px] tabular-nums">{new Date(order.timestamp).toLocaleTimeString()}</td>
+              {/* Symbol — L3 */}
+              <td className="font-semibold text-fw-text text-[13px] tracking-wide">{order.symbol}</td>
+              {/* Side badge */}
               <td>
-                <span className={cn('text-[14px] font-semibold px-1.5 py-0.5 rounded', order.side === 'BUY' ? 'text-green bg-green-dim' : 'text-red bg-red-dim')}>
+                <span className={cn('text-[11px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider', order.side === 'BUY' ? 'text-green bg-green-dim' : 'text-red bg-red-dim')}>
                   {order.side}
                 </span>
               </td>
-              <td className="text-fw-text-secondary">{order.orderType}</td>
-              <td className="text-fw-text-secondary">{order.productType}</td>
-              <td className="font-mono tabular-nums">{order.filledQty}/{order.qty}</td>
-              <td className="font-mono tabular-nums">{order.avgPrice > 0 ? `₹${formatPrice(order.avgPrice)}` : order.price ? `₹${formatPrice(order.price)}` : 'MKT'}</td>
-              <td className={cn('font-mono font-semibold tabular-nums', orderPnl === null ? 'text-fw-text-muted' : orderPnl >= 0 ? 'text-green' : 'text-red')}>
+              {/* Type / Product — L5 */}
+              <td className="tv-support text-fw-text-secondary">{order.orderType}</td>
+              <td className="tv-support text-fw-text-secondary">{order.productType}</td>
+              {/* Qty — L2 */}
+              <td className="font-mono tabular-nums text-[13px] text-fw-text-secondary">{order.filledQty}/{order.qty}</td>
+              {/* Price — L2 */}
+              <td className="font-mono tabular-nums text-[13px] font-semibold text-fw-text">{order.avgPrice > 0 ? `₹${formatPrice(order.avgPrice)}` : order.price ? `₹${formatPrice(order.price)}` : 'MKT'}</td>
+              {/* P&L — L1 treatment */}
+              <td className={cn('font-mono font-bold tabular-nums text-[14px]', orderPnl === null ? 'text-fw-text-muted' : orderPnl >= 0 ? 'text-green' : 'text-red')}>
                 {orderPnl !== null ? formatPnl(orderPnl) : '—'}
               </td>
+              {/* Status pill */}
               <td>
                 <span className={cn(
-                  'px-2 py-0.5 text-[13px] rounded-md font-semibold',
-                  order.status === 'FILLED' && 'bg-green-900/20 text-green-400',
-                  order.status === 'OPEN' && 'bg-blue-900/20 text-blue-400',
+                  'px-2 py-0.5 text-[11px] rounded font-bold uppercase tracking-wide',
+                  order.status === 'FILLED'    && 'bg-green-900/20 text-green-400',
+                  order.status === 'OPEN'      && 'bg-blue-900/20 text-blue-400',
                   order.status === 'CANCELLED' && 'bg-yellow-900/20 text-yellow-400',
-                  order.status === 'REJECTED' && 'bg-red-900/20 text-red-400',
-                  order.status === 'PENDING' && 'bg-orange-900/20 text-orange-400',
+                  order.status === 'REJECTED'  && 'bg-red-900/20 text-red-400',
+                  order.status === 'PENDING'   && 'bg-orange-900/20 text-orange-400',
                 )}>
                   {order.status}
                 </span>
                 {order.message && order.status === 'REJECTED' && (
-                  <div className="text-[13px] text-red-400/70 mt-0.5 max-w-[180px] truncate" title={order.message}>
+                  <div className="tv-support text-red-400/70 mt-0.5 max-w-[180px] truncate" title={order.message}>
                     {order.message}
                   </div>
                 )}
@@ -514,7 +530,7 @@ function OrdersTable({ orders, onCancel }: { orders: Order[]; onCancel: (id: str
               <td>
                 {order.status === 'OPEN' && (
                   <button onClick={() => onCancel(order.id)} className="p-1.5 rounded-md hover:bg-red-900/30 text-red-400 transition-colors" title="Cancel">
-                    <X size={13} />
+                    <X size={12} />
                   </button>
                 )}
               </td>
@@ -550,23 +566,23 @@ function TradesTable({ trades }: { trades: Trade[] }) {
       <tbody>
         {trades.map((trade) => (
           <tr key={trade.id}>
-            <td className="text-fw-text-secondary font-mono text-[14px] tabular-nums">{new Date(trade.timestamp).toLocaleTimeString()}</td>
-            <td className="font-semibold text-fw-text">{trade.symbol}</td>
+            <td className="text-fw-text-muted font-mono text-[11px] tabular-nums">{new Date(trade.timestamp).toLocaleTimeString()}</td>
+            <td className="font-semibold text-fw-text text-[13px] tracking-wide">{trade.symbol}</td>
             <td>
-              <span className={cn('text-[14px] font-semibold px-1.5 py-0.5 rounded', trade.side === 'BUY' ? 'text-green bg-green-dim' : 'text-red bg-red-dim')}>
+              <span className={cn('text-[11px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider', trade.side === 'BUY' ? 'text-green bg-green-dim' : 'text-red bg-red-dim')}>
                 {trade.side}
               </span>
             </td>
-            <td className="font-mono tabular-nums">{trade.qty}</td>
-            <td className="font-mono tabular-nums">₹{formatPrice(trade.price)}</td>
-            <td className={cn('font-mono font-semibold tabular-nums',
+            <td className="font-mono tabular-nums text-[13px] text-fw-text-secondary">{trade.qty}</td>
+            <td className="font-mono tabular-nums text-[13px] font-semibold text-fw-text">₹{formatPrice(trade.price)}</td>
+            <td className={cn('font-mono font-bold tabular-nums text-[14px]',
               trade.pnl === undefined || trade.pnl === 0 ? 'text-fw-text-muted'
               : trade.pnl > 0 ? 'text-green' : 'text-red'
             )}>
               {trade.pnl !== undefined && trade.pnl !== 0 ? formatPnl(trade.pnl) : '—'}
             </td>
-            <td className="text-fw-text-secondary">{trade.segment}</td>
-            <td className="text-fw-text-muted text-[13px] font-mono">{trade.orderId?.slice(0, 16)}…</td>
+            <td className="tv-support text-fw-text-secondary">{trade.segment}</td>
+            <td className="tv-support text-fw-text-muted font-mono">{trade.orderId?.slice(0, 16)}…</td>
           </tr>
         ))}
       </tbody>
@@ -580,8 +596,8 @@ function EmptyState({ message, icon }: { message: string; icon?: React.ReactNode
   return (
     <div className="flex flex-col items-center justify-center h-full text-fw-text-muted py-6 gap-2">
       {icon && <div className="opacity-30">{icon}</div>}
-      <span className="text-[13px] font-medium">{message}</span>
-      <span className="text-[13px] text-fw-text-muted/60">Data will appear here when market is active</span>
+      <span className="text-[13px] font-semibold tracking-wide">{message}</span>
+      <span className="tv-support text-fw-text-muted/60">Data will appear here when market is active</span>
     </div>
   );
 }

@@ -143,23 +143,24 @@ export function OrderPanel() {
           </div>
         </div>
       )}
-      {/* Compact Header with Symbol + LTP */}
+      {/* Compact Header with Symbol + LTP — L3 symbol, L1 price */}
       <div className="px-3 py-2.5 border-b border-fw-border bg-gradient-to-r from-[#10121a] to-[#0e1018] flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-2">
-          <span className="text-[13px] font-black text-fw-text">{symbol}</span>
+          <span className="tv-symbol-lg">{symbol}</span>
           {activeSymbol?.segment && (
-            <span className="text-[8px] font-bold text-fw-text-muted bg-fw-bg px-1.5 py-0.5 rounded border border-fw-border/50">{activeSymbol.segment}</span>
+            <span className="tv-support bg-fw-bg px-1.5 py-0.5 rounded border border-fw-border/50">{activeSymbol.segment}</span>
           )}
           {activeSymbol?.lotSize && activeSymbol.lotSize > 1 && (
-            <span className="text-[8px] font-mono text-fw-accent bg-fw-accent/8 px-1 py-0.5 rounded">Lot {activeSymbol.lotSize}</span>
+            <span className="tv-support text-fw-accent bg-fw-accent/8 px-1 py-0.5 rounded">Lot {activeSymbol.lotSize}</span>
           )}
         </div>
+        {/* L1 — Current price: must be instantly readable */}
         {quote && (
-          <div className="flex items-center gap-1.5">
-            <span className={cn('text-[16px] font-mono font-black tabular-nums', (quote.changePercent || 0) >= 0 ? 'text-green' : 'text-red')}>
+          <div className="flex flex-col items-end gap-0.5">
+            <span className={cn('op-price tv-smooth-value', (quote.changePercent || 0) >= 0 ? 'text-green' : 'text-red')}>
               {formatPrice(quote.ltp)}
             </span>
-            <span className={cn('text-[13px] font-mono tabular-nums px-1 py-0.5 rounded font-bold', (quote.changePercent || 0) >= 0 ? 'text-green bg-green-dim' : 'text-red bg-red-dim')}>
+            <span className={cn('tv-change-pill', (quote.changePercent || 0) >= 0 ? 'tv-change-pill-up' : 'tv-change-pill-down')}>
               {(quote.changePercent || 0) >= 0 ? '+' : ''}{(quote.changePercent || 0).toFixed(2)}%
             </span>
           </div>
@@ -183,7 +184,7 @@ export function OrderPanel() {
       )}
 
 
-      {/* Order Type Pills — Compact */}
+      {/* Order Type Pills */}
       <div className="px-3 py-2 flex-shrink-0">
         <div className="flex gap-1">
           {ORDER_TYPES.map((ot) => (
@@ -191,7 +192,7 @@ export function OrderPanel() {
               key={ot.value}
               onClick={() => setOrderForm({ orderType: ot.value })}
               className={cn(
-                'flex-1 py-1.5 text-[13px] font-bold rounded-md transition-all',
+                'flex-1 py-1.5 text-[12px] font-bold rounded-md transition-all tracking-wide',
                 orderForm.orderType === ot.value
                   ? 'bg-fw-accent text-white shadow-sm'
                   : 'bg-[#141720] text-fw-text-secondary border border-fw-border/60 hover:text-fw-text hover:border-fw-text-muted'
@@ -223,15 +224,15 @@ export function OrderPanel() {
         </div>
       </div>
 
-      {/* Quantity — Larger, more prominent */}
+      {/* Quantity — L2 value, L4 label */}
       <div className="px-3 pb-2 flex-shrink-0">
-        <label className="text-[14px] text-fw-text-muted uppercase font-semibold tracking-wider mb-1 block">
-          Qty {lotSize > 1 && <span className="text-fw-accent">× {lotSize} lot</span>}
+        <label className="tv-label uppercase tracking-wider mb-1.5 block">
+          Qty {lotSize > 1 && <span className="text-fw-accent font-semibold">× {lotSize} lot</span>}
         </label>
         <div className="flex items-center gap-1">
           <button
             onClick={() => setOrderForm({ qty: Math.max(1, orderForm.qty - (lotSize > 1 ? lotSize : 1)) })}
-            className="w-10 h-10 flex items-center justify-center bg-[#141720] border border-fw-border rounded-md text-fw-text text-[18px] font-bold hover:bg-fw-hover hover:border-fw-text-muted transition-colors"
+            className="w-10 h-10 flex items-center justify-center bg-[#141720] border border-fw-border rounded-md text-fw-text text-[20px] font-bold hover:bg-fw-hover hover:border-fw-text-muted transition-colors"
           >
             −
           </button>
@@ -239,12 +240,12 @@ export function OrderPanel() {
             type="number"
             value={orderForm.qty}
             onChange={(e) => setOrderForm({ qty: Math.max(1, parseInt(e.target.value) || 1) })}
-            className="flex-1 h-10 bg-[#141720] border border-fw-border rounded-md text-center font-mono text-[16px] font-bold text-fw-text outline-none focus:border-fw-accent tabular-nums"
+            className="flex-1 h-10 bg-[#141720] border border-fw-border rounded-md text-center op-qty text-fw-text outline-none focus:border-fw-accent"
             min={1}
           />
           <button
             onClick={() => setOrderForm({ qty: orderForm.qty + (lotSize > 1 ? lotSize : 1) })}
-            className="w-10 h-10 flex items-center justify-center bg-[#141720] border border-fw-border rounded-md text-fw-text text-[18px] font-bold hover:bg-fw-hover hover:border-fw-text-muted transition-colors"
+            className="w-10 h-10 flex items-center justify-center bg-[#141720] border border-fw-border rounded-md text-fw-text text-[20px] font-bold hover:bg-fw-hover hover:border-fw-text-muted transition-colors"
           >
             +
           </button>
@@ -255,7 +256,7 @@ export function OrderPanel() {
               key={q}
               onClick={() => setOrderForm({ qty: q * (lotSize > 1 ? lotSize : 1) })}
               className={cn(
-                'py-1 text-[14px] rounded-md font-bold tabular-nums transition-colors',
+                'py-1 text-[12px] rounded-md font-bold tabular-nums transition-colors',
                 orderForm.qty === q * (lotSize > 1 ? lotSize : 1)
                   ? 'bg-fw-accent/20 text-fw-accent border border-fw-accent/30'
                   : 'bg-[#141720] border border-fw-border/40 text-fw-text-muted hover:text-fw-text'
@@ -267,60 +268,60 @@ export function OrderPanel() {
         </div>
       </div>
 
-      {/* Price fields — only when needed */}
+      {/* Price fields */}
       {(orderForm.orderType === 'LIMIT' || orderForm.orderType === 'SL') && (
         <div className="px-3 pb-2 flex-shrink-0">
-          <label className="text-[14px] text-fw-text-muted uppercase font-semibold tracking-wider mb-1 block">Price</label>
+          <label className="tv-label uppercase tracking-wider mb-1.5 block">Price</label>
           <input
             type="number"
             value={orderForm.price || ''}
             onChange={(e) => setOrderForm({ price: parseFloat(e.target.value) || 0 })}
             placeholder={quote ? formatPrice(quote.ltp) : '0.00'}
-            className="w-full h-9 bg-[#141720] border border-fw-border rounded-md font-mono text-[14px] font-semibold text-fw-text px-3 outline-none focus:border-fw-accent tabular-nums"
+            className="w-full h-10 bg-[#141720] border border-fw-border rounded-md font-mono text-[15px] font-semibold text-fw-text px-3 outline-none focus:border-fw-accent tabular-nums"
           />
         </div>
       )}
       {(orderForm.orderType === 'SL' || orderForm.orderType === 'SL-M') && (
         <div className="px-3 pb-2 flex-shrink-0">
-          <label className="text-[14px] text-fw-text-muted uppercase font-semibold tracking-wider mb-1 block">Trigger Price</label>
+          <label className="tv-label uppercase tracking-wider mb-1.5 block">Trigger Price</label>
           <input
             type="number"
             value={orderForm.triggerPrice || ''}
             onChange={(e) => setOrderForm({ triggerPrice: parseFloat(e.target.value) || 0 })}
-            className="w-full h-9 bg-[#141720] border border-fw-border rounded-md font-mono text-[14px] font-semibold text-fw-text px-3 outline-none focus:border-fw-accent tabular-nums"
+            className="w-full h-10 bg-[#141720] border border-fw-border rounded-md font-mono text-[15px] font-semibold text-fw-text px-3 outline-none focus:border-fw-accent tabular-nums"
           />
         </div>
       )}
 
-      {/* Inline SL/TP — Advanced toggle */}
+      {/* SL / Target toggle */}
       <div className="px-3 pb-2 flex-shrink-0">
         <button
           onClick={() => setShowAdvanced(!showAdvanced)}
-          className="flex items-center gap-1 text-[14px] text-fw-text-muted hover:text-fw-text-secondary transition-colors"
+          className="flex items-center gap-1 tv-label hover:text-fw-text-secondary transition-colors"
         >
           {showAdvanced ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
-          <span className="font-semibold uppercase tracking-wider">SL / Target</span>
+          <span className="uppercase tracking-wider">SL / Target</span>
         </button>
         {showAdvanced && (
           <div className="grid grid-cols-2 gap-2 mt-1.5">
             <div>
-              <label className="text-[13px] text-red font-bold uppercase">Stop Loss</label>
+              <label className="tv-label-sm text-red font-bold uppercase tracking-wider block mb-1">Stop Loss</label>
               <input
                 type="number"
                 value={slPrice || ''}
                 onChange={(e) => setSlPrice(parseFloat(e.target.value) || 0)}
                 placeholder="0.00"
-                className="w-full h-8 bg-[#141720] border border-red-900/30 rounded-md font-mono text-[14px] text-fw-text px-2 outline-none focus:border-red tabular-nums mt-0.5"
+                className="w-full h-9 bg-[#141720] border border-red-900/30 rounded-md font-mono text-[14px] text-fw-text px-2 outline-none focus:border-red tabular-nums"
               />
             </div>
             <div>
-              <label className="text-[13px] text-green font-bold uppercase">Target</label>
+              <label className="tv-label-sm text-green font-bold uppercase tracking-wider block mb-1">Target</label>
               <input
                 type="number"
                 value={tpPrice || ''}
                 onChange={(e) => setTpPrice(parseFloat(e.target.value) || 0)}
                 placeholder="0.00"
-                className="w-full h-8 bg-[#141720] border border-green-900/30 rounded-md font-mono text-[14px] text-fw-text px-2 outline-none focus:border-green tabular-nums mt-0.5"
+                className="w-full h-9 bg-[#141720] border border-green-900/30 rounded-md font-mono text-[14px] text-fw-text px-2 outline-none focus:border-green tabular-nums"
               />
             </div>
           </div>
@@ -365,50 +366,49 @@ export function OrderPanel() {
         </div>
       )}
 
-      {/* Margin / Risk Context */}
+      {/* Margin / Risk Context — L4 labels, L5 values */}
       <div className="px-3 py-2 border-t border-fw-border/30 bg-[#090b10] flex-shrink-0">
-        <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[13px]">
+        <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
           <div className="flex items-center justify-between">
-            <span className="text-fw-text-muted">Est. Margin</span>
-            <span className="font-mono text-fw-text-secondary tabular-nums">₹{quote ? formatPrice(quote.ltp * orderForm.qty * 0.15) : '—'}</span>
+            <span className="tv-label">Est. Margin</span>
+            <span className="font-mono text-[12px] font-semibold text-fw-text-secondary tabular-nums">₹{quote ? formatPrice(quote.ltp * orderForm.qty * 0.15) : '—'}</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-fw-text-muted">Max Loss</span>
-            <span className="font-mono text-red-400 tabular-nums">{slPrice > 0 ? `₹${formatPrice(Math.abs(quote?.ltp || 0 - slPrice) * orderForm.qty)}` : '—'}</span>
+            <span className="tv-label">Max Loss</span>
+            <span className="font-mono text-[12px] font-semibold text-red-400 tabular-nums">{slPrice > 0 ? `₹${formatPrice(Math.abs(quote?.ltp || 0 - slPrice) * orderForm.qty)}` : '—'}</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-fw-text-muted">Order Value</span>
-            <span className="font-mono text-fw-text-secondary tabular-nums">₹{quote ? formatPrice(quote.ltp * orderForm.qty) : '—'}</span>
+            <span className="tv-label">Order Value</span>
+            <span className="font-mono text-[12px] font-semibold text-fw-text-secondary tabular-nums">₹{quote ? formatPrice(quote.ltp * orderForm.qty) : '—'}</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-fw-text-muted">Risk %</span>
-            <span className="font-mono text-orange-400 tabular-nums">{slPrice > 0 && quote ? `${((Math.abs(quote.ltp - slPrice) * orderForm.qty) / (account?.balance || 1000000) * 100).toFixed(2)}%` : '—'}</span>
+            <span className="tv-label">Risk %</span>
+            <span className="font-mono text-[12px] font-semibold text-orange-400 tabular-nums">{slPrice > 0 && quote ? `${((Math.abs(quote.ltp - slPrice) * orderForm.qty) / (account?.balance || 1000000) * 100).toFixed(2)}%` : '—'}</span>
           </div>
         </div>
       </div>
 
-      {/* Submit Buttons — Always visible at bottom */}
+      {/* Submit Buttons — BUY/SELL: largest text, maximum weight */}
       <div className="px-3 py-3 border-t border-fw-border bg-[#0a0c12] flex-shrink-0">
         <div className="grid grid-cols-2 gap-2">
           <button
             onClick={() => handleSubmitRequest('BUY')}
             disabled={isSubmitting || !symbol}
-            className="py-3 rounded-md text-[14px] font-black text-white bg-[var(--fw-green)] hover:brightness-110 disabled:opacity-40 shadow-[0_2px_12px_rgba(34,197,94,0.25)] transition-all active:scale-[0.98]"
+            className="py-3.5 rounded-md fw-btn-trade text-white bg-[var(--fw-green)] hover:brightness-110 disabled:opacity-40 shadow-[0_2px_12px_rgba(34,197,94,0.25)] transition-all active:scale-[0.98]"
           >
             BUY
           </button>
           <button
             onClick={() => handleSubmitRequest('SELL')}
             disabled={isSubmitting || !symbol}
-            className="py-3 rounded-md text-[14px] font-black text-white bg-[var(--fw-red)] hover:brightness-110 disabled:opacity-40 shadow-[0_2px_12px_rgba(239,68,68,0.25)] transition-all active:scale-[0.98]"
+            className="py-3.5 rounded-md fw-btn-trade text-white bg-[var(--fw-red)] hover:brightness-110 disabled:opacity-40 shadow-[0_2px_12px_rgba(239,68,68,0.25)] transition-all active:scale-[0.98]"
           >
             SELL
           </button>
         </div>
-        {/* Keyboard hint */}
         <div className="flex items-center justify-center gap-3 mt-1.5">
-          <span className="text-[13px] text-fw-text-muted"><kbd className="px-1 py-0.5 bg-fw-bg border border-fw-border rounded text-[8px] font-mono">B</kbd> Buy</span>
-          <span className="text-[13px] text-fw-text-muted"><kbd className="px-1 py-0.5 bg-fw-bg border border-fw-border rounded text-[8px] font-mono">S</kbd> Sell</span>
+          <span className="tv-support text-fw-text-muted"><kbd className="px-1 py-0.5 bg-fw-bg border border-fw-border rounded text-[8px] font-mono">B</kbd> Buy</span>
+          <span className="tv-support text-fw-text-muted"><kbd className="px-1 py-0.5 bg-fw-bg border border-fw-border rounded text-[8px] font-mono">S</kbd> Sell</span>
         </div>
       </div>
     </div>

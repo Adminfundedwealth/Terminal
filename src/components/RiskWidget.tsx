@@ -80,25 +80,26 @@ export function RiskWidget() {
         <RiskBadge level={riskLevel} />
       </div>
 
-      {/* P&L + Account Quick Stats */}
-      <div className="flex items-center justify-between px-3 py-1.5 border-b border-fw-border/20">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1">
-            {todayPnl >= 0 ? <TrendingUp size={10} className="text-green" /> : <TrendingDown size={10} className="text-red" />}
-            <span className="text-[13px] text-fw-text-muted">Day P&L</span>
-            <span className={cn('text-[13px] font-mono font-bold tabular-nums', todayPnl >= 0 ? 'text-green' : 'text-red')}>
-              {todayPnl >= 0 ? '+' : ''}₹{fmtRisk(Math.abs(todayPnl))}
-            </span>
+      {/* P&L + Account Quick Stats — L1 equity, L4 labels */}
+      <div className="flex items-center justify-between px-3 py-2 border-b border-fw-border/20">
+        <div className="flex items-center gap-4">
+          <div className="flex flex-col gap-0.5">
+            <span className="tv-label">Day P&amp;L</span>
+            <div className="flex items-center gap-1">
+              {todayPnl >= 0 ? <TrendingUp size={10} className="text-green" /> : <TrendingDown size={10} className="text-red" />}
+              <span className={cn('risk-value tv-smooth-value', todayPnl >= 0 ? 'text-green' : 'text-red')}>
+                {todayPnl >= 0 ? '+' : ''}₹{fmtRisk(Math.abs(todayPnl))}
+              </span>
+            </div>
           </div>
-          <div className="flex items-center gap-1">
-            <Activity size={9} className="text-fw-text-muted" />
-            <span className="text-[13px] text-fw-text-muted">Trades</span>
-            <span className="text-[14px] font-mono font-bold text-fw-text tabular-nums">{todayTrades}</span>
+          <div className="flex flex-col gap-0.5">
+            <span className="tv-label">Trades</span>
+            <span className="risk-value text-fw-text">{todayTrades}</span>
           </div>
         </div>
-        <div className="flex items-center gap-1">
-          <span className="text-[13px] text-fw-text-muted">Equity</span>
-          <span className="text-[14px] font-mono font-bold text-fw-text tabular-nums">₹{fmtRisk(equity)}</span>
+        <div className="flex flex-col gap-0.5 items-end">
+          <span className="tv-label">Equity</span>
+          <span className="risk-value text-fw-text">₹{fmtRisk(equity)}</span>
         </div>
       </div>
 
@@ -161,24 +162,25 @@ function RiskRow({ icon, label, pct, remaining, limit, color, isTarget }: {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-1">
+      <div className="flex items-center justify-between mb-1.5">
         <div className="flex items-center gap-1.5">
           <span className={iconColor}>{icon}</span>
-          <span className="text-[14px] text-fw-text-secondary font-semibold">{label}</span>
+          <span className="risk-label">{label}</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-[13px] text-fw-text-muted font-mono tabular-nums">
+          <span className={cn('font-mono text-[11px] font-medium tabular-nums text-fw-text-muted')}>
             {remainingLabel}
           </span>
+          {/* L1-sized percentage — the most important risk number */}
           <span className={cn(
-            'text-[14px] font-mono font-black tabular-nums min-w-[28px] text-right',
+            'risk-pct',
             isLoading ? 'text-fw-text-muted' : textColor,
           )}>
             {pctLabel}
           </span>
         </div>
       </div>
-      <div className={cn('h-[5px] rounded-full overflow-hidden', bgTint)}>
+      <div className={cn('h-[4px] rounded-full overflow-hidden', bgTint)}>
         <div
           className={cn('h-full rounded-full transition-all duration-700', isLoading ? 'bg-fw-border/40' : barColor)}
           style={{ width: `${safePct}%` }}
