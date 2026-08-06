@@ -39,7 +39,7 @@ interface AppState {
   terminalLayout: TerminalLayout;
   showOptionChain: boolean;
   showMarketDepth: boolean;
-  bottomTab: 'positions' | 'orders' | 'trades' | 'journal' | 'alerts' | 'analytics' | 'risk' | 'ai' | 'accounts' | 'activity' | 'scanner' | 'admin';
+  bottomTab: 'positions' | 'orders' | 'trades' | 'journal' | 'alerts' | 'analytics' | 'risk' | 'ai' | 'accounts' | 'activity' | 'scanner';
   searchOpen: boolean;
   panels: PanelVisibility;
   pinnedTokens: string[];
