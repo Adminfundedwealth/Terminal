@@ -173,7 +173,17 @@ export class AccountService {
         '1step': { profitTargetPct: 10, dailyLossLimitPct: 3, maxDrawdownPct: 6 },
         '2step': { profitTargetPct: 8, dailyLossLimitPct: 3, maxDrawdownPct: 8 },
       };
-      const planKey = ch?.plan?.toLowerCase() || 'flash';
+      // If plan is missing, infer from challenge type (fallback logic)
+      let inferredPlan = ch?.plan || 'flash';
+      if (!ch?.plan && ch?.type) {
+        // For types like 'evaluation_phase1', '2step_evaluation_phase1', etc., infer the product
+        const typeStr = String(ch.type).toLowerCase();
+        if (typeStr.includes('2step')) inferredPlan = '2step';
+        else if (typeStr.includes('1step')) inferredPlan = '1step';
+        else if (typeStr.includes('instant')) inferredPlan = 'instant';
+        else inferredPlan = 'flash';
+      }
+      const planKey = inferredPlan.toLowerCase();
       const defaults = planDefaults[planKey] || planDefaults.flash;
       
       return {
@@ -193,7 +203,7 @@ export class AccountService {
         challenge: ch ? {
           id: ch.id,
           type: ch.type,
-          plan: ch.plan,
+          plan: inferredPlan,
           initialBalance: parseFloat(ch.initial_balance) || 0,
           status: ch.status,
           startedAt: ch.started_at,
@@ -551,6 +561,7 @@ export class AccountService {
   /**
    * Fire-and-forget order execution.
    * Order is already PENDING in DB. This routes through risk → broker → fill handling.
+   * If slPrice or tpPrice are set, attaches them automatically after fill.
    */
   _executeOrderAsync(accountId, orderId, params) {
     // Non-blocking — execution happens in background
@@ -561,7 +572,32 @@ export class AccountService {
           console.error(`[AccountService] Cannot execute order — account ${accountId} not found`);
           return;
         }
-        await this.executionService.executeOrder(accountId, orderId, params, account);
+        const result = await this.executionService.executeOrder(accountId, orderId, params, account);
+
+        // After a MARKET/FILLED order, auto-attach SL and/or TP if provided
+        if (result?.status === 'FILLED' && (params.slPrice > 0 || params.tpPrice > 0)) {
+          // Find the position that was just opened/modified
+          const positions = await this.getPositions(accountId);
+          const pos = positions.find(p => p.symbol === params.symbol && p.qty !== 0);
+          if (pos) {
+            if (params.slPrice > 0) {
+              try {
+                await this.executionService.attachStopLoss(accountId, pos.id, params.slPrice);
+                console.log(`[AccountService] Auto-attached SL @ ${params.slPrice} for ${params.symbol}`);
+              } catch (e) {
+                console.warn(`[AccountService] SL attachment failed: ${e.message}`);
+              }
+            }
+            if (params.tpPrice > 0) {
+              try {
+                await this.executionService.attachTakeProfit(accountId, pos.id, params.tpPrice);
+                console.log(`[AccountService] Auto-attached TP @ ${params.tpPrice} for ${params.symbol}`);
+              } catch (e) {
+                console.warn(`[AccountService] TP attachment failed: ${e.message}`);
+              }
+            }
+          }
+        }
       } catch (err) {
         console.error(`[AccountService] Order execution failed for ${orderId}:`, err.message);
       }

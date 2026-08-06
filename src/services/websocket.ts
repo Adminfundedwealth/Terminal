@@ -1,5 +1,6 @@
 import { useMarketStore } from '@/store/marketStore';
 import { useTradingStore } from '@/store/tradingStore';
+import { getAccount } from '@/services/api';
 import type { MarketQuote, MarketDepth } from '@/types';
 
 type MessageHandler = (data: any) => void;
@@ -7,11 +8,13 @@ type MessageHandler = (data: any) => void;
 class WebSocketService {
   private ws: WebSocket | null = null;
   private reconnectAttempts = 0;
-  private maxReconnectAttempts = 10;
+  private maxReconnectAttempts = 30;       // was 10 — now retries for much longer
   private reconnectDelay = 1000;
+  private maxReconnectDelay = 15000;       // cap backoff at 15 seconds
   private handlers: Map<string, Set<MessageHandler>> = new Map();
   private subscribedTokens: Set<string> = new Set();
   private isConnecting = false;
+  private _reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
   connect(url?: string) {
     if (this.isConnecting || (this.ws && this.ws.readyState === WebSocket.OPEN)) return;
@@ -26,6 +29,7 @@ class WebSocketService {
         console.log('[WS] Connected');
         this.isConnecting = false;
         this.reconnectAttempts = 0;
+        this._reconnectTimer = null;
 
         // Resubscribe to tokens
         if (this.subscribedTokens.size > 0) {
@@ -61,15 +65,26 @@ class WebSocketService {
   }
 
   private attemptReconnect() {
+    if (this._reconnectTimer) return; // already scheduled
+
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.error('[WS] Max reconnection attempts reached');
+      console.error('[WS] Max reconnection attempts reached — reload the page to reconnect');
+      // Dispatch a custom event so the UI can show a "Reconnecting..." banner
+      window.dispatchEvent(new CustomEvent('ws:dead'));
       return;
     }
 
     this.reconnectAttempts++;
-    const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
-    console.log(`[WS] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
-    setTimeout(() => this.connect(), delay);
+    // Capped exponential backoff: 1s, 2s, 4s, 8s, 15s, 15s, ...
+    const delay = Math.min(
+      this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1),
+      this.maxReconnectDelay
+    );
+    console.log(`[WS] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+    this._reconnectTimer = setTimeout(() => {
+      this._reconnectTimer = null;
+      this.connect();
+    }, delay);
   }
 
   private handleMessage(data: any) {
@@ -131,24 +146,17 @@ class WebSocketService {
       case 'account_breached': {
         // Force account re-fetch so RiskOverlay fires immediately
         console.warn('[WS] account status event:', data.type, data.data || data);
-        // Re-fetch account info to sync locked/breached state
-        import('@/services/api').then(({ getAccount }) => {
-          getAccount().then((acc) => trading.setAccount(acc)).catch(() => {});
-        });
+        getAccount().then((acc) => useTradingStore.getState().setAccount(acc)).catch(() => {});
         break;
       }
       case 'account_unlocked': {
-        import('@/services/api').then(({ getAccount }) => {
-          getAccount().then((acc) => trading.setAccount(acc)).catch(() => {});
-        });
+        getAccount().then((acc) => useTradingStore.getState().setAccount(acc)).catch(() => {});
         break;
       }
       case 'challenge_update':
       case 'risk_progress': {
-        // Re-fetch account to sync challenge/risk progress
-        import('@/services/api').then(({ getAccount }) => {
-          getAccount().then((acc) => trading.setAccount(acc)).catch(() => {});
-        });
+        // Re-fetch account to sync challenge/risk progress — throttled to prevent flooding
+        getAccount().then((acc) => useTradingStore.getState().setAccount(acc)).catch(() => {});
         break;
       }
     }

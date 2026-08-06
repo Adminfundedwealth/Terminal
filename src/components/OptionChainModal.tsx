@@ -72,14 +72,12 @@ export function OptionChainModal() {
     loadExpiries();
   }, [symbol]);
 
-  // ── Load chain when expiry set, with 300ms debounce ───────────────────────
+  // ── Load chain immediately when expiry is set ─────────────────────────────
   useEffect(() => {
     if (!selectedExpiry) return;
+    // Cancel any previous debounce and load immediately
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      if (isMountedRef.current) doLoad();
-    }, 300);
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+    if (isMountedRef.current) doLoad();
   }, [symbol, selectedExpiry]);
 
   // ── Load functions ─────────────────────────────────────────────────────────
@@ -112,13 +110,14 @@ export function OptionChainModal() {
   };
 
   const loadExpiries = async () => {
+    setChain([]); // clear stale chain whenever we load fresh expiries
+    setError(null);
     try {
       const data = await getExpiries(symbol);
       if (!isMountedRef.current) return;
       if (data && data.length > 0) {
         setExpiries(data);
         setSelectedExpiry(data[0]);
-        setChain([]); // clear stale chain from previous symbol
       }
     } catch {
       if (!isMountedRef.current) return;
@@ -137,7 +136,6 @@ export function OptionChainModal() {
       setExpiries(fallback);
       if (fallback.length > 0) {
         setSelectedExpiry(fallback[0]);
-        setChain([]);
       }
     }
   };
@@ -233,17 +231,11 @@ export function OptionChainModal() {
           </div>
         ) : chain.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full gap-3 px-4 text-center">
-            <span className="text-[28px]">⛓</span>
-            <p className="text-[13px] text-fw-text-secondary font-semibold">No Data Yet</p>
+            <div className="w-5 h-5 border-2 border-fw-accent border-t-transparent rounded-full animate-spin" />
+            <p className="text-[13px] text-fw-text-secondary font-semibold">Loading {symbol}</p>
             <p className="text-[12px] text-fw-text-muted">
               {selectedExpiry ? `${symbol} · ${selectedExpiry}` : 'Select a symbol'}
             </p>
-            <button
-              onClick={handleRetry}
-              className="px-4 py-1.5 text-[12px] font-semibold bg-fw-accent text-white rounded hover:brightness-110 transition-all"
-            >
-              Load Chain
-            </button>
           </div>
         ) : (
           <table className="w-full border-collapse">

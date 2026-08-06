@@ -71,8 +71,24 @@ export function OrderPanel() {
     if (!symbol || !token) return;
     setIsSubmitting(true);
     try {
-      await placeOrder({ symbol, token, segment: activeSymbol?.segment || 'NSE', side, orderType: orderForm.orderType, productType: orderForm.productType, qty: orderForm.qty, price: orderForm.orderType === 'LIMIT' || orderForm.orderType === 'SL' ? orderForm.price : undefined, triggerPrice: orderForm.orderType === 'SL' || orderForm.orderType === 'SL-M' ? orderForm.triggerPrice : undefined, validity: orderForm.validity === 'GTD' ? 'GTC' : orderForm.validity, isAmo: orderForm.isAmo });
+      await placeOrder({
+        symbol, token,
+        segment: activeSymbol?.segment || 'NSE',
+        side,
+        orderType: orderForm.orderType,
+        productType: orderForm.productType,
+        qty: orderForm.qty,
+        price: orderForm.orderType === 'LIMIT' || orderForm.orderType === 'SL' ? orderForm.price : undefined,
+        triggerPrice: orderForm.orderType === 'SL' || orderForm.orderType === 'SL-M' ? orderForm.triggerPrice : undefined,
+        validity: orderForm.validity === 'GTD' ? 'GTC' : orderForm.validity,
+        isAmo: orderForm.isAmo,
+        slPrice: slPrice > 0 ? slPrice : undefined,
+        tpPrice: tpPrice > 0 ? tpPrice : undefined,
+      });
       showToast(orderSuccessMessage({ side, qty: orderForm.qty, symbol }));
+      // Reset SL/TP inputs after successful order
+      setSlPrice(0);
+      setTpPrice(0);
     } catch (err: any) { showToast(err.message || 'Order failed — check risk rules'); }
     finally { setIsSubmitting(false); }
   };

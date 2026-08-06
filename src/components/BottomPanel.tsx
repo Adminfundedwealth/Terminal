@@ -35,7 +35,7 @@ export function BottomPanel() {
       .catch(() => setIsFounder(false));
   }, []);
 
-  const refreshData = async () => {
+  const refreshData = async (signal?: AbortSignal) => {
     setIsRefreshing(true);
     try {
       const [posData, ordData, trdData] = await Promise.all([
@@ -43,20 +43,23 @@ export function BottomPanel() {
         getOrders().catch(() => []),
         getTrades(tradeFilter).catch(() => []),
       ]);
+      if (signal?.aborted) return;
       setPositions(posData);
       setOrders(ordData);
       setTrades(trdData);
     } catch (e) {
       // Silent fail
     } finally {
-      setIsRefreshing(false);
+      if (!signal?.aborted) setIsRefreshing(false);
     }
   };
 
   useEffect(() => {
-    refreshData();
-    const interval = setInterval(refreshData, 5000);
-    return () => clearInterval(interval);
+    const controller = new AbortController();
+    refreshData(controller.signal);
+    // Poll every 10s — WS handles real-time updates; this is just a safety net sync
+    const interval = setInterval(() => refreshData(controller.signal), 10000);
+    return () => { controller.abort(); clearInterval(interval); };
   }, [tradeFilter]);
 
   const filteredOrders = orders.filter((o) => {

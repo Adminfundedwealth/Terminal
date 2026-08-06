@@ -130,30 +130,44 @@ export class OptionChainService {
     if (!this.jwtToken) return [];
 
     console.log(`[OptionChain] Discovering expiries for ${sym}...`);
-    const expiries = [];
     const now = new Date();
 
+    // Build all candidate dates up front
+    const candidates = [];
     for (let i = 0; i <= EXPIRY_SCAN_DAYS; i++) {
       const date = new Date(now);
       date.setDate(date.getDate() + i);
       const iso = date.toISOString().split('T')[0];
-      const angelFmt = this._isoToAngel(iso);
-      const term = `${sym}${angelFmt}`;
-
-      try {
-        const r = await this._searchScrip(term);
-        if (r && r.length > 0) {
-          expiries.push(iso);
-          console.log(`[OptionChain] Found expiry: ${term} (${date.toLocaleDateString('en', { weekday: 'short' })}) — ${r.length} instruments`);
-          // Once we have 5 expiries, stop scanning
-          if (expiries.length >= 5) break;
-        }
-      } catch (_) { /* skip */ }
-
-      // Small delay every 5 requests to avoid rate limiting
-      if (i > 0 && i % 5 === 0) await this._sleep(200);
+      candidates.push({ iso, angelFmt: this._isoToAngel(iso) });
     }
 
+    // Fan out in parallel batches of 10 — much faster than serial
+    const BATCH = 10;
+    const found = []; // { iso, index }
+
+    for (let start = 0; start < candidates.length && found.length < 5; start += BATCH) {
+      const batch = candidates.slice(start, start + BATCH);
+      const results = await Promise.allSettled(
+        batch.map(({ iso, angelFmt }, bi) =>
+          this._searchScrip(`${sym}${angelFmt}`)
+            .then(r => ({ iso, idx: start + bi, count: r?.length || 0 }))
+            .catch(() => ({ iso, idx: start + bi, count: 0 }))
+        )
+      );
+      for (const r of results) {
+        if (r.status === 'fulfilled' && r.value.count > 0) {
+          found.push(r.value);
+        }
+      }
+      // Small inter-batch pause to stay within rate limits
+      if (start + BATCH < candidates.length && found.length < 5) {
+        await this._sleep(120);
+      }
+    }
+
+    // Sort by calendar order and return ISO strings
+    found.sort((a, b) => a.idx - b.idx);
+    const expiries = found.slice(0, 5).map(f => f.iso);
     console.log(`[OptionChain] Expiries for ${sym}: ${expiries.join(', ')}`);
     return expiries;
   }

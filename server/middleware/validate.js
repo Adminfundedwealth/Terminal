@@ -108,6 +108,8 @@ export const schemas = {
     triggerPrice: z.number().min(0).optional(),
     validity: z.enum(['DAY', 'IOC', 'GTC']).optional().default('DAY'),
     isAmo: z.boolean().optional().default(false),
+    slPrice: z.number().min(0).optional(),   // bracket stop-loss trigger
+    tpPrice: z.number().min(0).optional(),   // bracket take-profit limit
   }),
 
   // Order Modification

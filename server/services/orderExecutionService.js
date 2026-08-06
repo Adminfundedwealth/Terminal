@@ -37,6 +37,71 @@ const orderRepo = new OrderRepository();
 export class OrderExecutionService {
   constructor(marketDataEngine) {
     this.marketDataEngine = marketDataEngine;
+    this._paperOrderMonitor = null;
+    // Track pending paper SL/LIMIT orders: orderId → { accountId, orderParams, triggerPrice, limitPrice }
+    this._pendingPaperOrders = new Map();
+    this._startPaperOrderMonitor();
+  }
+
+  /**
+   * Monitor open SL-M and LIMIT paper orders every second.
+   * Fills them when LTP crosses the trigger/limit price.
+   */
+  _startPaperOrderMonitor() {
+    this._paperOrderMonitor = setInterval(async () => {
+      if (this._pendingPaperOrders.size === 0) return;
+      const { ExecutionMode } = await import('./executionMode.js').catch(() => ({ ExecutionMode: { isPaper: false } }));
+      if (!ExecutionMode.isPaper) return;
+
+      for (const [orderId, entry] of this._pendingPaperOrders) {
+        try {
+          const ltp = this.marketDataEngine.getQuote(entry.token)?.ltp;
+          if (!ltp) continue;
+
+          let shouldFill = false;
+
+          if (entry.orderType === 'SL-M' || entry.orderType === 'SL') {
+            // SL SELL fires when LTP ≤ triggerPrice; SL BUY fires when LTP ≥ triggerPrice
+            if (entry.side === 'SELL' && ltp <= entry.triggerPrice) shouldFill = true;
+            if (entry.side === 'BUY'  && ltp >= entry.triggerPrice) shouldFill = true;
+          } else if (entry.orderType === 'LIMIT') {
+            // LIMIT SELL fills when LTP ≥ limitPrice; LIMIT BUY fills when LTP ≤ limitPrice
+            if (entry.side === 'SELL' && ltp >= entry.price) shouldFill = true;
+            if (entry.side === 'BUY'  && ltp <= entry.price) shouldFill = true;
+          }
+
+          if (shouldFill) {
+            this._pendingPaperOrders.delete(orderId);
+            console.log(`[PaperMonitor] Triggering ${entry.orderType} ${entry.side} ${entry.symbol} @ LTP ${ltp} (trigger=${entry.triggerPrice || ''} limit=${entry.price || ''})`);
+            await this._handleMarketFill(
+              entry.accountId, orderId,
+              { ...entry.orderParams, orderType: 'MARKET' },
+              'PAPER-TRIGGER-' + orderId,
+              'paper',
+              0
+            );
+          }
+        } catch (err) {
+          console.error(`[PaperMonitor] Error checking order ${orderId}:`, err.message);
+        }
+      }
+    }, 1000);
+  }
+
+  /**
+   * Register an open paper SL/LIMIT order for price monitoring.
+   */
+  _registerPaperOrder(orderId, accountId, orderParams) {
+    this._pendingPaperOrders.set(orderId, {
+      accountId,
+      token: orderParams.token,
+      symbol: orderParams.symbol,
+      side: orderParams.side,
+      orderType: orderParams.orderType,
+      triggerPrice: orderParams.triggerPrice || 0,
+      price: orderParams.price || 0,
+      orderParams,
+    });
   }
 
   /**
@@ -202,6 +267,12 @@ export class OrderExecutionService {
           brokerProvider,
           latencyMs,
         }, { accountId });
+
+        // In paper mode, register with price monitor so it auto-fills when triggered
+        const { ExecutionMode: EM2 } = await import('./executionMode.js');
+        if (EM2.isPaper) {
+          this._registerPaperOrder(orderId, accountId, orderParams);
+        }
 
         return { orderId, status: 'OPEN', brokerOrderId };
       }
@@ -554,11 +625,13 @@ export class OrderExecutionService {
     const order = await orderRepo.createOrder(accountId, orderParams);
     eventBus.publish('order.created', { orderId: order.id, ...orderParams, status: 'PENDING' }, { accountId });
 
-    // In paper mode, SL-M stays OPEN (not immediately filled)
+    // In paper mode, SL-M stays OPEN and is registered with the price monitor
     const { ExecutionMode } = await import('./executionMode.js');
     if (ExecutionMode.isPaper) {
       try { await orderRepo.updateStatus(order.id, 'OPEN', { trigger_price: triggerPrice }); } catch {}
       eventBus.publish('order.updated', { orderId: order.id, status: 'OPEN', ...orderParams }, { accountId });
+      // Register with monitor so it auto-fills when LTP crosses trigger
+      this._registerPaperOrder(order.id, accountId, orderParams);
       return { orderId: order.id, status: 'OPEN', type: 'SL-M', triggerPrice };
     }
 
@@ -598,6 +671,8 @@ export class OrderExecutionService {
     if (ExecutionMode.isPaper) {
       try { await orderRepo.updateStatus(order.id, 'OPEN', { price: targetPrice }); } catch {}
       eventBus.publish('order.updated', { orderId: order.id, status: 'OPEN', ...orderParams }, { accountId });
+      // Register with monitor so it auto-fills when LTP reaches target
+      this._registerPaperOrder(order.id, accountId, orderParams);
       return { orderId: order.id, status: 'OPEN', type: 'LIMIT', price: targetPrice };
     }
 
