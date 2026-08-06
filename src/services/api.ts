@@ -80,6 +80,35 @@ export interface RiskState {
 }
 export const getRiskState = () => request<RiskState>('/account/risk-state');
 
+// Analytics — server-side FIFO P&L from executions table
+export interface AccountAnalytics {
+  dailyPnl: number;
+  weeklyPnl: number;
+  monthlyPnl: number;
+  totalPnl: number;
+  unrealizedPnl: number;
+  totalTrades: number;
+  winners: number;
+  losers: number;
+  winRate: number;
+  profitFactor: number | null;
+  avgWin: number;
+  avgLoss: number;
+  avgRR: number;
+  expectancy: number;
+  bestTrade: number;
+  worstTrade: number;
+  grossProfit: number;
+  grossLoss: number;
+  dailyTradeCount: number;
+  dailyWinRate: number;
+  maxWinStreak: number;
+  maxLossStreak: number;
+  symbolBreakdown: { symbol: string; trades: number; pnl: number }[];
+  computedAt: string;
+}
+export const getAccountAnalytics = () => request<AccountAnalytics>('/account/analytics');
+
 // Terminal status
 export interface TerminalStatus {
   executionMode: { mode: string; isLive: boolean; isPaper: boolean; reason: string };
