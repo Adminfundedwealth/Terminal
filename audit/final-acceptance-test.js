@@ -1,4 +1,6 @@
-﻿// FINAL PRODUCTION ACCEPTANCE TEST - FundedWealth Terminal
+﻿
+
+   // FINAL PRODUCTION ACCEPTANCE TEST - FundedWealth Terminal
 'use strict';
 const { chromium } = require('playwright');
 const http = require('http');

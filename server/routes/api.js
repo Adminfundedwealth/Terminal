@@ -435,6 +435,52 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
     } catch (err) { res.status(500).json({ message: err.message }); }
   });
 
+  // PATCH /positions/:id — Update SL/TP from chart drag
+  router.patch('/positions/:id', requireAuth, requirePermission('trade'), async (req, res) => {
+    try {
+      const realId = await accountService.resolveAccountId(req.user.accountId);
+      const { stopLoss, takeProfit } = req.body;
+
+      const results = {};
+
+      if (stopLoss !== undefined && stopLoss !== null) {
+        const slPrice = parseFloat(stopLoss);
+        if (isNaN(slPrice) || slPrice <= 0) {
+          return res.status(400).json({ message: 'Invalid stopLoss price' });
+        }
+        try {
+          const result = await accountService.executionService.attachStopLoss(realId, req.params.id, slPrice);
+          results.stopLoss = result;
+        } catch (err) {
+          // Store SL locally if execution service not available
+          const { PositionRepository } = await import('../repositories/position.repository.js');
+          const repo = new PositionRepository();
+          await repo.update(req.params.id, { stop_loss: slPrice, updated_at: new Date().toISOString() });
+          results.stopLoss = { status: 'stored', price: slPrice };
+        }
+      }
+
+      if (takeProfit !== undefined && takeProfit !== null) {
+        const tpPrice = parseFloat(takeProfit);
+        if (isNaN(tpPrice) || tpPrice <= 0) {
+          return res.status(400).json({ message: 'Invalid takeProfit price' });
+        }
+        try {
+          const result = await accountService.executionService.attachTakeProfit(realId, req.params.id, tpPrice);
+          results.takeProfit = result;
+        } catch (err) {
+          // Store TP locally if execution service not available
+          const { PositionRepository } = await import('../repositories/position.repository.js');
+          const repo = new PositionRepository();
+          await repo.update(req.params.id, { take_profit: tpPrice, updated_at: new Date().toISOString() });
+          results.takeProfit = { status: 'stored', price: tpPrice };
+        }
+      }
+
+      res.json({ status: 'updated', ...results });
+    } catch (err) { res.status(500).json({ message: err.message }); }
+  });
+
   router.get('/orders', requireAuth, async (req, res) => {
     try {
       const realId = await accountService.resolveAccountId(req.user.accountId);

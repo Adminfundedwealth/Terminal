@@ -317,6 +317,7 @@ export class AccountService {
         symbol: p.symbol,
         token: p.token,
         segment: p.segment,
+        side: p.side,
         productType: p.product_type,
         qty,
         avgPrice,
@@ -327,6 +328,10 @@ export class AccountService {
         sellQty: p.sell_qty || 0,
         buyAvg: parseFloat(p.buy_avg) || 0,
         sellAvg: parseFloat(p.sell_avg) || 0,
+        stopLoss: p.stop_loss ? parseFloat(p.stop_loss) : undefined,
+        takeProfit: p.take_profit ? parseFloat(p.take_profit) : undefined,
+        trailingStop: p.trailing_stop ? parseFloat(p.trailing_stop) : undefined,
+        breakEvenActivated: p.break_even_activated || false,
       };
     });
   }

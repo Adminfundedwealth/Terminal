@@ -69,6 +69,7 @@ export interface Position {
   token: string;
   segment: Segment;
   productType: ProductType;
+  side?: 'LONG' | 'SHORT';
   qty: number;
   avgPrice: number;
   ltp: number;
@@ -78,6 +79,10 @@ export interface Position {
   sellQty: number;
   buyAvg: number;
   sellAvg: number;
+  stopLoss?: number;
+  takeProfit?: number;
+  trailingStop?: number;
+  breakEvenActivated?: boolean;
 }
 
 export interface Order {

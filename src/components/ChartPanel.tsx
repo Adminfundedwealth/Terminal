@@ -11,6 +11,7 @@ import { type DrawingMode } from './DrawingTools';
 import { ChartDrawingToolbar, DrawingToolbarToggle } from './ChartDrawingToolbar';
 import { DrawingLayersPanel } from './DrawingLayersPanel';
 import { EmojiMarkerPicker } from './EmojiMarkerPicker';
+import { PositionManager } from './chart/PositionManager';
 import {
   calculateSMA, calculateEMA, calculateRSI, calculateMACD, calculateBollinger,
   calculateVWAP, extractVolume, calculateATR, calculateStochastic, calculateStochRSI,
@@ -1519,6 +1520,23 @@ export function ChartPanel() {
                 </div>
               </>
             )}
+
+            {/* ═══════════════════════════════════════════════════════════════════
+                PROFESSIONAL INTERACTIVE POSITION MANAGER
+                ═══════════════════════════════════════════════════════════════════
+                Renders on-chart position visualization with:
+                - Entry line (blue) with floating P/L
+                - Stop Loss (red, draggable)
+                - Take Profit (green, draggable)
+                - Risk/Reward zones
+                - Right-click context menu
+                - 60 FPS canvas rendering
+                ═══════════════════════════════════════════════════════════════════ */}
+            <PositionManager
+              chart={chartRef.current}
+              series={seriesRef.current}
+              containerRef={chartContainerRef}
+            />
           </div>
           {/* Sub-chart panes — one per enabled separate-pane indicator */}
           {separatePaneIndicators.map(ind => (

@@ -265,6 +265,7 @@ export const apiService = {
   get: <T = any>(url: string) => request<T>(url),
   post: <T = any>(url: string, data?: any) => request<T>(url, { method: 'POST', body: data ? JSON.stringify(data) : undefined }),
   put: <T = any>(url: string, data?: any) => request<T>(url, { method: 'PUT', body: data ? JSON.stringify(data) : undefined }),
+  patch: <T = any>(url: string, data?: any) => request<T>(url, { method: 'PATCH', body: data ? JSON.stringify(data) : undefined }),
   delete: <T = any>(url: string) => request<T>(url, { method: 'DELETE' }),
 };
 
