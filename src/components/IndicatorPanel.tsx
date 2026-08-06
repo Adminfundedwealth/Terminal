@@ -74,7 +74,6 @@ export const DEFAULT_INDICATORS: IndicatorConfig[] = [
   // ── Separate Panes ─────────────────────────────────────────
   { id: 'rsi',        type: 'rsi',       label: 'RSI (14)',           enabled: false, period: 14,  pane: 'separate' },
   { id: 'macd',       type: 'macd',      label: 'MACD (12,26,9)',     enabled: false, pane: 'separate' },
-  { id: 'volume',     type: 'volume',    label: 'Volume',             enabled: false, pane: 'separate' },
   { id: 'stochastic', type: 'stochastic', label: 'Stochastic (14,3)', enabled: false, period: 14,  pane: 'separate' },
   { id: 'stochrsi',   type: 'stochrsi',  label: 'Stoch RSI (14)',     enabled: false, period: 14,  pane: 'separate' },
   { id: 'adx',        type: 'adx',       label: 'ADX (14)',           enabled: false, period: 14,  pane: 'separate' },

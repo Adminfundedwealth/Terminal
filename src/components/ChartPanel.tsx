@@ -54,7 +54,10 @@ export function ChartPanel() {
   // Container refs for sub-charts — keyed by indicatorId
   const subChartContainersRef = useRef<Map<string, HTMLDivElement | null>>(new Map());
 
-  // Legacy fixed refs kept for layout (RSI, MACD, Volume containers still rendered separately)
+  // Permanent in-chart volume histogram (always visible, like TradingView)
+  const volumeSeriesRef = useRef<any>(null);
+
+  // Legacy fixed refs kept for layout (RSI, MACD sub-chart containers)
   const rsiChartRef = useRef<IChartApi | null>(null);
   const macdChartRef = useRef<IChartApi | null>(null);
   const volumeChartRef = useRef<IChartApi | null>(null);
@@ -156,7 +159,7 @@ export function ChartPanel() {
       layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: '#6b7280', fontSize: 11 },
       grid: { vertLines: { color: 'rgba(38, 42, 54, 0.4)' }, horzLines: { color: 'rgba(38, 42, 54, 0.4)' } },
       crosshair: { mode: CrosshairMode.Normal, vertLine: { color: '#6b7280', width: 1, style: 3 }, horzLine: { color: '#6b7280', width: 1, style: 3 } },
-      rightPriceScale: { borderColor: '#262a36', scaleMargins: { top: 0.06, bottom: 0.06 } },
+      rightPriceScale: { borderColor: '#262a36', scaleMargins: { top: 0.06, bottom: 0.22 } },
       timeScale: { borderColor: '#262a36', timeVisible: true, secondsVisible: false },
       handleScale: { axisPressedMouseMove: true },
       handleScroll: { mouseWheel: true, pressedMouseMove: true },
@@ -743,6 +746,13 @@ export function ChartPanel() {
   const updateChartSeries = (data: OHLC[]) => {
     if (!chartRef.current) return;
     if (seriesRef.current) { chartRef.current.removeSeries(seriesRef.current); seriesRef.current = null; }
+
+    // Remove old volume series before recreating
+    if (volumeSeriesRef.current) {
+      try { chartRef.current.removeSeries(volumeSeriesRef.current); } catch {}
+      volumeSeriesRef.current = null;
+    }
+
     if (chartType === 'line') {
       const series = chartRef.current.addLineSeries({ color: '#2962ff', lineWidth: 2 });
       series.setData(data.map(d => ({ time: d.time as any, value: d.close })));
@@ -759,6 +769,18 @@ export function ChartPanel() {
       series.setData(processed.map(d => ({ time: d.time as any, open: d.open, high: d.high, low: d.low, close: d.close })));
       seriesRef.current = series as any;
     }
+
+    // ── Permanent volume bars (always visible, bottom 20% of main chart) ──
+    const vs = chartRef.current.addHistogramSeries({
+      priceFormat: { type: 'volume' },
+      priceScaleId: 'volume',
+      lastValueVisible: false,
+      priceLineVisible: false,
+    });
+    vs.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 }, drawTicks: false, borderVisible: false });
+    vs.setData(extractVolume(data) as any);
+    volumeSeriesRef.current = vs;
+
     chartRef.current.timeScale().fitContent();
   };
 
