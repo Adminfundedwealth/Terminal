@@ -203,8 +203,8 @@ export function OrderPanel() {
         </div>
       </div>
 
-      {/* Product Type Pills — Compact */}
-      <div className="px-3 pb-2 flex-shrink-0">
+      {/* Product Type Pills — hidden, MIS used as default internally */}
+      <div className="hidden">
         <div className="flex gap-1">
           {PRODUCT_TYPES.map((pt) => (
             <button
@@ -327,8 +327,8 @@ export function OrderPanel() {
         )}
       </div>
 
-      {/* Quick Action Buttons */}
-      <div className="px-3 pb-2 flex-shrink-0">
+      {/* Quick Action Buttons — GTT/AMO/IOC/EXIT hidden, logic preserved */}
+      <div className="hidden">
         <div className="grid grid-cols-4 gap-1">
           <ActionBtn label="GTT" onClick={() => {
             setOrderForm({ validity: 'GTC' });
