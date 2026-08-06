@@ -12,6 +12,7 @@ import { ChartDrawingToolbar, DrawingToolbarToggle } from './ChartDrawingToolbar
 import { DrawingLayersPanel } from './DrawingLayersPanel';
 import { EmojiMarkerPicker } from './EmojiMarkerPicker';
 import { PositionManager } from './chart/PositionManager';
+import { DrawingToolbar } from './chart/DrawingToolbar';
 import {
   calculateSMA, calculateEMA, calculateRSI, calculateMACD, calculateBollinger,
   calculateVWAP, extractVolume, calculateATR, calculateStochastic, calculateStochRSI,
@@ -96,11 +97,23 @@ export function ChartPanel() {
   // Right-click context menu
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; drawingId: number } | null>(null);
 
-  // Selected drawing (select mode — click to select, shows floating delete bar)
-  const [selectedDrawingId, setSelectedDrawingId] = useState<number | null>(null);
-  const [selectedDrawingAnchor, setSelectedDrawingAnchor] = useState<{ x: number; y: number } | null>(null);
+  // Selected drawing — one click in pointer mode shows TradingView-style inline toolbar
+  const [selectedDrawing, setSelectedDrawing] = useState<{
+    id: number;
+    x: number;
+    y: number;
+    color: string;
+    lineWidth: number;
+    lineStyle: number;
+    isLocked: boolean;
+    isHidden: boolean;
+  } | null>(null);
   const selectedDrawingIdRef = useRef<number | null>(null);
-  useEffect(() => { selectedDrawingIdRef.current = selectedDrawingId; }, [selectedDrawingId]);
+  useEffect(() => { selectedDrawingIdRef.current = selectedDrawing?.id ?? null; }, [selectedDrawing]);
+  // Keep back-compat aliases used by keyboard handler
+  const selectedDrawingId = selectedDrawing?.id ?? null;
+  const setSelectedDrawingId = (id: number | null) => { if (id === null) setSelectedDrawing(null); };
+  const setSelectedDrawingAnchor = (_: any) => {}; // no-op, position now lives in selectedDrawing
 
   // Stable ref for clearLastDrawing — needed by keyboard handler registered at mount
   const clearLastDrawingRef = useRef<() => void>(() => {});
@@ -185,14 +198,17 @@ export function ChartPanel() {
       if (!param.point) return;
       const mode = drawingModeRef.current;
 
-      // ── SELECT MODE: click to select nearest drawing ──────────────────────
-      if (mode === 'select') {
-        if (!seriesRef.current || drawingsRef.current.length === 0) return;
+      // ── SELECT MODE / POINTER MODE: click to select nearest drawing ─────
+      if (mode === 'select' || mode === 'none') {
+        if (!seriesRef.current || drawingsRef.current.length === 0) {
+          if (mode === 'none') setSelectedDrawing(null);
+          return;
+        }
         const px = param.point.x;
         const py = param.point.y;
 
         let bestId: number | null = null;
-        let bestDist = 20; // px hit tolerance
+        let bestDist = 20;
 
         for (const d of drawingsRef.current) {
           if (d.hidden) continue;
@@ -208,7 +224,6 @@ export function ChartPanel() {
               bestDist = Math.abs(px - lineX); bestId = d.id;
             }
           } else if (d.points && d.points.length > 0) {
-            // Check proximity to endpoints AND midpoint of segment
             const pts: { time: number; price: number }[] = d.points;
             for (let i = 0; i < pts.length; i++) {
               const ex = chart.timeScale().timeToCoordinate(pts[i].time as any);
@@ -217,24 +232,15 @@ export function ChartPanel() {
                 const dist = Math.hypot(px - ex, py - ey);
                 if (dist < bestDist) { bestDist = dist; bestId = d.id; }
               }
-              // Midpoint between consecutive points
               if (i < pts.length - 1) {
                 const ex2 = chart.timeScale().timeToCoordinate(pts[i + 1].time as any);
                 const ey2 = (seriesRef.current as any).priceToCoordinate(pts[i + 1].price);
                 if (ex != null && ey != null && ex2 != null && ey2 != null) {
-                  const mx = (ex + ex2) / 2;
-                  const my = (ey + ey2) / 2;
-                  const distM = Math.hypot(px - mx, py - my);
-                  if (distM < bestDist) { bestDist = distM; bestId = d.id; }
-
-                  // Point on line segment (closest point)
                   const dx = ex2 - ex; const dy = ey2 - ey;
                   const lenSq = dx * dx + dy * dy;
                   if (lenSq > 0) {
                     const t = Math.max(0, Math.min(1, ((px - ex) * dx + (py - ey) * dy) / lenSq));
-                    const closestX = ex + t * dx;
-                    const closestY = ey + t * dy;
-                    const distSeg = Math.hypot(px - closestX, py - closestY);
+                    const distSeg = Math.hypot(px - (ex + t * dx), py - (ey + t * dy));
                     if (distSeg < bestDist) { bestDist = distSeg; bestId = d.id; }
                   }
                 }
@@ -243,24 +249,28 @@ export function ChartPanel() {
           } else if ((d.type === 'text' || d.type === 'emoji') && d.time != null) {
             const ex = chart.timeScale().timeToCoordinate(d.time as any);
             const ey = d.price != null ? (seriesRef.current as any).priceToCoordinate(d.price) : null;
-            if (ex != null && ey != null) {
-              const dist = Math.hypot(px - ex, py - ey);
-              if (dist < bestDist) { bestDist = dist; bestId = d.id; }
+            if (ex != null && ey != null && Math.hypot(px - ex, py - ey) < bestDist) {
+              bestDist = Math.hypot(px - ex, py - ey); bestId = d.id;
             }
           }
         }
 
         if (bestId !== null) {
-          setSelectedDrawingId(bestId);
-          // Anchor the floating toolbar near the click
+          const d = drawingsRef.current.find((d: any) => d.id === bestId)!;
           const rect = chartContainerRef.current?.getBoundingClientRect();
-          if (rect) {
-            setSelectedDrawingAnchor({ x: rect.left + px, y: rect.top + py });
-          }
+          setSelectedDrawing({
+            id: bestId,
+            x: rect ? rect.left + px : px,
+            y: rect ? rect.top + py : py,
+            color: d.color ?? '#f59e0b',
+            lineWidth: d.lineWidth ?? 2,
+            lineStyle: d.lineStyle ?? 0,
+            isLocked: d.locked ?? false,
+            isHidden: d.hidden ?? false,
+          });
         } else {
-          // Clicked empty area — deselect
-          setSelectedDrawingId(null);
-          setSelectedDrawingAnchor(null);
+          // Clicked empty space — deselect
+          setSelectedDrawing(null);
         }
         return;
       }
@@ -577,7 +587,12 @@ export function ChartPanel() {
     // Horizontal lines
     drawingsList.filter(d => d.type === 'hline').forEach(d => {
       const pl = (seriesRef.current as any).createPriceLine({
-        price: d.price, color: '#f59e0b', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: `H ${d.price.toFixed(2)}`,
+        price: d.price,
+        color: d.color ?? '#f59e0b',
+        lineWidth: d.lineWidth ?? 1,
+        lineStyle: d.lineStyle ?? 2,
+        axisLabelVisible: true,
+        title: `H ${d.price.toFixed(2)}`,
       });
       priceLineSeriesRef.current.push(pl);
     });
@@ -588,9 +603,9 @@ export function ChartPanel() {
       const [p1, p2] = d.points;
       const sorted = [p1, p2].sort((a: any, b: any) => a.time - b.time);
       const series = chartRef.current.addLineSeries({
-        color: '#06b6d4',
-        lineWidth: 2 as any,
-        lineStyle: 0,
+        color: d.color ?? '#06b6d4',
+        lineWidth: (d.lineWidth ?? 2) as any,
+        lineStyle: d.lineStyle ?? 0,
         lastValueVisible: false,
         priceLineVisible: false,
         crosshairMarkerVisible: false,
@@ -608,9 +623,9 @@ export function ChartPanel() {
       const [p1, p2] = d.points;
       const sorted = [p1, p2].sort((a: any, b: any) => a.time - b.time);
       const series = chartRef.current.addLineSeries({
-        color: '#f97316',
-        lineWidth: 2 as any,
-        lineStyle: 0,
+        color: d.color ?? '#f97316',
+        lineWidth: (d.lineWidth ?? 2) as any,
+        lineStyle: d.lineStyle ?? 0,
         lastValueVisible: true,
         priceLineVisible: false,
         crosshairMarkerVisible: true,
@@ -740,6 +755,61 @@ export function ChartPanel() {
   function handleLayersHighlight(id: number) {
     setHighlightedId(id);
     setTimeout(() => setHighlightedId(null), 1500);
+  }
+
+  // ── Drawing property mutation helpers (used by DrawingToolbar) ──────────
+
+  function handleDrawingColorChange(id: number, color: string) {
+    if (!activeSymbol) return;
+    const updated = drawingsRef.current.map((d: any) => d.id === id ? { ...d, color } : d);
+    drawingsRef.current = updated;
+    setDrawings(updated);
+    saveDrawings(activeSymbol.token, updated);
+    applyOverlayDrawings(updated.filter((d: any) => !d.hidden));
+    setSelectedDrawing(prev => prev?.id === id ? { ...prev, color } : prev);
+  }
+
+  function handleDrawingLineWidthChange(id: number, lineWidth: number) {
+    if (!activeSymbol) return;
+    const updated = drawingsRef.current.map((d: any) => d.id === id ? { ...d, lineWidth } : d);
+    drawingsRef.current = updated;
+    setDrawings(updated);
+    saveDrawings(activeSymbol.token, updated);
+    applyOverlayDrawings(updated.filter((d: any) => !d.hidden));
+    setSelectedDrawing(prev => prev?.id === id ? { ...prev, lineWidth } : prev);
+  }
+
+  function handleDrawingLineStyleChange(id: number, lineStyle: number) {
+    if (!activeSymbol) return;
+    const updated = drawingsRef.current.map((d: any) => d.id === id ? { ...d, lineStyle } : d);
+    drawingsRef.current = updated;
+    setDrawings(updated);
+    saveDrawings(activeSymbol.token, updated);
+    applyOverlayDrawings(updated.filter((d: any) => !d.hidden));
+    setSelectedDrawing(prev => prev?.id === id ? { ...prev, lineStyle } : prev);
+  }
+
+  function handleDrawingLockToggle(id: number) {
+    if (!activeSymbol) return;
+    const d = drawingsRef.current.find((d: any) => d.id === id);
+    const locked = !(d?.locked ?? false);
+    const updated = drawingsRef.current.map((d: any) => d.id === id ? { ...d, locked } : d);
+    drawingsRef.current = updated;
+    setDrawings(updated);
+    saveDrawings(activeSymbol.token, updated);
+    setSelectedDrawing(prev => prev?.id === id ? { ...prev, isLocked: locked } : prev);
+  }
+
+  function handleDrawingDuplicate(id: number) {
+    if (!activeSymbol) return;
+    const src = drawingsRef.current.find((d: any) => d.id === id);
+    if (!src) return;
+    const copy = { ...src, id: Date.now() + 1 };
+    const updated = [...drawingsRef.current, copy];
+    drawingsRef.current = updated;
+    setDrawings(updated);
+    saveDrawings(activeSymbol.token, updated);
+    applyOverlayDrawings(updated.filter((d: any) => !d.hidden));
   }
 
   function clearAllDrawings() {
@@ -1504,17 +1574,33 @@ export function ChartPanel() {
               onMouseLeave={overlayMouseUp}
               onContextMenu={handleChartContextMenu}
             >
-              {/* Brush strokes */}
+              {/* Brush strokes — clickable for selection */}
               {!eyeHidden && brushPaths.map(p => (
                 <path
                   key={p.id}
                   d={p.points}
-                  stroke={highlightedId === p.id ? '#ffffff' : p.color}
-                  strokeWidth={highlightedId === p.id ? 3 : 2}
+                  stroke={highlightedId === p.id ? '#ffffff' : selectedDrawing?.id === p.id ? '#fff' : p.color}
+                  strokeWidth={highlightedId === p.id || selectedDrawing?.id === p.id ? 3 : 2}
                   fill="none"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   opacity={0.85}
+                  style={{ cursor: drawingMode === 'none' || drawingMode === 'select' ? 'pointer' : 'default', pointerEvents: 'stroke' }}
+                  onClick={(e) => {
+                    if (drawingMode !== 'none' && drawingMode !== 'select') return;
+                    e.stopPropagation();
+                    const d = drawings.find((d: any) => d.id === p.id);
+                    setSelectedDrawing({
+                      id: p.id,
+                      x: e.clientX,
+                      y: e.clientY,
+                      color: d?.color ?? p.color ?? '#f59e0b',
+                      lineWidth: d?.lineWidth ?? 2,
+                      lineStyle: d?.lineStyle ?? 0,
+                      isLocked: d?.locked ?? false,
+                      isHidden: d?.hidden ?? false,
+                    });
+                  }}
                 />
               ))}
               {/* Zoom selection rectangle */}
@@ -1566,87 +1652,15 @@ export function ChartPanel() {
               </div>
             )}
             {/* Bottom hint — context-sensitive */}
-            {drawingMode === 'none' && drawings.length > 0 && !selectedDrawingId && (
+            {drawingMode === 'none' && drawings.length > 0 && !selectedDrawing && (
               <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 px-2.5 py-0.5 rounded-full bg-[#1a1d28]/80 text-fw-text-muted text-[12px] pointer-events-none border border-fw-border/30">
-                Press <kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-mono text-[11px]">S</kbd> or click Select tool → click any drawing to delete &nbsp;·&nbsp; Right-click drawing for options
+                Click any drawing to select · Right-click for options
               </div>
             )}
-            {drawingMode === 'select' && !selectedDrawingId && (
+            {drawingMode === 'select' && !selectedDrawing && (
               <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 px-3 py-1 rounded-full bg-fw-accent/20 text-fw-accent text-[12px] pointer-events-none border border-fw-accent/40 flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-fw-accent animate-pulse" />
                 Click any drawing to select it
-              </div>
-            )}
-            {drawingMode === 'select' && selectedDrawingId && selectedDrawingAnchor && (
-              <div
-                className="fixed z-[520] flex items-center gap-1 bg-[#0d1117] border border-[#2962ff]/60 rounded-lg shadow-2xl px-1.5 py-1"
-                style={{
-                  left: Math.min(selectedDrawingAnchor.x - 10, window.innerWidth - 240),
-                  top: Math.max(selectedDrawingAnchor.y - 52, 60),
-                }}
-              >
-                {/* Drawing type label */}
-                <span className="px-2 text-[11px] text-[#6b7280] border-r border-[#262a36] pr-2 mr-0.5 capitalize">
-                  {drawings.find(d => d.id === selectedDrawingId)?.type ?? 'Drawing'}
-                </span>
-
-                {/* Hide/Show */}
-                <button
-                  title="Hide / Show"
-                  className="flex items-center gap-1 px-2 py-1 rounded text-[12px] text-[#9ca3af] hover:bg-[#1e2330] hover:text-white transition-colors"
-                  onClick={() => {
-                    handleLayersToggleVisibility(selectedDrawingId);
-                  }}
-                >
-                  <span className="text-[13px]">
-                    {drawings.find(d => d.id === selectedDrawingId)?.hidden ? '👁' : '🙈'}
-                  </span>
-                  <span>{drawings.find(d => d.id === selectedDrawingId)?.hidden ? 'Show' : 'Hide'}</span>
-                </button>
-
-                {/* Duplicate */}
-                <button
-                  title="Duplicate drawing"
-                  className="flex items-center gap-1 px-2 py-1 rounded text-[12px] text-[#9ca3af] hover:bg-[#1e2330] hover:text-white transition-colors"
-                  onClick={() => {
-                    if (!activeSymbol) return;
-                    const src = drawings.find(d => d.id === selectedDrawingId);
-                    if (!src) return;
-                    const copy = { ...src, id: Date.now() + 1 };
-                    const updated = [...drawingsRef.current, copy];
-                    drawingsRef.current = updated;
-                    setDrawings(updated);
-                    saveDrawings(activeSymbol.token, updated);
-                    applyOverlayDrawings(updated);
-                    setSelectedDrawingId(copy.id);
-                  }}
-                >
-                  <span className="text-[13px]">⎘</span>
-                  <span>Duplicate</span>
-                </button>
-
-                {/* Delete — primary action */}
-                <button
-                  title="Delete drawing (Del)"
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded text-[12px] font-semibold bg-red-500/15 text-red-400 hover:bg-red-500/30 hover:text-red-300 transition-colors border border-red-500/20"
-                  onClick={() => {
-                    handleLayersDelete(selectedDrawingId);
-                    setSelectedDrawingId(null);
-                    setSelectedDrawingAnchor(null);
-                  }}
-                >
-                  <span className="text-[13px]">🗑</span>
-                  Delete
-                </button>
-
-                {/* Dismiss */}
-                <button
-                  title="Deselect (Esc)"
-                  className="ml-0.5 flex items-center justify-center w-6 h-6 rounded text-[#6b7280] hover:bg-[#1e2330] hover:text-white transition-colors text-[13px]"
-                  onClick={() => { setSelectedDrawingId(null); setSelectedDrawingAnchor(null); }}
-                >
-                  ✕
-                </button>
               </div>
             )}
 
@@ -1730,6 +1744,29 @@ export function ChartPanel() {
               containerRef={chartContainerRef}
             />
           </div>
+
+          {/* ═══ TradingView-style Drawing Toolbar — rendered outside chart div so it's never clipped ═══ */}
+          {selectedDrawing && (
+            <DrawingToolbar
+              drawingId={selectedDrawing.id}
+              drawingType={drawings.find(d => d.id === selectedDrawing.id)?.type ?? 'drawing'}
+              x={selectedDrawing.x}
+              y={selectedDrawing.y}
+              color={selectedDrawing.color}
+              lineWidth={selectedDrawing.lineWidth}
+              lineStyle={selectedDrawing.lineStyle}
+              isLocked={selectedDrawing.isLocked}
+              isHidden={selectedDrawing.isHidden}
+              onColorChange={handleDrawingColorChange}
+              onLineWidthChange={handleDrawingLineWidthChange}
+              onLineStyleChange={handleDrawingLineStyleChange}
+              onLockToggle={handleDrawingLockToggle}
+              onVisibilityToggle={(id) => { handleLayersToggleVisibility(id); setSelectedDrawing(prev => prev?.id === id ? { ...prev, isHidden: !prev.isHidden } : prev); }}
+              onDuplicate={handleDrawingDuplicate}
+              onDelete={(id) => { handleLayersDelete(id); setSelectedDrawing(null); }}
+              onClose={() => setSelectedDrawing(null)}
+            />
+          )}
           {/* Sub-chart panes — one per enabled separate-pane indicator */}
           {separatePaneIndicators.map(ind => (
             <div
