@@ -29,6 +29,7 @@ import { tamperDetection } from './middleware/tamperDetection.js';
 import { AuditLogger } from './services/auditLogger.js';
 import { createRedisRateLimitStore } from './middleware/rateLimitStore.js';
 import { createApiRouter } from './routes/api.js';
+import { createDashboardSyncRouter } from './routes/dashboard-sync.routes.js';
 import { createAuthRouter } from './routes/auth.routes.js';
 import { createProvisioningRouter } from './routes/provisioning.routes.js';
 import { createAdvancedOrdersRouter } from './routes/advanced-orders.routes.js';
@@ -82,11 +83,18 @@ const server = createServer(app);
 
 const isProduction = process.env.NODE_ENV === 'production';
 const corsOrigins = isProduction
-  ? [FRONTEND_URL]
-  : [FRONTEND_URL, 'http://localhost:5173', 'http://localhost:3000'];
+  ? [FRONTEND_URL, 'https://fundedwealth.com', 'https://www.fundedwealth.com', 'https://admin.fundedwealth.com'].filter(Boolean)
+  : [FRONTEND_URL, 'http://localhost:5173', 'http://localhost:3000', 'https://fundedwealth.com'];
 
 app.use(cors({
-  origin: corsOrigins,
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, curl, server-to-server)
+    if (!origin) return callback(null, true);
+    if (corsOrigins.includes(origin)) return callback(null, true);
+    // Allow any subdomain of fundedwealth.com
+    if (/\.fundedwealth\.com$/.test(origin) || origin === 'https://fundedwealth.com') return callback(null, true);
+    callback(null, false);
+  },
   credentials: true,
 }));
 app.use(express.json({ limit: '1mb' })); // Limit request body size
@@ -230,6 +238,9 @@ app.use('/api/market/expiries', optionChainLimiter);
 
 // API routes (protected + public)
 app.use('/api', createApiRouter(accountService, instrumentService, marketDataEngine, candleService, depthService, optionChainService));
+
+// Dashboard sync routes — called by fundedwealth.com main site (API key auth, no session needed)
+app.use('/api/dashboard', createDashboardSyncRouter());
 
 // Persistence routes (layouts, themes, journal, chart templates)
 // Mounted under both /api and /api/persistence for frontend compatibility
