@@ -150,7 +150,8 @@ class EventDispatcher {
     // Fire-and-forget: update today's account_metrics snapshot so the dashboard
     // Analytics page shows live data without waiting for the end-of-day cron.
     try {
-      const account = await this.accountRepo.findById(accountId);
+      // Use getWithChallenge so we have initial_balance for P&L and balance update
+      const account = await this.accountRepo.getWithChallenge(accountId);
       if (!account) return;
 
       // Get today's executions for FIFO P&L computation
@@ -257,23 +258,47 @@ class EventDispatcher {
       // The external dashboard reads balance - initial_balance as "P&L".
       // We need to keep balance current so the dashboard shows the right number.
       try {
-        const challenge = account.challenge;
-        const initialBalance = challenge?.initial_balance
-          ? parseFloat(challenge.initial_balance)
-          : balance;
+        const initialBalance = account.challenge?.initial_balance
+          ? parseFloat(account.challenge.initial_balance)
+          : parseFloat(account.initial_balance || balance);
         const newBalance = Math.round((initialBalance + realizedPnl) * 100) / 100;
-        if (newBalance !== balance) {
+        if (Math.abs(newBalance - balance) > 0.01) {
           await this.accountRepo.updateBalance(accountId, newBalance);
           // Update peak balance if equity is higher
           const currentEquity = newBalance + unrealizedPnl;
           if (currentEquity > peakBalance) {
             await this.accountRepo.updatePeakBalance(accountId, Math.round(currentEquity * 100) / 100);
           }
+          console.log(`[EventDispatcher] Balance updated: ₹${balance} → ₹${newBalance} (realizedPnl=₹${realizedPnl})`);
         }
       } catch (balErr) {
         console.error('[EventDispatcher] Balance update failed:', balErr.message);
       }
-      // ────────────────────────────────────────────────────────────────────────
+
+      // ── Push live P&L to external dashboard (fundedwealth.com) ──────────────
+      // The dashboard has its own DB — we push a trade.synced event so it can
+      // update Daily P&L, Total Trades, and progress bars in real time.
+      try {
+        const { LifecycleCallbackClient } = await import('../clients/lifecycle.callback.js');
+        await LifecycleCallbackClient.notifyWebsite('trade.synced', {
+          accountId,
+          traderId: account.trader_id,
+          data: {
+            dailyPnl: Math.round(realizedPnl * 100) / 100,
+            totalTrades: todayTrades.length,
+            winningTrades,
+            losingTrades,
+            grossProfit: Math.round(grossProfit * 100) / 100,
+            grossLoss: Math.round(grossLoss * 100) / 100,
+            currentBalance: Math.round((parseFloat(account.challenge?.initial_balance || balance) + realizedPnl) * 100) / 100,
+            syncedAt: new Date().toISOString(),
+          },
+        });
+      } catch (lcErr) {
+        // Non-blocking — external dashboard push failure must never break trading
+        console.warn('[EventDispatcher] Dashboard sync failed (non-critical):', lcErr.message);
+      }
+      // ─────────────────────────────────────────────────────────────────────────
 
       this._track('TradeExecuted_MetricsUpdated');
     } catch (err) {
