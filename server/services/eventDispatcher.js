@@ -253,6 +253,28 @@ class EventDispatcher {
         profitFactor: profitFactor !== null ? Math.round(profitFactor * 10000) / 10000 : null,
       });
 
+      // ── Update trading_accounts.balance with today's realized P&L ──────────
+      // The external dashboard reads balance - initial_balance as "P&L".
+      // We need to keep balance current so the dashboard shows the right number.
+      try {
+        const challenge = account.challenge;
+        const initialBalance = challenge?.initial_balance
+          ? parseFloat(challenge.initial_balance)
+          : balance;
+        const newBalance = Math.round((initialBalance + realizedPnl) * 100) / 100;
+        if (newBalance !== balance) {
+          await this.accountRepo.updateBalance(accountId, newBalance);
+          // Update peak balance if equity is higher
+          const currentEquity = newBalance + unrealizedPnl;
+          if (currentEquity > peakBalance) {
+            await this.accountRepo.updatePeakBalance(accountId, Math.round(currentEquity * 100) / 100);
+          }
+        }
+      } catch (balErr) {
+        console.error('[EventDispatcher] Balance update failed:', balErr.message);
+      }
+      // ────────────────────────────────────────────────────────────────────────
+
       this._track('TradeExecuted_MetricsUpdated');
     } catch (err) {
       this._fail('TradeExecuted', err);
