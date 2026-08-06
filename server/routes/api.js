@@ -815,6 +815,7 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
       const positions = await positionRepo.findOpenByAccountId(realId);
 
       // Helper: FIFO P&L computation from a list of executions
+      // Handles both long (BUY→SELL) and short (SELL→BUY) round trips correctly.
       function computePnlFromExecutions(executions) {
         // Group by token, sort by time ascending, then FIFO match
         const byToken = {};
@@ -829,35 +830,47 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
         for (const [, symbolTrades] of Object.entries(byToken)) {
           symbolTrades.sort((a, b) => new Date(a.executed_at).getTime() - new Date(b.executed_at).getTime());
 
-          let netQty = 0;
-          let avgCost = 0;
+          // Use a queue of open lots: each lot = { side: 'LONG'|'SHORT', qty, price, date }
+          const openLots = []; // FIFO queue
 
           for (const t of symbolTrades) {
             const qty = parseInt(t.qty) || 0;
             const price = parseFloat(t.price) || 0;
             const date = (t.executed_at || '').split('T')[0];
+            const symbol = t.symbol;
 
-            if (t.side === 'BUY') {
-              // Opening / adding to long
-              const totalCost = avgCost * netQty + price * qty;
-              netQty += qty;
-              avgCost = netQty > 0 ? totalCost / netQty : 0;
-            } else {
-              // SELL closes long
-              if (netQty > 0) {
-                const closeQty = Math.min(qty, netQty);
-                const realizedPnl = (price - avgCost) * closeQty;
-                trades.push({ pnl: realizedPnl, date, symbol: t.symbol });
-                netQty -= closeQty;
-                if (netQty <= 0) { netQty = 0; avgCost = 0; }
+            // Incoming direction: BUY opens LONG or closes SHORT; SELL opens SHORT or closes LONG
+            const incomingDir = t.side === 'BUY' ? 'LONG' : 'SHORT';
+            const closingDir  = t.side === 'BUY' ? 'SHORT' : 'LONG'; // this BUY closes an open SHORT, etc.
 
-                // Reversal excess — short side (simplified: treat excess as new short, skip for now)
+            let remaining = qty;
+
+            // First: try to close existing opposite-side lots (FIFO)
+            while (remaining > 0 && openLots.length > 0 && openLots[0].side === closingDir) {
+              const lot = openLots[0];
+              const closeQty = Math.min(remaining, lot.qty);
+
+              // P&L: for closing a LONG (selling it), pnl = (sell_price - buy_price) * qty
+              //       for closing a SHORT (buying it back), pnl = (sell_price - buy_price) * qty
+              let pnl;
+              if (closingDir === 'LONG') {
+                // Closing a long via SELL
+                pnl = (price - lot.price) * closeQty;
               } else {
-                // Short trade — opening short
-                const totalCost = avgCost * Math.abs(netQty) + price * qty;
-                netQty -= qty;
-                avgCost = netQty < 0 ? totalCost / Math.abs(netQty) : 0;
+                // Closing a short via BUY
+                pnl = (lot.price - price) * closeQty;
               }
+
+              trades.push({ pnl, date, symbol });
+
+              lot.qty -= closeQty;
+              if (lot.qty <= 0) openLots.shift();
+              remaining -= closeQty;
+            }
+
+            // If any qty left, it opens a new position
+            if (remaining > 0) {
+              openLots.push({ side: incomingDir, qty: remaining, price, date });
             }
           }
         }

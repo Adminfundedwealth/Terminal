@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { Plus, Trash2, Edit2, Save, X, Image, Tag, AlertCircle, BookOpen } from 'lucide-react';
 import { useJournalStore, type JournalEntry } from '@/store/journalStore';
 import { cn } from '@/utils/helpers';
@@ -13,11 +13,19 @@ const PHASES: { value: JournalEntry['tradePhase']; label: string }[] = [
 const COMMON_TAGS = ['momentum', 'breakout', 'scalp', 'swing', 'reversal', 'trend', 'gap', 'news', 'overtraded', 'revenge'];
 
 export function JournalPanel() {
-  const { entries, addEntry, updateEntry, deleteEntry, backendAvailable } = useJournalStore();
+  const { entries, addEntry, updateEntry, deleteEntry, backendAvailable, hydrateFromBackend, _lastHydrated } = useJournalStore();
   const [isAdding, setIsAdding] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [filterPhase, setFilterPhase] = useState<'all' | JournalEntry['tradePhase']>('all');
   const [filterTag, setFilterTag] = useState('');
+
+  // Hydrate from backend on first mount (or if not hydrated in last 5 min)
+  useEffect(() => {
+    const fiveMin = 5 * 60 * 1000;
+    if (Date.now() - (_lastHydrated || 0) > fiveMin) {
+      hydrateFromBackend();
+    }
+  }, []);
   const [form, setForm] = useState({
     symbol: '',
     side: 'BUY' as 'BUY' | 'SELL',

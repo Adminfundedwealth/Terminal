@@ -367,12 +367,59 @@ export class AccountService {
     if (!supabase) {
       return [];
     }
-    let query = supabase
+
+    // Always fetch ALL executions for FIFO P&L computation, then filter by period for display
+    let allQuery = supabase
       .from('executions')
       .select('*')
       .eq('trading_account_id', accountId)
-      .order('executed_at', { ascending: false });
+      .order('executed_at', { ascending: true }); // ascending for FIFO
 
+    const { data: allData, error: allError } = await allQuery;
+    if (allError || !allData) {
+      return [];
+    }
+
+    // ── FIFO P&L computation across all executions ─────────────────────────
+    // openLots: per-token queue of { side, qty, price }
+    const openLots = {};    // token → [{ side:'LONG'|'SHORT', qty, price }]
+    const pnlByExec = {};   // execId → realizedPnl for this execution
+
+    for (const t of allData) {
+      const key = t.token || t.symbol;
+      if (!openLots[key]) openLots[key] = [];
+
+      const qty = parseInt(t.qty) || 0;
+      const price = parseFloat(t.price) || 0;
+      const incomingDir = t.side === 'BUY' ? 'LONG' : 'SHORT';
+      const closingDir  = t.side === 'BUY' ? 'SHORT' : 'LONG';
+
+      let remaining = qty;
+      let execPnl = 0;
+
+      // Close opposite lots first (FIFO)
+      while (remaining > 0 && openLots[key].length > 0 && openLots[key][0].side === closingDir) {
+        const lot = openLots[key][0];
+        const closeQty = Math.min(remaining, lot.qty);
+        const pnl = closingDir === 'LONG'
+          ? (price - lot.price) * closeQty   // closing long via SELL
+          : (lot.price - price) * closeQty;  // closing short via BUY
+        execPnl += pnl;
+        lot.qty -= closeQty;
+        if (lot.qty <= 0) openLots[key].shift();
+        remaining -= closeQty;
+      }
+
+      // Open new lot for remaining qty
+      if (remaining > 0) {
+        openLots[key].push({ side: incomingDir, qty: remaining, price });
+      }
+
+      pnlByExec[t.id] = execPnl;
+    }
+
+    // ── Filter by period for display ────────────────────────────────────────
+    let filteredData = allData;
     if (period) {
       const now = new Date();
       let from;
@@ -386,24 +433,26 @@ export class AccountService {
         default:
           from = new Date(now); from.setHours(0, 0, 0, 0);
       }
-      query = query.gte('executed_at', from.toISOString());
+      const fromIso = from.toISOString();
+      filteredData = allData.filter(t => t.executed_at >= fromIso);
     }
 
-    const { data, error } = await query;
-    if (error || !data) {
-      return [];
-    }
-    return data.map(t => ({
-      id: t.id,
-      orderId: t.order_id,
-      symbol: t.symbol,
-      token: t.token,
-      segment: t.segment,
-      side: t.side,
-      qty: t.qty,
-      price: parseFloat(t.price) || 0,
-      timestamp: t.executed_at,
-    }));
+    // Return most-recent-first for display, with P&L attached
+    return filteredData
+      .slice()
+      .sort((a, b) => new Date(b.executed_at).getTime() - new Date(a.executed_at).getTime())
+      .map(t => ({
+        id: t.id,
+        orderId: t.order_id,
+        symbol: t.symbol,
+        token: t.token,
+        segment: t.segment,
+        side: t.side,
+        qty: t.qty,
+        price: parseFloat(t.price) || 0,
+        timestamp: t.executed_at,
+        pnl: Math.round((pnlByExec[t.id] || 0) * 100) / 100,
+      }));
   }
 
   async placeOrder(accountId, params) {

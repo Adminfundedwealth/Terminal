@@ -464,51 +464,63 @@ function OrdersTable({ orders, onCancel }: { orders: Order[]; onCancel: (id: str
           <th>Type</th>
           <th>Product</th>
           <th>Qty</th>
-          <th>Price</th>
+          <th>Avg Price</th>
+          <th>P&amp;L</th>
           <th>Status</th>
           <th>Actions</th>
         </tr>
       </thead>
       <tbody>
-        {orders.map((order) => (
-          <tr key={order.id}>
-            <td className="text-fw-text-secondary font-mono text-[14px] tabular-nums">{new Date(order.timestamp).toLocaleTimeString()}</td>
-            <td className="font-semibold text-fw-text">{order.symbol}</td>
-            <td>
-              <span className={cn('text-[14px] font-semibold px-1.5 py-0.5 rounded', order.side === 'BUY' ? 'text-green bg-green-dim' : 'text-red bg-red-dim')}>
-                {order.side}
-              </span>
-            </td>
-            <td className="text-fw-text-secondary">{order.orderType}</td>
-            <td className="text-fw-text-secondary">{order.productType}</td>
-            <td className="font-mono tabular-nums">{order.filledQty}/{order.qty}</td>
-            <td className="font-mono tabular-nums">{order.price ? `₹${formatPrice(order.price)}` : 'MKT'}</td>
-            <td>
-              <span className={cn(
-                'px-2 py-0.5 text-[13px] rounded-md font-semibold',
-                order.status === 'FILLED' && 'bg-green-900/20 text-green-400',
-                order.status === 'OPEN' && 'bg-blue-900/20 text-blue-400',
-                order.status === 'CANCELLED' && 'bg-yellow-900/20 text-yellow-400',
-                order.status === 'REJECTED' && 'bg-red-900/20 text-red-400',
-                order.status === 'PENDING' && 'bg-orange-900/20 text-orange-400',
-              )}>
-                {order.status}
-              </span>
-              {order.message && order.status === 'REJECTED' && (
-                <div className="text-[13px] text-red-400/70 mt-0.5 max-w-[180px] truncate" title={order.message}>
-                  {order.message}
-                </div>
-              )}
-            </td>
-            <td>
-              {order.status === 'OPEN' && (
-                <button onClick={() => onCancel(order.id)} className="p-1.5 rounded-md hover:bg-red-900/30 text-red-400 transition-colors" title="Cancel">
-                  <X size={13} />
-                </button>
-              )}
-            </td>
-          </tr>
-        ))}
+        {orders.map((order) => {
+          // Compute indicative P&L for filled orders: (avgFill - limit) * filledQty
+          const hasFill = order.status === 'FILLED' && order.avgPrice > 0 && order.filledQty > 0;
+          const orderPnl = hasFill && order.price > 0
+            ? (order.side === 'SELL' ? order.avgPrice - order.price : order.price - order.avgPrice) * order.filledQty
+            : null;
+
+          return (
+            <tr key={order.id}>
+              <td className="text-fw-text-secondary font-mono text-[14px] tabular-nums">{new Date(order.timestamp).toLocaleTimeString()}</td>
+              <td className="font-semibold text-fw-text">{order.symbol}</td>
+              <td>
+                <span className={cn('text-[14px] font-semibold px-1.5 py-0.5 rounded', order.side === 'BUY' ? 'text-green bg-green-dim' : 'text-red bg-red-dim')}>
+                  {order.side}
+                </span>
+              </td>
+              <td className="text-fw-text-secondary">{order.orderType}</td>
+              <td className="text-fw-text-secondary">{order.productType}</td>
+              <td className="font-mono tabular-nums">{order.filledQty}/{order.qty}</td>
+              <td className="font-mono tabular-nums">{order.avgPrice > 0 ? `₹${formatPrice(order.avgPrice)}` : order.price ? `₹${formatPrice(order.price)}` : 'MKT'}</td>
+              <td className={cn('font-mono font-semibold tabular-nums', orderPnl === null ? 'text-fw-text-muted' : orderPnl >= 0 ? 'text-green' : 'text-red')}>
+                {orderPnl !== null ? formatPnl(orderPnl) : '—'}
+              </td>
+              <td>
+                <span className={cn(
+                  'px-2 py-0.5 text-[13px] rounded-md font-semibold',
+                  order.status === 'FILLED' && 'bg-green-900/20 text-green-400',
+                  order.status === 'OPEN' && 'bg-blue-900/20 text-blue-400',
+                  order.status === 'CANCELLED' && 'bg-yellow-900/20 text-yellow-400',
+                  order.status === 'REJECTED' && 'bg-red-900/20 text-red-400',
+                  order.status === 'PENDING' && 'bg-orange-900/20 text-orange-400',
+                )}>
+                  {order.status}
+                </span>
+                {order.message && order.status === 'REJECTED' && (
+                  <div className="text-[13px] text-red-400/70 mt-0.5 max-w-[180px] truncate" title={order.message}>
+                    {order.message}
+                  </div>
+                )}
+              </td>
+              <td>
+                {order.status === 'OPEN' && (
+                  <button onClick={() => onCancel(order.id)} className="p-1.5 rounded-md hover:bg-red-900/30 text-red-400 transition-colors" title="Cancel">
+                    <X size={13} />
+                  </button>
+                )}
+              </td>
+            </tr>
+          );
+        })}
       </tbody>
     </table>
   );
@@ -530,6 +542,7 @@ function TradesTable({ trades }: { trades: Trade[] }) {
           <th>Side</th>
           <th>Qty</th>
           <th>Price</th>
+          <th>P&amp;L</th>
           <th>Segment</th>
           <th>Order ID</th>
         </tr>
@@ -546,8 +559,14 @@ function TradesTable({ trades }: { trades: Trade[] }) {
             </td>
             <td className="font-mono tabular-nums">{trade.qty}</td>
             <td className="font-mono tabular-nums">₹{formatPrice(trade.price)}</td>
+            <td className={cn('font-mono font-semibold tabular-nums',
+              trade.pnl === undefined || trade.pnl === 0 ? 'text-fw-text-muted'
+              : trade.pnl > 0 ? 'text-green' : 'text-red'
+            )}>
+              {trade.pnl !== undefined && trade.pnl !== 0 ? formatPnl(trade.pnl) : '—'}
+            </td>
             <td className="text-fw-text-secondary">{trade.segment}</td>
-            <td className="text-fw-text-muted text-[13px] font-mono">{trade.orderId}</td>
+            <td className="text-fw-text-muted text-[13px] font-mono">{trade.orderId?.slice(0, 16)}…</td>
           </tr>
         ))}
       </tbody>

@@ -1,7 +1,8 @@
-﻿import { useState, useMemo } from 'react';
+﻿import { useState, useEffect, useMemo } from 'react';
 import { Bot, TrendingUp, Brain, Calendar, MessageCircle, RefreshCw, AlertCircle } from 'lucide-react';
 import { useTradingStore } from '@/store/tradingStore';
 import { useJournalStore } from '@/store/journalStore';
+import { getAccountAnalytics, getTrades } from '@/services/api';
 import { cn } from '@/utils/helpers';
 
 type AITab = 'review' | 'behavior' | 'summary' | 'coaching';
@@ -79,11 +80,36 @@ function TradeReviewTab() {
   const trades = useTradingStore((s) => s.trades);
   const { entries } = useJournalStore();
 
+  // Fetch server analytics for real P&L data
+  const [analytics, setAnalytics] = useState<any>(null);
+  const [allTrades, setAllTrades] = useState<any[]>([]);
+
+  useEffect(() => {
+    getAccountAnalytics().then(setAnalytics).catch(() => {});
+    getTrades('month').then(setAllTrades).catch(() => {});
+  }, []);
+
+  // Build reviewable list: prefer real server trades with P&L, fall back to journal
   const recentTrades = useMemo(() => {
-    // Combine journal entries with P&L as "completed trades" for review
-    const reviewable = entries
-      .filter(e => e.pnl !== undefined && e.pnl !== 0)
+    // Real executed trades with FIFO P&L from server
+    const fromExecutions = allTrades
+      .filter(t => t.pnl !== undefined && t.pnl !== 0)
       .slice(0, 20)
+      .map(t => ({
+        id: t.id,
+        symbol: t.symbol,
+        side: t.side,
+        pnl: t.pnl || 0,
+        date: new Date(t.timestamp).toISOString().split('T')[0],
+        emotion: 'neutral' as const,
+        rating: 3 as const,
+        source: 'execution' as const,
+      }));
+
+    // Supplement with journal entries that have P&L (manual entries)
+    const fromJournal = entries
+      .filter(e => e.pnl !== undefined && e.pnl !== 0)
+      .slice(0, 10)
       .map(e => ({
         id: e.id,
         symbol: e.symbol,
@@ -92,9 +118,20 @@ function TradeReviewTab() {
         date: e.date,
         emotion: e.emotion,
         rating: e.rating,
+        source: 'journal' as const,
       }));
-    return reviewable;
-  }, [entries]);
+
+    // Deduplicate by date+symbol, prefer execution source
+    const seen = new Set<string>();
+    const merged = [...fromExecutions, ...fromJournal].filter(t => {
+      const key = `${t.date}:${t.symbol}:${t.side}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    return merged.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 20);
+  }, [allTrades, entries]);
 
   const [selectedTrade, setSelectedTrade] = useState<string | null>(null);
 
@@ -182,66 +219,73 @@ function TradeReviewTab() {
 
 function BehavioralTab() {
   const { entries } = useJournalStore();
-  const trades = useTradingStore((s) => s.trades);
+  const [allTrades, setAllTrades] = useState<any[]>([]);
+  const [analytics, setAnalytics] = useState<any>(null);
+
+  useEffect(() => {
+    getTrades('month').then(setAllTrades).catch(() => {});
+    getAccountAnalytics().then(setAnalytics).catch(() => {});
+  }, []);
 
   const analysis = useMemo(() => {
-    const recentEntries = entries.filter(e => e.pnl !== undefined).slice(0, 50);
-    if (recentEntries.length < 5) return null;
+    // Use real execution trades + journal entries together
+    const executionTrades = allTrades.filter(t => t.pnl !== undefined && t.pnl !== 0).map(t => ({
+      pnl: t.pnl || 0,
+      date: new Date(t.timestamp).toISOString().split('T')[0],
+      emotion: 'neutral' as const,
+      createdAt: t.timestamp,
+    }));
+    const journalTrades = entries.filter(e => e.pnl !== undefined);
+    const combined = [...executionTrades, ...journalTrades];
 
-    // Overtrading detection: >2x average trades per active day
+    if (combined.length < 3) return null;
+
     const dayMap = new Map<string, number>();
-    recentEntries.forEach(e => { dayMap.set(e.date, (dayMap.get(e.date) || 0) + 1); });
-    const avgPerDay = recentEntries.length / Math.max(1, dayMap.size);
+    combined.forEach(e => { dayMap.set(e.date, (dayMap.get(e.date) || 0) + 1); });
+    const avgPerDay = combined.length / Math.max(1, dayMap.size);
     const overtradingDays = Array.from(dayMap.values()).filter(c => c > avgPerDay * 2).length;
     const isOvertrading = overtradingDays > dayMap.size * 0.3;
 
-    // Revenge trading: loss followed by trade within same day with larger implicit risk
+    // Revenge trading from journal entries only (need emotion data)
     let revengeTrades = 0;
-    const sorted = [...recentEntries].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-    for (let i = 1; i < sorted.length; i++) {
-      if (sorted[i - 1].pnl && sorted[i - 1].pnl! < 0 && sorted[i].date === sorted[i - 1].date) {
+    const sortedJ = [...journalTrades].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    for (let i = 1; i < sortedJ.length; i++) {
+      if ((sortedJ[i - 1].pnl || 0) < 0 && sortedJ[i].date === sortedJ[i - 1].date) {
         revengeTrades++;
       }
     }
-    const isRevenge = revengeTrades > recentEntries.length * 0.2;
+    const isRevenge = journalTrades.length > 0 && revengeTrades > journalTrades.length * 0.2;
 
-    // Emotional patterns
     const emotionCounts: Record<string, number> = {};
-    recentEntries.forEach(e => { emotionCounts[e.emotion] = (emotionCounts[e.emotion] || 0) + 1; });
+    journalTrades.forEach(e => { emotionCounts[e.emotion] = (emotionCounts[e.emotion] || 0) + 1; });
     const dominantEmotion = Object.entries(emotionCounts).sort((a, b) => b[1] - a[1])[0];
 
-    // Win/loss streaks
-    let maxWinStreak = 0, maxLossStreak = 0, curStreak = 0, lastType: 'w' | 'l' | null = null;
-    recentEntries.forEach(e => {
-      const type = (e.pnl || 0) > 0 ? 'w' : 'l';
-      if (type === lastType) curStreak++;
-      else { curStreak = 1; lastType = type; }
-      if (type === 'w') maxWinStreak = Math.max(maxWinStreak, curStreak);
-      else maxLossStreak = Math.max(maxLossStreak, curStreak);
-    });
+    // Win/loss streaks from server analytics if available
+    const maxWinStreak = analytics?.maxWinStreak ?? 0;
+    const maxLossStreak = analytics?.maxLossStreak ?? 0;
 
-    // Consistency score (0-100)
-    const winRate = recentEntries.filter(e => (e.pnl || 0) > 0).length / recentEntries.length;
-    const consistencyScore = Math.round(winRate * 50 + (1 - (overtradingDays / Math.max(1, dayMap.size))) * 30 + (revengeTrades === 0 ? 20 : 0));
+    const winners = combined.filter(e => (e.pnl || 0) > 0).length;
+    const winRate = combined.length > 0 ? winners / combined.length : 0;
+    const consistencyScore = Math.round(
+      winRate * 50 +
+      (1 - (overtradingDays / Math.max(1, dayMap.size))) * 30 +
+      (revengeTrades === 0 ? 20 : 0)
+    );
 
     return {
-      isOvertrading,
-      overtradingDays,
-      isRevenge,
-      revengeTrades,
+      isOvertrading, overtradingDays, isRevenge, revengeTrades,
       dominantEmotion: dominantEmotion?.[0] || 'neutral',
       dominantEmotionCount: dominantEmotion?.[1] || 0,
-      maxWinStreak,
-      maxLossStreak,
+      maxWinStreak, maxLossStreak,
       consistencyScore,
-      totalAnalyzed: recentEntries.length,
+      totalAnalyzed: combined.length,
       tradingDays: dayMap.size,
       avgPerDay: avgPerDay.toFixed(1),
     };
-  }, [entries]);
+  }, [allTrades, entries, analytics]);
 
   if (!analysis) {
-    return <InsufficientDataMessage message="Minimum 5 completed trades required for Behavioral Analysis." count={entries.filter(e => e.pnl).length} />;
+    return <InsufficientDataMessage message="Minimum 3 completed trades required for Behavioral Analysis." count={allTrades.filter(t => t.pnl !== 0).length + entries.filter(e => e.pnl).length} />;
   }
 
   return (
@@ -294,25 +338,32 @@ function DailySummaryTab() {
   const positions = useTradingStore((s) => s.positions);
   const trades = useTradingStore((s) => s.trades);
   const { entries } = useJournalStore();
+  const [analytics, setAnalytics] = useState<any>(null);
+
+  useEffect(() => {
+    getAccountAnalytics().then(setAnalytics).catch(() => {});
+  }, []);
 
   const summary = useMemo(() => {
     const today = new Date().toISOString().split('T')[0];
     const todayEntries = entries.filter(e => e.date === today);
-    const todayPnl = todayEntries.reduce((s, e) => s + (e.pnl || 0), 0);
-    const openMtm = positions.reduce((s, p) => s + (p.mtm || p.pnl || 0), 0);
-    const wins = todayEntries.filter(e => (e.pnl || 0) > 0).length;
-    const losses = todayEntries.filter(e => (e.pnl || 0) < 0).length;
-    const winRate = todayEntries.length > 0 ? (wins / todayEntries.length) * 100 : 0;
 
-    // Suggestions based on data patterns
+    // Prefer server analytics P&L, fall back to journal
+    const todayPnl = analytics?.dailyPnl ?? todayEntries.reduce((s, e) => s + (e.pnl || 0), 0);
+    const openMtm = positions.reduce((s, p) => s + (p.mtm || p.pnl || 0), 0);
+    const wins = analytics?.winners ?? todayEntries.filter(e => (e.pnl || 0) > 0).length;
+    const losses = analytics?.losers ?? todayEntries.filter(e => (e.pnl || 0) < 0).length;
+    const totalToday = analytics?.dailyTradeCount ?? todayEntries.length;
+    const winRate = analytics?.dailyWinRate ?? (totalToday > 0 ? (wins / totalToday) * 100 : 0);
+
     const suggestions: string[] = [];
-    if (todayEntries.length === 0 && positions.length === 0) {
+    if (totalToday === 0 && positions.length === 0) {
       suggestions.push('No trading activity today. Review your watchlists and setups.');
     }
-    if (wins > 0 && losses === 0) {
+    if (wins > 0 && losses === 0 && totalToday > 0) {
       suggestions.push('Perfect session so far. Consider locking profits or reducing size.');
     }
-    if (losses > wins && todayEntries.length >= 3) {
+    if (losses > wins && totalToday >= 3) {
       suggestions.push('More losses than wins today. Consider stepping away and reviewing strategy.');
     }
     if (todayPnl < 0 && Math.abs(todayPnl) > 5000) {
@@ -322,8 +373,8 @@ function DailySummaryTab() {
       suggestions.push(`${positions.length} open positions — monitor concentration risk.`);
     }
 
-    return { todayEntries: todayEntries.length, todayPnl, openMtm, wins, losses, winRate, openPositions: positions.length, suggestions };
-  }, [positions, trades, entries]);
+    return { todayEntries: totalToday, todayPnl, openMtm, wins, losses, winRate, openPositions: positions.length, suggestions };
+  }, [positions, trades, entries, analytics]);
 
   return (
     <div className="p-3 space-y-3">
@@ -378,58 +429,61 @@ function DailySummaryTab() {
 function CoachingTab() {
   const positions = useTradingStore((s) => s.positions);
   const { entries } = useJournalStore();
+  const [analytics, setAnalytics] = useState<any>(null);
+  const [weekTrades, setWeekTrades] = useState<any[]>([]);
+
+  useEffect(() => {
+    getAccountAnalytics().then(setAnalytics).catch(() => {});
+    getTrades('week').then(setWeekTrades).catch(() => {});
+  }, []);
 
   const coaching = useMemo(() => {
-    // Last 7 days entries
     const weekAgo = new Date();
     weekAgo.setDate(weekAgo.getDate() - 7);
     const weekStr = weekAgo.toISOString().split('T')[0];
-    const recent = entries.filter(e => e.date >= weekStr);
 
-    if (recent.length < 5) return null;
+    // Real trades from executions this week
+    const executionCount = weekTrades.filter(t => t.pnl !== undefined && t.pnl !== 0).length;
+    // Journal entries this week
+    const recentJournal = entries.filter(e => e.date >= weekStr);
+    const totalTrades = Math.max(executionCount, recentJournal.length);
+
+    if (totalTrades < 2 && !analytics) return null;
+
+    const totalPnl = analytics?.weeklyPnl ?? recentJournal.reduce((s, e) => s + (e.pnl || 0), 0);
+    const winRateNum = analytics?.winRate ?? 0;
+    const winRate = winRateNum / 100;
 
     const tips: { category: string; advice: string }[] = [];
-    const totalPnl = recent.reduce((s, e) => s + (e.pnl || 0), 0);
-    const winRate = recent.filter(e => (e.pnl || 0) > 0).length / recent.length;
-    const avgPnl = totalPnl / recent.length;
 
-    // Position sizing
-    if (recent.some(e => e.mistakes?.includes('oversize'))) {
-      tips.push({ category: 'Position Sizing', advice: 'You\'ve flagged oversizing mistakes this week. Consider using the Position Size Calculator to enforce risk limits before entry.' });
+    if (recentJournal.some(e => e.mistakes?.includes('oversize'))) {
+      tips.push({ category: 'Position Sizing', advice: 'You\'ve flagged oversizing mistakes this week. Use the Position Size Calculator to enforce risk limits before entry.' });
     }
-
-    // Win rate coaching
-    if (winRate < 0.4) {
+    if (winRate > 0 && winRate < 0.4) {
       tips.push({ category: 'Entry Quality', advice: `Win rate is ${(winRate * 100).toFixed(0)}% this week. Focus on fewer, higher-conviction setups rather than taking every signal.` });
-    } else if (winRate > 0.6) {
+    } else if (winRate >= 0.6) {
       tips.push({ category: 'Scaling', advice: `Strong ${(winRate * 100).toFixed(0)}% win rate. Consider slightly increasing position size while maintaining risk rules.` });
     }
-
-    // Emotional coaching
-    const fearCount = recent.filter(e => e.emotion === 'fearful').length;
-    const greedCount = recent.filter(e => e.emotion === 'greedy').length;
-    if (fearCount > recent.length * 0.3) {
+    const fearCount = recentJournal.filter(e => e.emotion === 'fearful').length;
+    const greedCount = recentJournal.filter(e => e.emotion === 'greedy').length;
+    if (fearCount > recentJournal.length * 0.3) {
       tips.push({ category: 'Psychology', advice: 'Fear appears frequently in your journal. Pre-define exit rules before entry to reduce emotional decision-making.' });
     }
-    if (greedCount > recent.length * 0.3) {
+    if (greedCount > recentJournal.length * 0.3) {
       tips.push({ category: 'Psychology', advice: 'Greed patterns detected. Set take-profit levels in advance and honor them consistently.' });
     }
-
-    // Open positions
     if (positions.length > 3) {
       tips.push({ category: 'Exposure', advice: `You have ${positions.length} open positions. Monitor total portfolio risk and consider reducing if correlated.` });
     }
-
-    // Default encouragement
     if (tips.length === 0) {
       tips.push({ category: 'General', advice: 'Good trading discipline this week. Stay consistent with your process and risk management.' });
     }
 
-    return { totalTrades: recent.length, weekPnl: totalPnl, winRate, tips };
-  }, [entries, positions]);
+    return { totalTrades, weekPnl: totalPnl, winRate, tips };
+  }, [entries, positions, analytics, weekTrades]);
 
   if (!coaching) {
-    return <InsufficientDataMessage message="Minimum 5 trades in the last 7 days required for coaching." count={entries.filter(e => e.date >= new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0]).length} />;
+    return <InsufficientDataMessage message="Trading data loading… Come back after a few trades." count={weekTrades.length} />;
   }
 
   return (

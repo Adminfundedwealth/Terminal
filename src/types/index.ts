@@ -108,6 +108,8 @@ export interface Trade {
   qty: number;
   price: number;
   timestamp: string;
+  pnl?: number;        // realized P&L for this execution (FIFO-matched)
+  cumPnl?: number;     // cumulative P&L for the symbol up to this trade
 }
 
 export interface WatchlistItem {

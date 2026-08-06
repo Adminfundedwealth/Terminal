@@ -1,5 +1,7 @@
-﻿import { useTradingStore } from '@/store/tradingStore';
+﻿import { useState, useEffect } from 'react';
+import { useTradingStore } from '@/store/tradingStore';
 import { useJournalStore } from '@/store/journalStore';
+import { getRiskState } from '@/services/api';
 import { cn, getChallengeRulePct } from '@/utils/helpers';
 import { ShieldAlert, TrendingDown, Target, AlertTriangle, BarChart3, Activity } from 'lucide-react';
 
@@ -9,17 +11,36 @@ export function RiskPanel() {
   const account = useTradingStore((s) => s.account);
   const { entries } = useJournalStore();
 
-  // Account fundamentals
-  const balance = account?.balance || 0;
-  const initialBalance = account?.challenge?.initialBalance || balance || 1000000;
-  const peakBalance = account?.peakBalance || Math.max(balance, initialBalance);
+  // Live risk state from server (includes closed-trade P&L)
+  const [riskState, setRiskState] = useState<any>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => {
+      getRiskState()
+        .then(r => { if (!cancelled) setRiskState(r); })
+        .catch(() => {});
+    };
+    load();
+    const interval = setInterval(load, 10000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
+
+  // Account fundamentals — prefer server riskState, fall back to store
+  const balance = riskState?.balance || account?.balance || 0;
+  const initialBalance = riskState?.initialBalance || account?.challenge?.initialBalance || balance || 1000000;
+  const peakBalance = riskState?.peakBalance || account?.peakBalance || Math.max(balance, initialBalance);
   const availableMargin = account?.availableMargin || balance;
   const usedMargin = account?.usedMargin || 0;
   const challengePlan = account?.challenge?.plan;
 
-  // Position-based risk metrics
-  const totalMTM = positions.reduce((sum, p) => sum + (p.mtm || 0), 0);
+  // Use server-computed P&L (includes ALL closed trades, not just open positions)
+  const todayRealizedPnl = riskState?.todayRealizedPnl ?? 0;
+  const unrealizedPnl = riskState?.unrealizedPnl ?? positions.reduce((s, p) => s + (p.mtm || 0), 0);
+  const totalDailyPnl = riskState?.totalDailyPnl ?? (todayRealizedPnl + unrealizedPnl);
+  const totalMTM = unrealizedPnl;
   const totalPnl = positions.reduce((sum, p) => sum + (p.pnl || 0), 0);
+
   const openPositionCount = positions.length;
   const longPositions = positions.filter((p) => p.qty > 0);
   const shortPositions = positions.filter((p) => p.qty < 0);
@@ -34,24 +55,25 @@ export function RiskPanel() {
   const dailyLossLimitPct = getChallengeRulePct(account?.challenge?.dailyLossLimitPct, challengePlan, 'dailyLossLimitPct');
   const maxDrawdownPct = getChallengeRulePct(account?.challenge?.maxDrawdownPct, challengePlan, 'maxDrawdownPct');
   const profitTargetPct = getChallengeRulePct(account?.challenge?.profitTargetPct, challengePlan, 'profitTargetPct');
-  const dailyLossLimit = initialBalance * (dailyLossLimitPct / 100);
-  const maxDrawdownLimit = initialBalance * (maxDrawdownPct / 100);
+  const dailyLossLimit = riskState?.dailyLossLimit || initialBalance * (dailyLossLimitPct / 100);
+  const maxDrawdownLimit = riskState?.maxDrawdownLimit || initialBalance * (maxDrawdownPct / 100);
   const profitTarget = initialBalance * (profitTargetPct / 100);
-  const maxPositionSize = initialBalance * 0.20; // 20% max single position
+  const maxPositionSize = initialBalance * 0.20;
 
-  // Current daily loss
-  const dailyLoss = totalMTM < 0 ? Math.abs(totalMTM) : 0;
+  // Use server daily loss (negative totalDailyPnl = loss)
+  const dailyLoss = totalDailyPnl < 0 ? Math.abs(totalDailyPnl) : 0;
   const dailyLossPct = dailyLossLimit > 0 ? (dailyLoss / dailyLossLimit) * 100 : 0;
 
-  // Drawdown from peak
-  const currentEquity = balance + totalMTM;
-  const drawdown = peakBalance - currentEquity;
-  const drawdownPct = maxDrawdownLimit > 0 ? (Math.max(0, drawdown) / maxDrawdownLimit) * 100 : 0;
-  const drawdownFromPeakPct = peakBalance > 0 ? (Math.max(0, drawdown) / peakBalance) * 100 : 0;
+  // Drawdown — prefer server value
+  const drawdown = riskState?.drawdown ?? Math.max(0, peakBalance - (balance + totalMTM));
+  const drawdownPct = maxDrawdownLimit > 0 ? (drawdown / maxDrawdownLimit) * 100 : 0;
+  const drawdownFromPeakPct = peakBalance > 0 ? (drawdown / peakBalance) * 100 : 0;
 
-  // Profit progress
-  const profitAchieved = currentEquity - initialBalance;
+  // Profit progress — use server pnlFromStart if available
+  const pnlFromStart = riskState?.pnlFromStart ?? (balance + totalMTM - initialBalance);
+  const profitAchieved = pnlFromStart;
   const targetPct = profitTarget > 0 ? (Math.max(0, profitAchieved) / profitTarget) * 100 : 0;
+  const currentEquity = riskState?.currentEquity ?? (balance + totalMTM);
 
   // Margin utilization
   const marginUtilization = balance > 0 ? (usedMargin / balance) * 100 : 0;
@@ -145,15 +167,15 @@ export function RiskPanel() {
       <div className="grid grid-cols-4 gap-2 mb-3">
         <MetricCard label="Equity" value={formatINR(currentEquity)} />
         <MetricCard label="Balance" value={formatINR(balance)} />
+        <MetricCard label="Today Realized" value={formatINR(todayRealizedPnl)} color={todayRealizedPnl >= 0 ? 'green' : 'red'} />
+        <MetricCard label="Unrealized" value={formatINR(unrealizedPnl)} color={unrealizedPnl >= 0 ? 'green' : 'red'} />
         <MetricCard label="Peak Balance" value={formatINR(peakBalance)} />
         <MetricCard label="DD from Peak" value={`${drawdownFromPeakPct.toFixed(2)}%`} color={drawdownFromPeakPct > 5 ? 'red' : drawdownFromPeakPct > 2 ? 'orange' : 'green'} />
         <MetricCard label="Open Positions" value={openPositionCount.toString()} />
+        <MetricCard label="Total Daily P&L" value={formatINR(totalDailyPnl)} color={totalDailyPnl >= 0 ? 'green' : 'red'} />
         <MetricCard label="Long Exposure" value={formatINR(longExposure)} color="green" />
         <MetricCard label="Short Exposure" value={formatINR(shortExposure)} color="red" />
         <MetricCard label="Net Exposure" value={formatINR(netExposure)} color={netExposure >= 0 ? 'green' : 'red'} />
-        <MetricCard label="Total MTM" value={formatINR(totalMTM)} color={totalMTM >= 0 ? 'green' : 'red'} />
-        <MetricCard label="Largest Position" value={formatINR(largestPosition)} color={largestPositionPct > 80 ? 'red' : undefined} />
-        <MetricCard label="Pending Orders" value={formatINR(pendingOrdersExposure)} />
         <MetricCard label="Available Margin" value={formatINR(availableMargin)} />
       </div>
 
