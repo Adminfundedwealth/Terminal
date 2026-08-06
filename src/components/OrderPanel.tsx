@@ -388,22 +388,90 @@ export function OrderPanel() {
         </div>
       </div>
 
-      {/* Submit Buttons — BUY/SELL: largest text, maximum weight */}
+      {/* Submit Buttons — Premium institutional BUY/SELL */}
       <div className="px-3 py-3 border-t border-fw-border bg-[#0a0c12] flex-shrink-0">
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-2.5">
+          {/* BUY */}
           <button
             onClick={() => handleSubmitRequest('BUY')}
             disabled={isSubmitting || !symbol}
-            className="py-3.5 rounded-md fw-btn-trade text-white bg-[var(--fw-green)] hover:brightness-110 disabled:opacity-40 shadow-[0_2px_12px_rgba(34,197,94,0.25)] transition-all active:scale-[0.98]"
+            className={cn(
+              'relative overflow-hidden group',
+              'h-[50px] rounded-xl',
+              'flex items-center justify-center gap-1.5',
+              'font-bold text-[15px] tracking-[0.3px] text-white',
+              'transition-all duration-[180ms] ease-out',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0a0c12]',
+              'active:scale-[0.97] active:duration-[120ms]',
+              'disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100',
+              !isSubmitting && symbol ? 'hover:scale-[1.02] hover:shadow-[0_4px_20px_rgba(34,197,94,0.35)]' : '',
+            )}
+            style={{
+              background: isSubmitting ? 'linear-gradient(180deg, #166534 0%, #15803d 100%)' :
+                'linear-gradient(180deg, #166534 0%, #16a34a 50%, #15803d 100%)',
+              boxShadow: '0 2px 10px rgba(22,163,74,0.25), inset 0 1px 0 rgba(255,255,255,0.08)',
+            }}
           >
-            BUY
+            {/* Shimmer overlay on hover */}
+            <span className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-[180ms]"
+              style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.06) 0%, transparent 100%)' }} />
+            {isSubmitting ? (
+              <>
+                <svg className="animate-spin w-4 h-4 text-white/80" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+                </svg>
+                <span className="text-[14px] font-semibold text-white/90">Executing...</span>
+              </>
+            ) : (
+              <>
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="opacity-90">
+                  <path d="M6 1L11 10H1L6 1Z" fill="white"/>
+                </svg>
+                <span>BUY</span>
+              </>
+            )}
           </button>
+
+          {/* SELL */}
           <button
             onClick={() => handleSubmitRequest('SELL')}
             disabled={isSubmitting || !symbol}
-            className="py-3.5 rounded-md fw-btn-trade text-white bg-[var(--fw-red)] hover:brightness-110 disabled:opacity-40 shadow-[0_2px_12px_rgba(239,68,68,0.25)] transition-all active:scale-[0.98]"
+            className={cn(
+              'relative overflow-hidden group',
+              'h-[50px] rounded-xl',
+              'flex items-center justify-center gap-1.5',
+              'font-bold text-[15px] tracking-[0.3px] text-white',
+              'transition-all duration-[180ms] ease-out',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0a0c12]',
+              'active:scale-[0.97] active:duration-[120ms]',
+              'disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100',
+              !isSubmitting && symbol ? 'hover:scale-[1.02] hover:shadow-[0_4px_20px_rgba(239,68,68,0.35)]' : '',
+            )}
+            style={{
+              background: isSubmitting ? 'linear-gradient(180deg, #7f1d1d 0%, #991b1b 100%)' :
+                'linear-gradient(180deg, #7f1d1d 0%, #dc2626 50%, #b91c1c 100%)',
+              boxShadow: '0 2px 10px rgba(220,38,38,0.25), inset 0 1px 0 rgba(255,255,255,0.08)',
+            }}
           >
-            SELL
+            <span className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-[180ms]"
+              style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.06) 0%, transparent 100%)' }} />
+            {isSubmitting ? (
+              <>
+                <svg className="animate-spin w-4 h-4 text-white/80" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+                </svg>
+                <span className="text-[14px] font-semibold text-white/90">Executing...</span>
+              </>
+            ) : (
+              <>
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="opacity-90">
+                  <path d="M6 11L1 2H11L6 11Z" fill="white"/>
+                </svg>
+                <span>SELL</span>
+              </>
+            )}
           </button>
         </div>
         <div className="flex items-center justify-center gap-3 mt-1.5">
