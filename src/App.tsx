@@ -126,7 +126,7 @@ export default function App() {
   const [watchlistWidth, setWatchlistWidth] = useState(250);
   const [orderPanelWidth, setOrderPanelWidth] = useState(290);
   const [bottomPanelHeight, setBottomPanelHeight] = useState(180);
-  const [depthPanelHeight, setDepthPanelHeight] = useState(250);
+  const [depthPanelHeight, setDepthPanelHeight] = useState(320);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   useHotkeys();
@@ -322,7 +322,7 @@ export default function App() {
                 {panels.marketDepth && (
                   <>
                     <HDivider onDrag={handleDepthResize} />
-                    <div style={{ height: depthPanelHeight, minHeight: 160, maxHeight: 520 }} className="flex-shrink-0 overflow-hidden">
+                    <div style={{ height: depthPanelHeight, minHeight: 200, maxHeight: 600 }} className="flex-shrink-0 overflow-hidden">
                       <ErrorBoundary fallbackTitle="Market Depth Error">
                         <MarketDepthPanel />
                       </ErrorBoundary>

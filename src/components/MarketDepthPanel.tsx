@@ -426,106 +426,89 @@ export function MarketDepthPanel() {
   return (
     <div className="flex flex-col h-full bg-[#08090e] select-none text-fw-text overflow-hidden">
 
-      {/* ══ HEADER ══════════════════════════════════════════════════════════ */}
-      <div className="flex items-center justify-between px-3 py-1.5 border-b border-fw-border bg-[#0d0f17] flex-shrink-0 gap-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="tv-heading text-fw-text">DEPTH</span>
+      {/* ══ HEADER — compact single row ═════════════════════════════════════ */}
+      <div className="flex items-center justify-between px-2 py-1 border-b border-fw-border bg-[#0d0f17] flex-shrink-0 gap-2">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="tv-heading text-fw-text-muted">DOM</span>
           {activeSymbol && (
-            <span className="tv-symbol text-fw-accent truncate">{activeSymbol.symbol}</span>
+            <span className="text-[11px] font-bold text-fw-accent truncate">{activeSymbol.symbol}</span>
           )}
-        </div>
-        <div className="flex items-center gap-1.5 flex-shrink-0">
-          {/* T&S toggle */}
-          <button
-            onClick={() => setShowTape(v => !v)}
-            className={cn(
-              'tv-support font-bold px-1.5 py-0.5 rounded border transition-colors',
-              showTape
-                ? 'border-fw-accent text-fw-accent bg-fw-accent/10'
-                : 'border-fw-border/40 text-fw-text-muted hover:border-fw-accent/40',
-            )}
-          >T&amp;S</button>
-          {/* Cumulative toggle */}
-          <button
-            onClick={() => setShowCum(v => !v)}
-            className={cn(
-              'tv-support font-bold px-1.5 py-0.5 rounded border transition-colors',
-              showCumulative
-                ? 'border-fw-accent text-fw-accent bg-fw-accent/10'
-                : 'border-fw-border/40 text-fw-text-muted hover:border-fw-accent/40',
-            )}
-          >CUM</button>
-          {/* Live LTP */}
           {quote && (
             <span className={cn(
-              'dom-price ml-1 font-mono font-bold tabular-nums tv-smooth-value',
+              'font-mono text-[12px] font-bold tabular-nums tv-smooth-value',
               (quote.changePercent || 0) >= 0 ? 'text-green' : 'text-red',
             )}>
               {formatPrice(quote.ltp)}
             </span>
           )}
         </div>
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <button
+            onClick={() => setShowCum(v => !v)}
+            className={cn(
+              'text-[9px] font-bold px-1 py-0.5 rounded border transition-colors',
+              showCumulative
+                ? 'border-fw-accent text-fw-accent bg-fw-accent/10'
+                : 'border-fw-border/40 text-fw-text-muted hover:border-fw-accent/40',
+            )}
+          >CUM</button>
+          <button
+            onClick={() => setShowTape(v => !v)}
+            className={cn(
+              'text-[9px] font-bold px-1 py-0.5 rounded border transition-colors',
+              showTape
+                ? 'border-fw-accent text-fw-accent bg-fw-accent/10'
+                : 'border-fw-border/40 text-fw-text-muted hover:border-fw-accent/40',
+            )}
+          >T&amp;S</button>
+        </div>
       </div>
 
-      {/* ══ BEST BID / ASK ══════════════════════════════════════════════════ */}
-      <div className="grid grid-cols-2 gap-px border-b border-fw-border/30 flex-shrink-0">
+      {/* ══ BEST BID / ASK + SPREAD — single compact row ════════════════════ */}
+      <div className="flex items-center border-b border-fw-border/30 flex-shrink-0" style={{ minHeight: 36 }}>
+        {/* Best Bid */}
         <div
-          className="flex flex-col items-center py-2 cursor-pointer hover:bg-green/[0.08] transition-colors relative overflow-hidden"
-          style={{ background: 'rgba(34,197,94,0.04)', boxShadow: 'inset 0 -2px 0 rgba(34,197,94,0.35)' }}
+          className="flex-1 flex flex-col items-center py-1 cursor-pointer hover:bg-green/[0.08] transition-colors"
+          style={{ background: 'rgba(34,197,94,0.04)', boxShadow: 'inset 0 -2px 0 rgba(34,197,94,0.3)' }}
           onClick={() => bestBid && onBidClick(bestBid.price)}
         >
-          <span className="tv-label-sm text-green/60 uppercase tracking-widest">Best Bid</span>
-          <span className="font-mono text-[16px] font-bold tabular-nums text-green" style={{ textShadow: '0 0 14px rgba(34,197,94,0.5)' }}>
+          <span className="text-[8px] text-green/50 uppercase tracking-widest font-semibold">Bid</span>
+          <span className="font-mono text-[13px] font-bold tabular-nums text-green leading-none">
             {bestBid ? formatPrice(bestBid.price) : '—'}
           </span>
-          <span className="dom-qty text-green/50">{bestBid ? fmtQty(bestBid.qty) : ''}</span>
+          <span className="font-mono text-[9px] text-green/40 tabular-nums">{bestBid ? fmtQty(bestBid.qty) : ''}</span>
         </div>
-        <div
-          className="flex flex-col items-center py-2 cursor-pointer hover:bg-red/[0.08] transition-colors relative overflow-hidden"
-          style={{ background: 'rgba(239,68,68,0.04)', boxShadow: 'inset 0 -2px 0 rgba(239,68,68,0.35)' }}
-          onClick={() => bestAsk && onAskClick(bestAsk.price)}
-        >
-          <span className="tv-label-sm text-red/60 uppercase tracking-widest">Best Ask</span>
-          <span className="font-mono text-[16px] font-bold tabular-nums text-red" style={{ textShadow: '0 0 14px rgba(239,68,68,0.5)' }}>
-            {bestAsk ? formatPrice(bestAsk.price) : '—'}
-          </span>
-          <span className="dom-qty text-red/50">{bestAsk ? fmtQty(bestAsk.qty) : ''}</span>
-        </div>
-      </div>
-
-      {/* ══ SPREAD VISUALIZER ═══════════════════════════════════════════════ */}
-      <div className="flex items-center justify-between px-3 py-1 border-b border-fw-border/20 bg-[#0a0c13] flex-shrink-0">
-        <div className="flex items-center gap-1.5">
-          <span className="tv-label-sm uppercase tracking-wider">Mid</span>
-          <span className="font-mono text-[12px] font-bold text-fw-text tabular-nums">
-            {midPrice > 0 ? formatPrice(midPrice) : '—'}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="tv-label-sm uppercase tracking-wider text-fw-text-muted">Spread</span>
-          <span className={cn('font-mono text-[12px] font-bold tabular-nums', spreadStatus.color)}>
+        {/* Spread center */}
+        <div className="flex flex-col items-center px-2 flex-shrink-0">
+          <span className={cn('font-mono text-[10px] font-bold tabular-nums', spreadStatus.color)}>
             {spread > 0 ? formatPrice(spread) : '—'}
           </span>
-          {spread > 0 && (
-            <span className={cn(
-              'text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded',
-              spreadStatus.color,
-              spread <= 0.05 ? 'bg-green/10' : spread <= 0.25 ? 'bg-orange-500/10' : 'bg-red/10',
-            )}>
-              {spreadStatus.label}
-            </span>
-          )}
+          <span className={cn('text-[8px] font-bold uppercase', spreadStatus.color, 'opacity-70')}>
+            {spread > 0 ? spreadStatus.label : 'spread'}
+          </span>
+        </div>
+        {/* Best Ask */}
+        <div
+          className="flex-1 flex flex-col items-center py-1 cursor-pointer hover:bg-red/[0.08] transition-colors"
+          style={{ background: 'rgba(239,68,68,0.04)', boxShadow: 'inset 0 -2px 0 rgba(239,68,68,0.3)' }}
+          onClick={() => bestAsk && onAskClick(bestAsk.price)}
+        >
+          <span className="text-[8px] text-red/50 uppercase tracking-widest font-semibold">Ask</span>
+          <span className="font-mono text-[13px] font-bold tabular-nums text-red leading-none">
+            {bestAsk ? formatPrice(bestAsk.price) : '—'}
+          </span>
+          <span className="font-mono text-[9px] text-red/40 tabular-nums">{bestAsk ? fmtQty(bestAsk.qty) : ''}</span>
         </div>
       </div>
 
       {/* ══ COLUMN HEADERS ══════════════════════════════════════════════════ */}
-      <div className="grid grid-cols-[68px_1fr_68px] px-0 py-[3px] border-b border-fw-border/25 bg-[#08090e] flex-shrink-0">
-        <span className="tv-label-sm text-green/50 text-right pr-2 uppercase tracking-wider">
-          {showCumulative ? 'Cum Bid' : 'Bid Qty'}
+      <div className="grid grid-cols-[60px_1fr_60px] py-[3px] border-b border-fw-border/20 bg-[#08090e] flex-shrink-0">
+        <span className="text-[8px] text-green/50 text-right pr-1.5 uppercase tracking-wider font-semibold">
+          {showCumulative ? 'Cum' : 'Bid'}
         </span>
-        <span className="tv-label-sm text-fw-text-muted/50 text-center uppercase tracking-wider">Price</span>
-        <span className="tv-label-sm text-red/50 text-left pl-2 uppercase tracking-wider">
-          {showCumulative ? 'Cum Ask' : 'Ask Qty'}
+        <span className="text-[8px] text-fw-text-muted/40 text-center uppercase tracking-wider font-semibold">Price</span>
+        <span className="text-[8px] text-red/50 text-left pl-1.5 uppercase tracking-wider font-semibold">
+          {showCumulative ? 'Cum' : 'Ask'}
         </span>
       </div>
 
@@ -533,16 +516,16 @@ export function MarketDepthPanel() {
       <div ref={ladderRef} className="flex-1 overflow-y-auto min-h-0 scrollbar-none relative">
         {!hasData ? (
           <div className="flex flex-col items-center justify-center h-full gap-2 opacity-35">
-            <div className="w-10 h-10 rounded-full border border-fw-border/30 flex items-center justify-center">
-              <span className="text-fw-text-muted text-xl">≡</span>
+            <div className="w-8 h-8 rounded-full border border-fw-border/30 flex items-center justify-center">
+              <span className="text-fw-text-muted text-lg">≡</span>
             </div>
-            <span className="text-[12px] text-fw-text-muted font-medium">Waiting for depth data</span>
-            <span className="text-[10px] text-fw-text-muted/50">Click price to set order</span>
+            <span className="text-[11px] text-fw-text-muted">Waiting for depth data</span>
+            <span className="text-[9px] text-fw-text-muted/40">Click price to set order</span>
           </div>
         ) : (
           <>
-            {/* ASK rows — highest ask first, best ask closest to mid */}
-            {[...ladder].filter(r => r.askQty > 0 && r.bidQty === 0).map(row => (
+            {/* ASK rows — highest price first, best ask nearest to mid divider */}
+            {[...ladder].filter(r => r.askQty > 0).sort((a,b) => b.price - a.price).map(row => (
               <div key={`ask-${row.price}`} className="relative">
                 <PriceRow
                   price={row.price}
@@ -566,25 +549,21 @@ export function MarketDepthPanel() {
             ))}
 
             {/* ── MID PRICE DIVIDER ── */}
-            {hasData && (
-              <div className="flex items-center gap-2 px-2 py-[5px] bg-[#0e1018] border-y border-fw-accent/15 flex-shrink-0">
-                <div className="flex-1 h-px bg-fw-accent/15" />
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-bold text-fw-accent/60 uppercase tracking-widest whitespace-nowrap">
-                    {midPrice > 0 ? formatPrice(midPrice) : 'MID'}
-                  </span>
-                  {spread > 0 && (
-                    <span className={cn('text-[9px] font-mono font-semibold', spreadStatus.color)}>
-                      Δ{formatPrice(spread)}
-                    </span>
-                  )}
-                </div>
-                <div className="flex-1 h-px bg-fw-accent/15" />
-              </div>
-            )}
+            <div className="flex items-center gap-1.5 px-2 py-[4px] bg-[#0e1018] border-y border-fw-accent/15">
+              <div className="flex-1 h-px bg-fw-accent/15" />
+              <span className="text-[9px] font-bold text-fw-accent/60 uppercase tracking-widest whitespace-nowrap">
+                {midPrice > 0 ? formatPrice(midPrice) : 'MID'}
+              </span>
+              {spread > 0 && (
+                <span className={cn('text-[8px] font-mono font-semibold', spreadStatus.color)}>
+                  Δ{formatPrice(spread)}
+                </span>
+              )}
+              <div className="flex-1 h-px bg-fw-accent/15" />
+            </div>
 
-            {/* BID rows — best bid first */}
-            {[...ladder].filter(r => r.bidQty > 0 && r.askQty === 0).map(row => (
+            {/* BID rows — best bid nearest to mid, lower prices below */}
+            {[...ladder].filter(r => r.bidQty > 0).sort((a,b) => b.price - a.price).map(row => (
               <div key={`bid-${row.price}`} className="relative">
                 <PriceRow
                   price={row.price}
