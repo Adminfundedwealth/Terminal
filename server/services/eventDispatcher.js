@@ -254,25 +254,45 @@ class EventDispatcher {
         profitFactor: profitFactor !== null ? Math.round(profitFactor * 10000) / 10000 : null,
       });
 
-      // ── Update trading_accounts.balance with today's realized P&L ──────────
-      // The external dashboard reads balance - initial_balance as "P&L".
-      // We need to keep balance current so the dashboard shows the right number.
+      // ── Sync balance to BOTH trading_accounts AND challenge_accounts ────────
+      // Dashboard reads challenge_accounts.current_balance for "Current Balance"
+      // and current_balance - initial_balance for "P&L"
       try {
         const initialBalance = account.challenge?.initial_balance
           ? parseFloat(account.challenge.initial_balance)
           : parseFloat(account.initial_balance || balance);
         const newBalance = Math.round((initialBalance + realizedPnl) * 100) / 100;
         if (Math.abs(newBalance - balance) > 0.01) {
+          // 1. Update trading_accounts.balance
           await this.accountRepo.updateBalance(accountId, newBalance);
-          // Update peak balance if equity is higher
+
+          // 2. Update challenge_accounts.current_balance — this is what the dashboard reads
+          if (account.challenge?.id) {
+            const { supabase } = await import('../db/client.js');
+            await supabase
+              .from('challenge_accounts')
+              .update({ current_balance: newBalance, updated_at: new Date().toISOString() })
+              .eq('id', account.challenge.id);
+          }
+
+          // 3. Update peak balance if equity is higher
           const currentEquity = newBalance + unrealizedPnl;
           if (currentEquity > peakBalance) {
-            await this.accountRepo.updatePeakBalance(accountId, Math.round(currentEquity * 100) / 100);
+            const newPeak = Math.round(currentEquity * 100) / 100;
+            await this.accountRepo.updatePeakBalance(accountId, newPeak);
+            if (account.challenge?.id) {
+              const { supabase } = await import('../db/client.js');
+              await supabase
+                .from('challenge_accounts')
+                .update({ peak_balance: newPeak })
+                .eq('id', account.challenge.id);
+            }
           }
-          console.log(`[EventDispatcher] Balance updated: ₹${balance} → ₹${newBalance} (realizedPnl=₹${realizedPnl})`);
+
+          console.log(`[EventDispatcher] Balance synced: ₹${balance} → ₹${newBalance} (P&L ${realizedPnl >= 0 ? '+' : ''}₹${Math.round(realizedPnl)})`);
         }
       } catch (balErr) {
-        console.error('[EventDispatcher] Balance update failed:', balErr.message);
+        console.error('[EventDispatcher] Balance sync failed:', balErr.message);
       }
 
       // ── Push live P&L to external dashboard (fundedwealth.com) ──────────────
