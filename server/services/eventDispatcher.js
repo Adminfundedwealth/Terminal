@@ -28,6 +28,10 @@ import { OrderAuditRepository } from '../repositories/order-audit.repository.js'
 import { RiskEventRepository } from '../repositories/risk-event.repository.js';
 import { ChallengeMetricsRepository } from '../repositories/challenge-metrics.repository.js';
 import { BrokerSessionRepository } from '../repositories/broker-session.repository.js';
+import { MetricsRepository } from '../repositories/metrics.repository.js';
+import { TradeRepository } from '../repositories/trade.repository.js';
+import { PositionRepository } from '../repositories/position.repository.js';
+import { AccountRepository } from '../repositories/account.repository.js';
 
 class EventDispatcher {
   constructor() {
@@ -35,6 +39,10 @@ class EventDispatcher {
     this.riskEventRepo = new RiskEventRepository();
     this.challengeMetricsRepo = new ChallengeMetricsRepository();
     this.brokerSessionRepo = new BrokerSessionRepository();
+    this.metricsRepo = new MetricsRepository();
+    this.tradeRepo = new TradeRepository();
+    this.positionRepo = new PositionRepository();
+    this.accountRepo = new AccountRepository();
     this._subscriptions = [];
     this._initialized = false;
     this._stats = {
@@ -58,6 +66,9 @@ class EventDispatcher {
 
     // Position lifecycle
     this._sub('position.updated', this._onPositionUpdated.bind(this));
+
+    // Trade fill — update account_metrics snapshot in real-time
+    this._sub('trade.executed', this._onTradeExecuted.bind(this));
 
     // Challenge lifecycle
     this._sub('challenge.updated', this._onChallengeUpdated.bind(this));
@@ -128,6 +139,123 @@ class EventDispatcher {
       this._track('Position' + action.charAt(0).toUpperCase() + action.slice(1));
     } catch (err) {
       this._fail('PositionUpdated', err);
+    }
+  }
+
+  async _onTradeExecuted(event) {
+    const { payload, meta } = event;
+    const accountId = meta.accountId || payload.accountId;
+    if (!accountId) return;
+
+    // Fire-and-forget: update today's account_metrics snapshot so the dashboard
+    // Analytics page shows live data without waiting for the end-of-day cron.
+    try {
+      const account = await this.accountRepo.findById(accountId);
+      if (!account) return;
+
+      // Get today's executions for FIFO P&L computation
+      const todayTrades = await this.tradeRepo.findTodayTrades(accountId);
+
+      // FIFO P&L calculation (mirrors AnalyticsPanel.tsx logic)
+      const byToken = {};
+      for (const t of todayTrades) {
+        const key = t.token;
+        if (!byToken[key]) byToken[key] = [];
+        byToken[key].push(t);
+      }
+
+      let realizedPnl = 0;
+      let winningTrades = 0;
+      let losingTrades = 0;
+      let grossProfit = 0;
+      let grossLoss = 0;
+      let largestWin = 0;
+      let largestLoss = 0;
+      let totalWin = 0;
+      let totalLoss = 0;
+      let winCount = 0;
+      let lossCount = 0;
+
+      for (const [, symbolTrades] of Object.entries(byToken)) {
+        symbolTrades.sort((a, b) => new Date(a.executed_at).getTime() - new Date(b.executed_at).getTime());
+        let netQty = 0;
+        let avgCost = 0;
+
+        for (const t of symbolTrades) {
+          const qty = parseInt(t.qty) || 0;
+          const price = parseFloat(t.price) || 0;
+
+          if (t.side === 'BUY') {
+            const totalCost = avgCost * netQty + price * qty;
+            netQty += qty;
+            avgCost = netQty > 0 ? totalCost / netQty : 0;
+          } else {
+            // SELL
+            if (netQty > 0) {
+              const closeQty = Math.min(qty, netQty);
+              const tradePnl = (price - avgCost) * closeQty;
+              realizedPnl += tradePnl;
+
+              if (tradePnl > 0) {
+                winningTrades++;
+                grossProfit += tradePnl;
+                totalWin += tradePnl;
+                winCount++;
+                if (tradePnl > largestWin) largestWin = tradePnl;
+              } else if (tradePnl < 0) {
+                losingTrades++;
+                grossLoss += Math.abs(tradePnl);
+                totalLoss += Math.abs(tradePnl);
+                lossCount++;
+                if (Math.abs(tradePnl) > largestLoss) largestLoss = Math.abs(tradePnl);
+              }
+
+              netQty -= closeQty;
+              if (netQty <= 0) { netQty = 0; avgCost = 0; }
+            } else {
+              // Opening short
+              const totalCost = avgCost * Math.abs(netQty) + price * qty;
+              netQty -= qty;
+              avgCost = netQty < 0 ? totalCost / Math.abs(netQty) : 0;
+            }
+          }
+        }
+      }
+
+      // Unrealized from open positions
+      const positions = await this.positionRepo.findOpenByAccountId(accountId);
+      const unrealizedPnl = positions.reduce((sum, p) => sum + (parseFloat(p.unrealized_pnl || p.pnl || 0)), 0);
+
+      const balance = parseFloat(account.balance) || 0;
+      const peakBalance = Math.max(parseFloat(account.peak_balance) || balance, balance + unrealizedPnl);
+      const drawdown = Math.max(0, peakBalance - (balance + unrealizedPnl));
+      const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : (grossProfit > 0 ? null : 0);
+      const avgWin = winCount > 0 ? totalWin / winCount : null;
+      const avgLoss = lossCount > 0 ? totalLoss / lossCount : null;
+
+      await this.metricsRepo.upsertDailyMetrics(accountId, {
+        startingBalance: balance - realizedPnl,
+        endingBalance: balance,
+        realizedPnl: Math.round(realizedPnl * 100) / 100,
+        unrealizedPnl: Math.round(unrealizedPnl * 100) / 100,
+        totalTrades: todayTrades.length,
+        winningTrades,
+        losingTrades,
+        grossProfit: Math.round(grossProfit * 100) / 100,
+        grossLoss: Math.round(grossLoss * 100) / 100,
+        maxDrawdown: Math.round(drawdown * 100) / 100,
+        dailyLoss: realizedPnl < 0 ? Math.abs(realizedPnl) : 0,
+        peakBalance: Math.round(peakBalance * 100) / 100,
+        avgWin: avgWin !== null ? Math.round(avgWin * 100) / 100 : null,
+        avgLoss: avgLoss !== null ? Math.round(avgLoss * 100) / 100 : null,
+        largestWin: largestWin > 0 ? Math.round(largestWin * 100) / 100 : null,
+        largestLoss: largestLoss > 0 ? Math.round(largestLoss * 100) / 100 : null,
+        profitFactor: profitFactor !== null ? Math.round(profitFactor * 10000) / 10000 : null,
+      });
+
+      this._track('TradeExecuted_MetricsUpdated');
+    } catch (err) {
+      this._fail('TradeExecuted', err);
     }
   }
 

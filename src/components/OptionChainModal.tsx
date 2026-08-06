@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef, useMemo } from 'react';
+﻿import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useAppStore } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
 import { getOptionChain, getExpiries } from '@/services/api';
@@ -16,6 +16,11 @@ const LOT_SIZES: Record<string, number> = {
 };
 const STRIKES_AROUND_ATM = 20;
 
+// Max retries before giving up and showing manual retry button
+const MAX_AUTO_RETRIES = 8;
+// Retry delay schedule: 1s, 2s, 3s, 4s, 5s, 5s, 5s, 5s
+const retryDelay = (attempt: number) => Math.min(attempt * 1000, 5000);
+
 export function OptionChainModal() {
   const { activeSymbol, setActiveSymbol } = useAppStore();
   const { setOrderForm, setSelectedContract, selectedContract } = useTradingStore();
@@ -26,13 +31,15 @@ export function OptionChainModal() {
   const [selectedExpiry, setSelectedExpiry] = useState('');
   const [chain, setChain] = useState<OptionChainEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const [fatalError, setFatalError] = useState<string | null>(null); // only shown after MAX_AUTO_RETRIES
 
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isMountedRef = useRef(true);
-  const loadingRef = useRef(false); // prevent overlapping loads
+  const loadingRef = useRef(false);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const currentLoadKeyRef = useRef(''); // symbol:expiry — detect stale loads
 
-  // ── Symbol auto-sync ───────────────────────────────────────────────────────
+  // ── Symbol auto-sync from active symbol ──────────────────────────────────
   useEffect(() => {
     if (!activeSymbol) return;
     const sym = activeSymbol.symbol.replace(/\s.*/, '').toUpperCase();
@@ -63,88 +70,169 @@ export function OptionChainModal() {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
-      if (debounceRef.current) clearTimeout(debounceRef.current);
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
     };
+  }, []);
+
+  // ── Cancel any pending retry when symbol changes ───────────────────────────
+  const cancelRetry = useCallback(() => {
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
+    loadingRef.current = false;
   }, []);
 
   // ── Load expiries when symbol changes ──────────────────────────────────────
   useEffect(() => {
-    loadExpiries();
+    cancelRetry();
+    setChain([]);
+    setFatalError(null);
+    setRetryCount(0);
+    loadExpiriesAndChain(symbol);
   }, [symbol]);
 
-  // ── Load chain immediately when expiry is set ─────────────────────────────
+  // ── Reload chain when expiry manually changed ─────────────────────────────
   useEffect(() => {
     if (!selectedExpiry) return;
-    // Cancel any previous debounce and load immediately
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (isMountedRef.current) doLoad();
-  }, [symbol, selectedExpiry]);
+    cancelRetry();
+    setChain([]);
+    setFatalError(null);
+    setRetryCount(0);
+    scheduleLoad(symbol, selectedExpiry, 0);
+  }, [selectedExpiry]);
 
-  // ── Load functions ─────────────────────────────────────────────────────────
-  const doLoad = async () => {
-    if (!selectedExpiry || loadingRef.current) return;
-    loadingRef.current = true;
-    setIsLoading(true);
-    setError(null);
+  // ── Load expiries then immediately load chain ──────────────────────────────
+  const loadExpiriesAndChain = useCallback(async (sym: string) => {
+    let expiryList: string[] = [];
+
     try {
-      const data = await getOptionChain(symbol, selectedExpiry);
+      const data = await getExpiries(sym);
       if (!isMountedRef.current) return;
       if (data && data.length > 0) {
-        setChain(data);
-      } else {
-        setChain([]);
-        setError('No data for this expiry. The market may be closed.');
-      }
-    } catch (err: any) {
-      if (!isMountedRef.current) return;
-      setChain([]);
-      const is429 = err?.status === 429 ||
-        (typeof err?.message === 'string' && err.message.includes('429'));
-      setError(is429
-        ? 'Too many requests — wait a moment then click Retry.'
-        : (err.message || 'Failed to load option chain.'));
-    } finally {
-      if (isMountedRef.current) setIsLoading(false);
-      loadingRef.current = false;
-    }
-  };
-
-  const loadExpiries = async () => {
-    setChain([]); // clear stale chain whenever we load fresh expiries
-    setError(null);
-    try {
-      const data = await getExpiries(symbol);
-      if (!isMountedRef.current) return;
-      if (data && data.length > 0) {
+        expiryList = data;
         setExpiries(data);
         setSelectedExpiry(data[0]);
+        // Chain load triggered via selectedExpiry useEffect above
+        return;
       }
     } catch {
-      if (!isMountedRef.current) return;
-      // Fallback: generate approximate dates
-      const dayMap: Record<string, number> = {
-        NIFTY: 2, BANKNIFTY: 4, FINNIFTY: 2, MIDCPNIFTY: 1, SENSEX: 4,
-      };
-      const day = dayMap[symbol] ?? 4;
-      const now = new Date();
-      const fallback: string[] = [];
-      for (let i = 0; i < 4; i++) {
-        const d = new Date(now);
-        d.setDate(d.getDate() + ((day - d.getDay() + 7) % 7) + i * 7);
-        if (d > now) fallback.push(d.toISOString().split('T')[0]);
-      }
-      setExpiries(fallback);
-      if (fallback.length > 0) {
-        setSelectedExpiry(fallback[0]);
-      }
+      // fall through to hardcoded fallback
     }
+
+    if (!isMountedRef.current) return;
+
+    // Hardcoded fallback expiries — always provides something to try
+    const dayMap: Record<string, number> = {
+      NIFTY: 2, BANKNIFTY: 3, FINNIFTY: 2, MIDCPNIFTY: 1, SENSEX: 5,
+    };
+    const day = dayMap[sym] ?? 4;
+    const now = new Date();
+    const fallback: string[] = [];
+    for (let i = 0; i < 6; i++) {
+      const d = new Date(now);
+      const daysUntil = (day - d.getDay() + 7) % 7 || 7;
+      d.setDate(d.getDate() + daysUntil + i * 7);
+      fallback.push(d.toISOString().split('T')[0]);
+    }
+    setExpiries(fallback);
+    setSelectedExpiry(fallback[0]);
+    expiryList = fallback;
+    // Chain load triggered via selectedExpiry useEffect above
+  }, []);
+
+  // ── Schedule a chain load with auto-retry ─────────────────────────────────
+  const scheduleLoad = useCallback((sym: string, expiry: string, attempt: number) => {
+    if (!isMountedRef.current) return;
+    const loadKey = `${sym}:${expiry}`;
+    currentLoadKeyRef.current = loadKey;
+
+    const run = async () => {
+      if (!isMountedRef.current) return;
+      if (currentLoadKeyRef.current !== loadKey) return; // stale
+      if (loadingRef.current) return;
+
+      loadingRef.current = true;
+      setIsLoading(true);
+      setRetryCount(attempt);
+
+      try {
+        const data = await getOptionChain(sym, expiry);
+        if (!isMountedRef.current) return;
+        if (currentLoadKeyRef.current !== loadKey) return; // symbol/expiry changed while loading
+
+        if (data && data.length > 0) {
+          setChain(data);
+          setFatalError(null);
+          setIsLoading(false);
+          loadingRef.current = false;
+          return;
+        }
+
+        // Empty result or retryable error — retry
+        throw new Error('empty');
+      } catch (err: any) {
+        if (!isMountedRef.current) return;
+        if (currentLoadKeyRef.current !== loadKey) return;
+
+        loadingRef.current = false;
+        setIsLoading(false);
+
+        // 503 / 429 / network errors are always retryable — never show error screen for these
+        const isRetryable = err?.retryable === true || err?.status === 503 || err?.status === 429
+          || err?.status >= 500 || err?.message === 'empty' || err?.message === 'Failed to fetch';
+
+        if (attempt >= MAX_AUTO_RETRIES && !isRetryable) {
+          setFatalError('Could not load option chain. Please check your connection.');
+          return;
+        }
+
+        if (attempt >= MAX_AUTO_RETRIES) {
+          // Even after max retries on a retryable, show a manual retry but keep auto-retrying slowly
+          setFatalError('Waiting for market data service…');
+          retryTimerRef.current = setTimeout(() => {
+            if (isMountedRef.current && currentLoadKeyRef.current === loadKey) {
+              setFatalError(null);
+              scheduleLoad(sym, expiry, 0); // reset attempt counter on slow retry
+            }
+          }, 10000);
+          return;
+        }
+
+        // Auto-retry silently
+        const delay = retryDelay(attempt + 1);
+        retryTimerRef.current = setTimeout(() => {
+          if (isMountedRef.current && currentLoadKeyRef.current === loadKey) {
+            scheduleLoad(sym, expiry, attempt + 1);
+          }
+        }, delay);
+      }
+    };
+
+    run();
+  }, []);
+
+  const handleManualRetry = () => {
+    setFatalError(null);
+    setRetryCount(0);
+    cancelRetry();
+    scheduleLoad(symbol, selectedExpiry, 0);
   };
 
-  const handleRetry = () => {
-    setError(null);
+  const handleSymbolChange = (sym: string) => {
+    cancelRetry();
     setChain([]);
-    loadingRef.current = false;
-    doLoad();
+    setFatalError(null);
+    setRetryCount(0);
+    setSymbol(sym);
+  };
+
+  const handleExpiryChange = (expiry: string) => {
+    cancelRetry();
+    setChain([]);
+    setFatalError(null);
+    setRetryCount(0);
+    setSelectedExpiry(expiry);
   };
 
   const handleStrikeClick = (strike: number, type: 'CE' | 'PE', ltp?: number) => {
@@ -186,7 +274,7 @@ export function OptionChainModal() {
           {INDEX_SYMBOLS.map((s) => (
             <button
               key={s}
-              onClick={() => setSymbol(s)}
+              onClick={() => handleSymbolChange(s)}
               className={cn(
                 'px-1.5 py-0.5 text-[12px] rounded font-semibold transition-colors',
                 s === symbol ? 'bg-fw-accent text-white' : 'text-fw-text-secondary hover:text-fw-text',
@@ -198,7 +286,7 @@ export function OptionChainModal() {
         </div>
         <select
           value={selectedExpiry}
-          onChange={(e) => setSelectedExpiry(e.target.value)}
+          onChange={(e) => handleExpiryChange(e.target.value)}
           className="ml-auto bg-fw-bg text-fw-text text-[12px] border border-fw-border rounded px-1.5 py-0.5 font-mono"
         >
           {expiries.map((e) => <option key={e} value={e}>{e}</option>)}
@@ -212,30 +300,29 @@ export function OptionChainModal() {
 
       {/* Body */}
       <div className="flex-1 overflow-auto text-[12px]">
-        {isLoading ? (
+        {/* Loading / retrying — always show spinner, never an error screen unless truly fatal */}
+        {(isLoading || (chain.length === 0 && !fatalError)) ? (
           <div className="flex flex-col items-center justify-center h-full gap-3">
             <div className="w-5 h-5 border-2 border-fw-accent border-t-transparent rounded-full animate-spin" />
-            <p className="text-fw-text-secondary font-medium">Loading {symbol} · {selectedExpiry}</p>
+            <p className="text-fw-text-secondary font-medium text-[13px]">
+              {isLoading ? `Loading ${symbol} · ${selectedExpiry}` : `Connecting…`}
+            </p>
+            {retryCount > 0 && (
+              <p className="text-fw-text-muted text-[11px]">Retrying ({retryCount}/{MAX_AUTO_RETRIES})</p>
+            )}
           </div>
-        ) : error ? (
+        ) : fatalError ? (
+          /* Only shown after MAX_AUTO_RETRIES — user can still retry manually */
           <div className="flex flex-col items-center justify-center h-full gap-3 px-4 text-center">
             <span className="text-[28px]">⛓</span>
             <p className="text-[13px] text-fw-text-secondary font-semibold">Option Chain Unavailable</p>
-            <p className="text-[12px] text-fw-text-muted max-w-[260px]">{error}</p>
+            <p className="text-[12px] text-fw-text-muted max-w-[260px]">{fatalError}</p>
             <button
-              onClick={handleRetry}
+              onClick={handleManualRetry}
               className="px-4 py-1.5 text-[12px] font-semibold bg-fw-accent text-white rounded hover:brightness-110 transition-all"
             >
               Retry Now
             </button>
-          </div>
-        ) : chain.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full gap-3 px-4 text-center">
-            <div className="w-5 h-5 border-2 border-fw-accent border-t-transparent rounded-full animate-spin" />
-            <p className="text-[13px] text-fw-text-secondary font-semibold">Loading {symbol}</p>
-            <p className="text-[12px] text-fw-text-muted">
-              {selectedExpiry ? `${symbol} · ${selectedExpiry}` : 'Select a symbol'}
-            </p>
           </div>
         ) : (
           <table className="w-full border-collapse">

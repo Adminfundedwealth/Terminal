@@ -618,29 +618,49 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
   router.get('/market/option-chain', async (req, res) => {
     const { symbol, expiry } = req.query;
     if (!symbol || !expiry) return res.status(400).json({ message: 'symbol and expiry required' });
-    if (optionChainService) {
-      console.log(`[OptionChain] Request: symbol=${symbol}, expiry=${expiry}`);
-      const chain = await optionChainService.getOptionChain(symbol, expiry);
-      console.log(`[OptionChain] Response: ${chain.length} strikes returned`);
-      return res.json(chain);
+    if (!optionChainService) return res.json([]);
+
+    console.log(`[OptionChain] Request: symbol=${symbol}, expiry=${expiry}`);
+
+    // Ensure token is available before attempting fetch
+    await optionChainService._ensureToken();
+
+    if (!optionChainService.jwtToken) {
+      console.warn('[OptionChain] No JWT token — returning 503 so client retries');
+      return res.status(503).json({ message: 'Market data service initializing. Retrying…' });
     }
-    res.json([]);
+
+    const chain = await optionChainService.getOptionChain(symbol, expiry);
+    console.log(`[OptionChain] Response: ${chain.length} strikes returned`);
+
+    if (chain.length === 0) {
+      // Return 503 so the frontend knows to retry — NOT a 200 with empty array
+      return res.status(503).json({ message: 'Option chain data unavailable — retrying' });
+    }
+
+    return res.json(chain);
   });
 
   router.get('/market/expiries', async (req, res) => {
     const { symbol } = req.query;
     if (!symbol) return res.status(400).json({ message: 'symbol required' });
-    // Use optionChainService to discover real expiries via searchScrip scan
-    // Falls back to instrumentService if optionChainService not available
+
     if (optionChainService) {
-      try {
-        const expiries = await optionChainService.getExpiries(symbol);
-        if (expiries && expiries.length > 0) return res.json(expiries);
-      } catch (err) {
-        console.error('[Expiries] optionChainService failed:', err.message);
+      // Ensure token before attempting
+      await optionChainService._ensureToken();
+
+      if (optionChainService.jwtToken) {
+        try {
+          const expiries = await optionChainService.getExpiries(symbol);
+          if (expiries && expiries.length > 0) return res.json(expiries);
+        } catch (err) {
+          console.error('[Expiries] optionChainService failed:', err.message);
+        }
       }
     }
-    res.json(instrumentService.getExpiries(symbol));
+
+    // Fallback: instrumentService hardcoded expiries (always returns something)
+    return res.json(instrumentService.getExpiries(symbol));
   });
 
   // === TRADINGVIEW DATAFEED ENDPOINTS ===
@@ -770,6 +790,212 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
       const data = await metricsRepo.getEquityCurve(realId, days);
       res.json(data);
     } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════
+  // LIVE ACCOUNT ANALYTICS — computed from executions + positions
+  // Used by the dashboard Analytics page to show real-time data.
+  // This mirrors AnalyticsPanel.tsx but server-side so the dashboard
+  // can fetch it without being inside the terminal.
+  // ═══════════════════════════════════════════════════════════
+  router.get('/account/analytics', requireAuth, async (req, res) => {
+    try {
+      const { TradeRepository } = await import('../repositories/trade.repository.js');
+      const { PositionRepository } = await import('../repositories/position.repository.js');
+
+      const realId = await accountService.resolveAccountId(req.user.accountId);
+      const tradeRepo = new TradeRepository();
+      const positionRepo = new PositionRepository();
+
+      // Fetch all executions for this account (all time, for total stats)
+      const allExecutions = await tradeRepo.findByAccountId(realId);
+      // Fetch open positions for unrealized P&L
+      const positions = await positionRepo.findOpenByAccountId(realId);
+
+      // Helper: FIFO P&L computation from a list of executions
+      function computePnlFromExecutions(executions) {
+        // Group by token, sort by time ascending, then FIFO match
+        const byToken = {};
+        for (const t of executions) {
+          const key = t.token || t.symbol;
+          if (!byToken[key]) byToken[key] = [];
+          byToken[key].push(t);
+        }
+
+        const trades = []; // { pnl, date, symbol }
+
+        for (const [, symbolTrades] of Object.entries(byToken)) {
+          symbolTrades.sort((a, b) => new Date(a.executed_at).getTime() - new Date(b.executed_at).getTime());
+
+          let netQty = 0;
+          let avgCost = 0;
+
+          for (const t of symbolTrades) {
+            const qty = parseInt(t.qty) || 0;
+            const price = parseFloat(t.price) || 0;
+            const date = (t.executed_at || '').split('T')[0];
+
+            if (t.side === 'BUY') {
+              // Opening / adding to long
+              const totalCost = avgCost * netQty + price * qty;
+              netQty += qty;
+              avgCost = netQty > 0 ? totalCost / netQty : 0;
+            } else {
+              // SELL closes long
+              if (netQty > 0) {
+                const closeQty = Math.min(qty, netQty);
+                const realizedPnl = (price - avgCost) * closeQty;
+                trades.push({ pnl: realizedPnl, date, symbol: t.symbol });
+                netQty -= closeQty;
+                if (netQty <= 0) { netQty = 0; avgCost = 0; }
+
+                // Reversal excess — short side (simplified: treat excess as new short, skip for now)
+              } else {
+                // Short trade — opening short
+                const totalCost = avgCost * Math.abs(netQty) + price * qty;
+                netQty -= qty;
+                avgCost = netQty < 0 ? totalCost / Math.abs(netQty) : 0;
+              }
+            }
+          }
+        }
+
+        return trades;
+      }
+
+      const now = new Date();
+      const today = now.toISOString().split('T')[0];
+
+      // Start of week (Monday)
+      const dayOfWeek = now.getDay();
+      const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+      const weekStart = new Date(now);
+      weekStart.setDate(now.getDate() - mondayOffset);
+      weekStart.setHours(0, 0, 0, 0);
+      const weekStartStr = weekStart.toISOString().split('T')[0];
+
+      // Start of month
+      const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+
+      // Compute realized P&L from all executions
+      const allTrades = computePnlFromExecutions(allExecutions);
+
+      // Add today's unrealized from open positions
+      const unrealizedPnl = positions.reduce((sum, p) => {
+        const pnl = parseFloat(p.unrealized_pnl || 0);
+        return sum + pnl;
+      }, 0);
+
+      // Include unrealized in today's P&L
+      const todayUnrealized = unrealizedPnl; // only add once for today
+
+      const totalTrades = allTrades.length;
+      const winners = allTrades.filter(t => t.pnl > 0);
+      const losers = allTrades.filter(t => t.pnl < 0);
+      const winRate = totalTrades > 0 ? (winners.length / totalTrades) * 100 : 0;
+      const totalPnl = allTrades.reduce((s, t) => s + t.pnl, 0);
+      const grossProfit = winners.reduce((s, t) => s + t.pnl, 0);
+      const grossLoss = Math.abs(losers.reduce((s, t) => s + t.pnl, 0));
+      const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : (grossProfit > 0 ? null : 0);
+      const avgWin = winners.length > 0 ? grossProfit / winners.length : 0;
+      const avgLoss = losers.length > 0 ? grossLoss / losers.length : 0;
+      const avgRR = avgLoss > 0 ? avgWin / avgLoss : 0;
+      const bestTrade = allTrades.length > 0 ? Math.max(...allTrades.map(t => t.pnl)) : 0;
+      const worstTrade = allTrades.length > 0 ? Math.min(...allTrades.map(t => t.pnl)) : 0;
+
+      const dailyTrades = allTrades.filter(t => t.date === today);
+      const dailyPnl = dailyTrades.reduce((s, t) => s + t.pnl, 0) + todayUnrealized;
+      const weeklyPnl = allTrades.filter(t => t.date >= weekStartStr).reduce((s, t) => s + t.pnl, 0);
+      const monthlyPnl = allTrades.filter(t => t.date >= monthStart).reduce((s, t) => s + t.pnl, 0);
+
+      const dailyWinRate = dailyTrades.length > 0
+        ? (dailyTrades.filter(t => t.pnl > 0).length / dailyTrades.length) * 100
+        : 0;
+
+      // Win/loss streaks
+      let maxWinStreak = 0, maxLossStreak = 0, currentStreak = 0, streakType = null;
+      for (const t of allTrades) {
+        if (t.pnl > 0) {
+          if (streakType === 'win') { currentStreak++; } else { currentStreak = 1; streakType = 'win'; }
+          maxWinStreak = Math.max(maxWinStreak, currentStreak);
+        } else if (t.pnl < 0) {
+          if (streakType === 'loss') { currentStreak++; } else { currentStreak = 1; streakType = 'loss'; }
+          maxLossStreak = Math.max(maxLossStreak, currentStreak);
+        }
+      }
+
+      // Expectancy
+      const expectancy = totalTrades > 0
+        ? ((winRate / 100) * avgWin) - ((1 - winRate / 100) * avgLoss)
+        : 0;
+
+      // Symbol breakdown
+      const symbolMap = {};
+      for (const t of allTrades) {
+        if (!t.symbol) continue;
+        if (!symbolMap[t.symbol]) symbolMap[t.symbol] = { symbol: t.symbol, trades: 0, pnl: 0 };
+        symbolMap[t.symbol].trades++;
+        symbolMap[t.symbol].pnl += t.pnl;
+      }
+      const symbolBreakdown = Object.values(symbolMap)
+        .sort((a, b) => Math.abs(b.pnl) - Math.abs(a.pnl))
+        .slice(0, 10);
+
+      // Day of week breakdown
+      const dowMap = { Mon: { pnl: 0, trades: 0 }, Tue: { pnl: 0, trades: 0 }, Wed: { pnl: 0, trades: 0 }, Thu: { pnl: 0, trades: 0 }, Fri: { pnl: 0, trades: 0 } };
+      const dowNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      for (const t of allTrades) {
+        const d = new Date(t.date);
+        const dow = dowNames[d.getDay()];
+        if (dowMap[dow]) {
+          dowMap[dow].pnl += t.pnl;
+          dowMap[dow].trades++;
+        }
+      }
+
+      res.json({
+        // Period P&L
+        dailyPnl: Math.round(dailyPnl * 100) / 100,
+        weeklyPnl: Math.round(weeklyPnl * 100) / 100,
+        monthlyPnl: Math.round(monthlyPnl * 100) / 100,
+        totalPnl: Math.round(totalPnl * 100) / 100,
+        unrealizedPnl: Math.round(unrealizedPnl * 100) / 100,
+
+        // Key metrics
+        totalTrades,
+        winners: winners.length,
+        losers: losers.length,
+        winRate: Math.round(winRate * 100) / 100,
+        profitFactor: profitFactor !== null ? Math.round(profitFactor * 100) / 100 : null,
+        avgWin: Math.round(avgWin * 100) / 100,
+        avgLoss: Math.round(avgLoss * 100) / 100,
+        avgRR: Math.round(avgRR * 100) / 100,
+        expectancy: Math.round(expectancy * 100) / 100,
+        bestTrade: Math.round(bestTrade * 100) / 100,
+        worstTrade: Math.round(worstTrade * 100) / 100,
+        grossProfit: Math.round(grossProfit * 100) / 100,
+        grossLoss: Math.round(grossLoss * 100) / 100,
+
+        // Daily
+        dailyTradeCount: dailyTrades.length,
+        dailyWinRate: Math.round(dailyWinRate * 100) / 100,
+
+        // Streaks
+        maxWinStreak,
+        maxLossStreak,
+
+        // Breakdowns
+        symbolBreakdown,
+        dayOfWeekBreakdown: dowMap,
+
+        // Timestamps
+        computedAt: new Date().toISOString(),
+        accountId: realId,
+      });
+    } catch (err) {
+      console.error('[Analytics] Error computing live analytics:', err.message);
       res.status(500).json({ error: err.message });
     }
   });

@@ -27,6 +27,7 @@ async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
     const err = new Error(error.message || error.error || `HTTP ${response.status}`);
     (err as any).status = response.status;
     (err as any).code = error.error;
+    (err as any).retryable = response.status === 503 || response.status === 429 || response.status >= 500;
     throw err;
   }
 
