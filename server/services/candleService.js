@@ -50,6 +50,10 @@ export class CandleService {
     this.tokenExchangeCache = new Map(); // token -> exchange
     // Current candle state per token per timeframe
     this.currentCandles = new Map(); // `${token}:${tf}` → { time, open, high, low, close, volume }
+    // Cumulative volume tracking — Angel One sends day-cumulative volume per tick
+    // We track prev tick volume per token to compute per-candle delta
+    this.prevDayVolume = new Map();   // token → last cumulative day volume from tick
+    this.prevDayDate  = new Map();   // token → YYYY-MM-DD of the last tick (reset on new day)
   }
 
   /**
@@ -194,10 +198,32 @@ export class CandleService {
   processLiveTick(token, ltp, volume, timestamp) {
     const timeframes = ['1', '5', '15'];
     const results = [];
+    const now = timestamp || Date.now();
+
+    // ── Volume delta calculation ───────────────────────────────────────────
+    // Angel One sends cumulative day volume per tick, not per-tick traded qty.
+    // We compute the delta (volume traded since last tick) for candle accumulation.
+    let volumeDelta = 0;
+    if (volume > 0) {
+      const todayStr = new Date(now).toISOString().slice(0, 10); // YYYY-MM-DD
+      const prevDate = this.prevDayDate.get(token);
+      const prevVol  = this.prevDayVolume.get(token) || 0;
+
+      if (prevDate !== todayStr) {
+        // New trading day — reset baseline; first tick of day sets the baseline
+        this.prevDayDate.set(token, todayStr);
+        this.prevDayVolume.set(token, volume);
+        volumeDelta = volume; // whole day volume so far on first tick
+      } else {
+        volumeDelta = Math.max(0, volume - prevVol);
+        this.prevDayVolume.set(token, volume);
+      }
+    }
+    // ──────────────────────────────────────────────────────────────────────
 
     for (const tf of timeframes) {
       const key = `${token}:${tf}`;
-      const candleTime = this._getCandleTime(timestamp || Date.now(), tf);
+      const candleTime = this._getCandleTime(now, tf);
 
       const existing = this.currentCandles.get(key);
 
@@ -209,16 +235,16 @@ export class CandleService {
           high: ltp,
           low: ltp,
           close: ltp,
-          volume: volume || 0,
+          volume: volumeDelta,
         };
         this.currentCandles.set(key, newCandle);
         results.push({ token, timeframe: tf, candle: newCandle, isNew: true });
       } else {
-        // Update existing candle
+        // Update existing candle — accumulate volume delta
         existing.high = Math.max(existing.high, ltp);
         existing.low = Math.min(existing.low, ltp);
         existing.close = ltp;
-        if (volume) existing.volume = volume;
+        existing.volume = (existing.volume || 0) + volumeDelta;
         results.push({ token, timeframe: tf, candle: { ...existing }, isNew: false });
       }
     }

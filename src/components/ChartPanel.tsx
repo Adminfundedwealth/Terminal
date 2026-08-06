@@ -65,7 +65,7 @@ export function ChartPanel() {
   const macdContainerRef = useRef<HTMLDivElement>(null);
   const volumeContainerRef = useRef<HTMLDivElement>(null);
   const rawDataRef = useRef<OHLC[]>([]);
-  const liveBarRef = useRef<{ time: number; open: number; high: number; low: number; close: number } | null>(null);
+  const liveBarRef = useRef<{ time: number; open: number; high: number; low: number; close: number; volume: number } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [noData, setNoData] = useState(false);
@@ -1119,33 +1119,44 @@ export function ChartPanel() {
     }
 
     const ltp = quote.ltp;
+    // quote.volume is cumulative day volume from Angel One — use it directly for display
+    // The candle volume will be updated by the server-side candle aggregator
+    const tickVolume = quote.volume || 0;
 
     if (chartType === 'line' || chartType === 'area') {
       (seriesRef.current as any).update({ time: candleTime, value: ltp });
     } else {
-      // Get the last bar from the series to maintain proper candle OHLC
-      // We track current live candle state in a ref to avoid using day H/L
       const prevLiveCandle = liveBarRef.current;
-      let updatedBar: { time: number; open: number; high: number; low: number; close: number };
+      let updatedBar: { time: number; open: number; high: number; low: number; close: number; volume: number };
 
       if (!prevLiveCandle || prevLiveCandle.time !== candleTime) {
         // New candle — open at current LTP
-        updatedBar = { time: candleTime, open: ltp, high: ltp, low: ltp, close: ltp };
+        updatedBar = { time: candleTime, open: ltp, high: ltp, low: ltp, close: ltp, volume: tickVolume };
       } else {
-        // Update existing live candle
+        // Update existing live candle — volume grows as new ticks arrive
         updatedBar = {
           time: candleTime,
           open: prevLiveCandle.open,
           high: Math.max(prevLiveCandle.high, ltp),
           low: Math.min(prevLiveCandle.low, ltp),
           close: ltp,
+          volume: Math.max(prevLiveCandle.volume, tickVolume), // cumulative, take max
         };
       }
 
       liveBarRef.current = updatedBar;
       (seriesRef.current as any).update(updatedBar);
+
+      // Update permanent volume histogram with live candle volume
+      if (volumeSeriesRef.current && updatedBar.volume > 0) {
+        volumeSeriesRef.current.update({
+          time: candleTime,
+          value: updatedBar.volume,
+          color: ltp >= updatedBar.open ? 'rgba(38,166,154,0.5)' : 'rgba(239,83,80,0.5)',
+        });
+      }
     }
-  }, [quote?.ltp]);
+  }, [quote?.ltp, quote?.volume]);
 
   const handleToggleIndicator = useCallback((id: string) => {
     setIndicators(prev => prev.map(i => i.id === id ? { ...i, enabled: !i.enabled } : i));
