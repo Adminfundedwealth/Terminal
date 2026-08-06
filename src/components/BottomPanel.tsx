@@ -212,7 +212,7 @@ export function BottomPanel() {
         )}
 
         <button
-          onClick={refreshData}
+          onClick={() => refreshData()}
           className={cn('p-1.5 rounded-md hover:bg-fw-hover text-fw-text-secondary transition-colors', isRefreshing && 'animate-spin')}
         >
           <RefreshCw size={13} />

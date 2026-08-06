@@ -775,20 +775,19 @@ export function ChartPanel() {
     }
 
     // ── Permanent volume bars (always visible, bottom 20% of main chart) ──
-    // In lightweight-charts v4, use priceScaleId: '' (overlay scale) and
-    // set scaleMargins on the series price scale directly.
+    // lightweight-charts v4: use priceScaleId '' (overlay/left scale) and set
+    // scaleMargins on the series. The chart rightPriceScale bottom margin (0.22)
+    // reserves space so volume bars don't overlap candlesticks.
     const vs = chartRef.current.addHistogramSeries({
       priceFormat: { type: 'volume' },
-      priceScaleId: 'vol_overlay',
+      priceScaleId: '',
       lastValueVisible: false,
       priceLineVisible: false,
       color: 'rgba(38,166,154,0.4)',
     });
     vs.priceScale().applyOptions({
       scaleMargins: { top: 0.85, bottom: 0 },
-      drawTicks: false,
       borderVisible: false,
-      entireTextOnly: true,
     });
     const volData = extractVolume(data);
     if (volData.length > 0) {
