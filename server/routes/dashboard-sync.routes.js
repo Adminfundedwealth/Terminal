@@ -78,19 +78,35 @@ function calcFifoPnl(trades) {
 export function createDashboardSyncRouter() {
   const router = Router();
 
+  // ── GET /api/dashboard/accounts — list all account codes (for debugging) ──
+  router.get('/accounts', requireDashboardKey, async (req, res) => {
+    try {
+      const { data, error } = await supabase
+        .from('trading_accounts')
+        .select('id, account_code, status, balance')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      res.json({ accounts: data || [] });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── GET /api/dashboard/account/:accountCode/analytics ─────────────────────
   router.get('/account/:accountCode/analytics', requireDashboardKey, async (req, res) => {
     try {
       const { accountCode } = req.params;
 
-      // Resolve account
-      const { data: account, error: accErr } = await supabase
-        .from('trading_accounts')
-        .select('id, trader_id, balance, challenge_id, status')
-        .eq('account_code', accountCode)
-        .single();
+      // Resolve account — try account_code first, then id, then trader external_id
+      let account = null;
+      // Try account_code
+      { const { data } = await supabase.from('trading_accounts').select('id, trader_id, balance, challenge_id, status').eq('account_code', accountCode).maybeSingle(); account = data; }
+      // Try without prefix (FW- stripped)
+      if (!account) { const { data } = await supabase.from('trading_accounts').select('id, trader_id, balance, challenge_id, status').ilike('account_code', `%${accountCode.replace(/^FW-/i,'').replace(/-/g,'')}%`).maybeSingle(); account = data; }
+      // Try by id directly (if a UUID was passed)
+      if (!account && accountCode.includes('-') && accountCode.length > 20) { const { data } = await supabase.from('trading_accounts').select('id, trader_id, balance, challenge_id, status').eq('id', accountCode).maybeSingle(); account = data; }
 
-      if (accErr || !account) return res.status(404).json({ error: 'Account not found' });
+      if (!account) return res.status(404).json({ error: 'Account not found', tried: accountCode });
 
       // Fetch all executions
       const { data: allTrades } = await supabase
@@ -212,11 +228,10 @@ export function createDashboardSyncRouter() {
     try {
       const { accountCode } = req.params;
 
-      const { data: account } = await supabase
-        .from('trading_accounts')
-        .select('id, balance, challenge_id, status, peak_balance')
-        .eq('account_code', accountCode)
-        .single();
+      let account = null;
+      { const { data } = await supabase.from('trading_accounts').select('id, balance, challenge_id, status, peak_balance').eq('account_code', accountCode).maybeSingle(); account = data; }
+      if (!account) { const { data } = await supabase.from('trading_accounts').select('id, balance, challenge_id, status, peak_balance').ilike('account_code', `%${accountCode.replace(/^FW-/i,'').replace(/-/g,'')}%`).maybeSingle(); account = data; }
+      if (!account && accountCode.length > 20) { const { data } = await supabase.from('trading_accounts').select('id, balance, challenge_id, status, peak_balance').eq('id', accountCode).maybeSingle(); account = data; }
 
       if (!account) return res.status(404).json({ error: 'Account not found' });
 
@@ -298,8 +313,10 @@ export function createDashboardSyncRouter() {
       const limit = Math.min(parseInt(req.query.limit) || 50, 200);
       const period = req.query.period || 'all'; // today | week | month | all
 
-      const { data: account } = await supabase
-        .from('trading_accounts').select('id').eq('account_code', accountCode).single();
+      let account = null;
+      { const { data } = await supabase.from('trading_accounts').select('id').eq('account_code', accountCode).maybeSingle(); account = data; }
+      if (!account) { const { data } = await supabase.from('trading_accounts').select('id').ilike('account_code', `%${accountCode.replace(/^FW-/i,'').replace(/-/g,'')}%`).maybeSingle(); account = data; }
+      if (!account && accountCode.length > 20) { const { data } = await supabase.from('trading_accounts').select('id').eq('id', accountCode).maybeSingle(); account = data; }
       if (!account) return res.status(404).json({ error: 'Account not found' });
 
       let query = supabase.from('executions').select('*')
