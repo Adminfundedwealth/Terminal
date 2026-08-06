@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState, useCallback } from 'react';
+﻿import { useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react';
 import { createChart, type IChartApi, type ISeriesApi, ColorType, CrosshairMode } from 'lightweight-charts';
 import { useAppStore } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
@@ -668,10 +668,55 @@ export function ChartPanel() {
     loadChartData();
   }, [activeSymbol?.token, activeSymbol?.exchange, timeframe, chartType]);
 
-  // Apply indicators whenever data or indicator config changes
+  // Apply indicators whenever data or indicator config changes.
+  // Overlay indicators can be applied immediately; sub-pane indicators need
+  // their container <div>s to be in the DOM first (they are conditionally
+  // rendered based on the same `indicators` state, so they won't exist yet
+  // during this effect).  We schedule the sub-pane pass with useLayoutEffect
+  // (runs after DOM commit but before paint) via the flag below.
+  const pendingSubPaneApply = useRef(false);
+
   useEffect(() => {
-    applyIndicators();
+    if (!chartRef.current) return;
+    const data = rawDataRef.current;
+    if (data.length === 0) return;
+
+    // Remove old indicator series from main chart
+    indicatorSeriesRef.current.forEach((s) => {
+      try { chartRef.current!.removeSeries(s); } catch {}
+    });
+    indicatorSeriesRef.current.clear();
+
+    // Remove all sub-charts (generic map)
+    subChartsRef.current.forEach((sc) => { try { sc.remove(); } catch {} });
+    subChartsRef.current.clear();
+
+    // Legacy fixed sub-charts
+    if (rsiChartRef.current) { rsiChartRef.current.remove(); rsiChartRef.current = null; }
+    if (macdChartRef.current) { macdChartRef.current.remove(); macdChartRef.current = null; }
+    if (volumeChartRef.current) { volumeChartRef.current.remove(); volumeChartRef.current = null; }
+
+    // Apply overlay indicators immediately (no DOM containers needed)
+    for (const ind of indicators) {
+      if (!ind.enabled || ind.pane !== 'main') continue;
+      applyMainIndicator(ind, data);
+    }
+
+    // Mark that sub-pane indicators need to be applied once containers are mounted
+    pendingSubPaneApply.current = true;
   }, [indicators]);
+
+  // After React commits the DOM (sub-pane divs are now mounted), apply sub-pane indicators
+  useLayoutEffect(() => {
+    if (!pendingSubPaneApply.current) return;
+    pendingSubPaneApply.current = false;
+    const data = rawDataRef.current;
+    if (!chartRef.current || data.length === 0) return;
+    for (const ind of indicators) {
+      if (!ind.enabled || ind.pane !== 'separate') continue;
+      applySubPaneIndicator(ind, data);
+    }
+  });
 
   const loadChartData = async () => {
     if (!chartRef.current || !activeSymbol) return;
@@ -737,17 +782,23 @@ export function ChartPanel() {
     if (macdChartRef.current) { macdChartRef.current.remove(); macdChartRef.current = null; }
     if (volumeChartRef.current) { volumeChartRef.current.remove(); volumeChartRef.current = null; }
 
-    // Apply overlay indicators
+    // Apply overlay indicators immediately (no DOM containers needed)
     for (const ind of indicators) {
       if (!ind.enabled || ind.pane !== 'main') continue;
       applyMainIndicator(ind, data);
     }
 
-    // Apply separate-pane indicators
-    for (const ind of indicators) {
-      if (!ind.enabled || ind.pane !== 'separate') continue;
-      applySubPaneIndicator(ind, data);
-    }
+    // Sub-pane indicators require their container <div>s to be mounted.
+    // Schedule via requestAnimationFrame so the React render (which creates
+    // those divs) has had a chance to commit to the DOM first.
+    requestAnimationFrame(() => {
+      const latestData = rawDataRef.current;
+      if (!chartRef.current || latestData.length === 0) return;
+      for (const ind of indicators) {
+        if (!ind.enabled || ind.pane !== 'separate') continue;
+        applySubPaneIndicator(ind, latestData);
+      }
+    });
   };
 
   const applyMainIndicator = (ind: IndicatorConfig, data: OHLC[]) => {
