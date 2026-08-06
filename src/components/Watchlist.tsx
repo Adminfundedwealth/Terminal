@@ -134,8 +134,8 @@ export function Watchlist() {
       {/* Header — Professional */}
       <div className="px-3 py-2.5 border-b border-fw-border flex items-center justify-between flex-shrink-0 bg-gradient-to-r from-[#10121a] to-[#0e1018]">
         <div className="flex items-center gap-2">
-          <span className="text-[13px] font-black text-fw-text uppercase tracking-wider">Watchlist</span>
-          <span className="text-[13px] text-fw-text-muted font-mono">{filteredItems.length}</span>
+          <span className="tv-heading text-fw-text">Watchlist</span>
+          <span className="tv-support text-fw-text-muted font-mono bg-fw-border/30 px-1.5 py-0.5 rounded">{filteredItems.length}</span>
         </div>
         <div className="flex items-center gap-1">
           <button onClick={() => setShowImport(!showImport)} className="p-1.5 text-fw-text-secondary hover:text-fw-text rounded hover:bg-fw-hover transition-colors" title="Import">
@@ -154,7 +154,7 @@ export function Watchlist() {
             key={wl.id}
             onClick={() => setActiveWatchlistTab(wl.id)}
             className={cn(
-              'px-3 py-1.5 text-[13px] font-black whitespace-nowrap border-b-2 transition-all flex-shrink-0 uppercase tracking-wider',
+              'px-3 py-1.5 text-[11px] font-bold whitespace-nowrap border-b-2 transition-all flex-shrink-0 uppercase tracking-widest',
               currentWlId === wl.id
                 ? 'text-fw-text border-current bg-white/[0.02]'
                 : 'text-fw-text-muted border-transparent hover:text-fw-text-secondary hover:bg-fw-hover/20'
@@ -175,7 +175,7 @@ export function Watchlist() {
             placeholder="Filter..."
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            className="w-full bg-[#141720] border border-fw-border/50 rounded-md text-[13px] text-fw-text pl-7 pr-2 py-1.5 outline-none focus:border-fw-accent/60 placeholder:text-fw-text-muted"
+            className="w-full bg-[#141720] border border-fw-border/50 rounded-md text-[12px] text-fw-text pl-7 pr-2 py-1.5 outline-none focus:border-fw-accent/60 placeholder:text-fw-text-muted"
           />
         </div>
       </div>
@@ -216,11 +216,11 @@ export function Watchlist() {
         </div>
       )}
 
-      {/* Column Headers */}
-      <div className="grid grid-cols-[1fr_72px_56px] px-3 py-[5px] border-b border-fw-border/30 flex-shrink-0 bg-[#090b10]">
-        <span className="text-[8px] text-fw-text-muted font-bold uppercase tracking-wider">Symbol</span>
-        <span className="text-[8px] text-fw-text-muted font-bold uppercase text-right tracking-wider">LTP</span>
-        <span className="text-[8px] text-fw-text-muted font-bold uppercase text-right tracking-wider">Chg%</span>
+      {/* Column Headers — L4 label style */}
+      <div className="grid grid-cols-[1fr_72px_54px] px-3 py-[4px] border-b border-fw-border/30 flex-shrink-0 bg-[#090b10]">
+        <span className="tv-label-sm uppercase tracking-widest">Symbol</span>
+        <span className="tv-label-sm uppercase tracking-widest text-right">LTP</span>
+        <span className="tv-label-sm uppercase tracking-widest text-right">Chg%</span>
       </div>
 
       {/* Items — Dense rows */}
@@ -289,28 +289,28 @@ function WatchlistRow({ item, isSelected, isPinned, onSelect, onRemove, onPin }:
   return (
     <div
       className={cn(
-        'group relative grid grid-cols-[1fr_72px_56px] items-center px-3 h-[36px] cursor-pointer border-b border-fw-border/[0.06] transition-all',
+        'group relative grid grid-cols-[1fr_72px_54px] items-center px-3 h-[40px] cursor-pointer border-b border-fw-border/[0.06] transition-all',
         isSelected
           ? 'bg-fw-accent/[0.06] border-l-[3px] border-l-fw-accent'
           : 'hover:bg-fw-hover/40 border-l-[3px] border-l-transparent'
       )}
       onClick={onSelect}
     >
-      {/* Symbol */}
+      {/* Symbol — L3 name, L5 segment */}
       <div className="flex items-center gap-1.5 min-w-0">
         {isPinned && <Star size={8} className="text-fw-accent flex-shrink-0 fill-fw-accent" />}
         <SymbolLogo symbol={item.symbol} size={20} className="flex-shrink-0" />
-        <div className="flex flex-col min-w-0">
-          <span className={cn('text-[13px] font-bold truncate leading-tight', isSelected ? 'text-fw-text' : 'text-fw-text/90')}>
+        <div className="flex flex-col min-w-0 gap-[1px]">
+          <span className={cn('wl-symbol truncate', isSelected ? 'text-fw-text' : 'text-fw-text/90')}>
             {item.symbol}
           </span>
-          <span className="text-[8px] text-fw-text-muted/50 uppercase leading-tight">{item.segment}</span>
+          <span className="wl-segment">{item.segment}</span>
         </div>
       </div>
 
-      {/* LTP */}
+      {/* LTP — L1/L2 price: largest number in the row */}
       <span className={cn(
-        'text-[14px] font-mono tabular-nums text-right font-bold transition-colors duration-300',
+        'wl-price text-right tv-smooth-value transition-colors duration-300',
         quote ? getChangeColor(quote.changePercent) : 'text-fw-text-secondary',
         flash === 'green' && 'animate-[priceFlashGreen_0.6s_ease-out]',
         flash === 'red' && 'animate-[priceFlashRed_0.6s_ease-out]'
@@ -318,21 +318,21 @@ function WatchlistRow({ item, isSelected, isPinned, onSelect, onRemove, onPin }:
         {quote ? formatPrice(quote.ltp) : '—'}
       </span>
 
-      {/* Change % */}
+      {/* Change % — L4 pill */}
       <div className="text-right">
         {quote ? (
           <span className={cn(
-            'text-[13px] font-mono tabular-nums px-1.5 py-[3px] rounded font-bold inline-block min-w-[44px] text-center',
-            (quote.changePercent || 0) >= 0 ? 'text-green bg-green/[0.08]' : 'text-red bg-red/[0.08]'
+            'tv-change-pill inline-block min-w-[46px] text-center',
+            (quote.changePercent || 0) >= 0 ? 'tv-change-pill-up' : 'tv-change-pill-down'
           )}>
             {(quote.changePercent || 0) >= 0 ? '+' : ''}{(quote.changePercent || 0).toFixed(2)}%
           </span>
         ) : (
-          <span className="text-[13px] text-fw-text-muted/40">—</span>
+          <span className="tv-label-sm text-fw-text-muted/40">—</span>
         )}
       </div>
 
-      {/* Hover actions — overlaid */}
+      {/* Hover actions */}
       <div className="col-span-3 absolute right-2 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center gap-0.5 bg-[#0c0e14]/90 backdrop-blur-sm rounded px-1 py-0.5">
         <button onClick={(e) => { e.stopPropagation(); onPin(); }} className="p-0.5 text-fw-text-muted hover:text-fw-accent transition-colors" title={isPinned ? 'Unpin' : 'Pin'}>
           <Star size={10} className={isPinned ? 'fill-fw-accent text-fw-accent' : ''} />

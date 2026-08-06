@@ -576,6 +576,7 @@ async function connectAngelFeed() {
       { token: '99926009', exchange: 'NSE', symbol: 'BANKNIFTY' },
       { token: '99926037', exchange: 'NSE', symbol: 'FINNIFTY' },
       { token: '99926074', exchange: 'NSE', symbol: 'MIDCPNIFTY' },
+      { token: '99919000', exchange: 'BSE', symbol: 'SENSEX' },
       // NIFTY 50 constituents (mode 2 â€” Quote with OHLC + volume)
       { token: '2885', exchange: 'NSE', symbol: 'RELIANCE' },
       { token: '3045', exchange: 'NSE', symbol: 'SBIN' },

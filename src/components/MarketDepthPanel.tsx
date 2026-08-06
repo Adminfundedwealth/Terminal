@@ -110,10 +110,10 @@ function PriceRow({
         </div>
       )}
 
-      {/* BID QTY */}
+      {/* BID QTY — L4/dim, qty is secondary to price */}
       <div
         className={cn(
-          'relative z-10 text-right pr-2 font-mono tabular-nums text-[12px] font-semibold cursor-pointer transition-colors',
+          'relative z-10 text-right pr-2 dom-qty cursor-pointer transition-colors',
           bidLevel ? (bidWall ? 'text-green font-black' : 'text-green/75 hover:text-green') : 'text-transparent'
         )}
         onClick={() => bidLevel && onBidClick(bidLevel.price)}
@@ -122,10 +122,10 @@ function PriceRow({
         {bidWall && <span className="ml-0.5 text-[8px] text-green/60">⬛</span>}
       </div>
 
-      {/* BID PRICE */}
+      {/* BID PRICE — L2, price dominates qty */}
       <div
         className={cn(
-          'relative z-10 text-center font-mono tabular-nums text-[12px] font-bold cursor-pointer transition-colors',
+          'relative z-10 text-center dom-price cursor-pointer transition-colors',
           bidLevel ? 'text-green/90 hover:text-green' : 'text-fw-text-muted/20'
         )}
         onClick={() => bidLevel && onBidClick(bidLevel.price)}
@@ -133,10 +133,10 @@ function PriceRow({
         {bidLevel ? formatPrice(bidLevel.price) : ''}
       </div>
 
-      {/* ASK PRICE */}
+      {/* ASK PRICE — L2 */}
       <div
         className={cn(
-          'relative z-10 text-center font-mono tabular-nums text-[12px] font-bold cursor-pointer transition-colors',
+          'relative z-10 text-center dom-price cursor-pointer transition-colors',
           askLevel ? 'text-red/90 hover:text-red' : 'text-fw-text-muted/20'
         )}
         onClick={() => askLevel && onAskClick(askLevel.price)}
@@ -144,10 +144,10 @@ function PriceRow({
         {askLevel ? formatPrice(askLevel.price) : ''}
       </div>
 
-      {/* ASK QTY */}
+      {/* ASK QTY — L4/dim */}
       <div
         className={cn(
-          'relative z-10 text-left pl-2 font-mono tabular-nums text-[12px] font-semibold cursor-pointer transition-colors',
+          'relative z-10 text-left pl-2 dom-qty cursor-pointer transition-colors',
           askLevel ? (askWall ? 'text-red font-black' : 'text-red/75 hover:text-red') : 'text-transparent'
         )}
         onClick={() => askLevel && onAskClick(askLevel.price)}
@@ -163,15 +163,15 @@ function PriceRow({
 function TapeRow({ entry }: { entry: TapeEntry }) {
   return (
     <div className={cn(
-      'flex items-center justify-between px-2 py-[2px] border-b border-fw-border/[0.06] text-[11px] font-mono tabular-nums',
+      'flex items-center justify-between px-2 py-[2px] border-b border-fw-border/[0.06]',
       entry.side === 'buy' ? 'bg-green/[0.04]' : 'bg-red/[0.04]',
     )}>
-      <span className={entry.side === 'buy' ? 'text-green font-bold' : 'text-red font-bold'}>
+      <span className={cn('tv-support font-bold', entry.side === 'buy' ? 'text-green' : 'text-red')}>
         {entry.side === 'buy' ? 'B' : 'S'}
       </span>
-      <span className="text-fw-text font-bold">{formatPrice(entry.price)}</span>
-      <span className="text-fw-text-muted">{fmtQty(entry.qty)}</span>
-      <span className="text-fw-text-muted/50">{fmtTime(entry.time)}</span>
+      <span className="dom-price text-fw-text">{formatPrice(entry.price)}</span>
+      <span className="dom-qty text-fw-text-muted">{fmtQty(entry.qty)}</span>
+      <span className="tv-support text-fw-text-muted/50">{fmtTime(entry.time)}</span>
     </div>
   );
 }
@@ -310,28 +310,26 @@ export function MarketDepthPanel() {
       {/* ── HEADER ── */}
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-fw-border bg-[#0e1018] flex-shrink-0 gap-2">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-[11px] font-black text-fw-text uppercase tracking-widest">DOM</span>
+          <span className="tv-heading text-fw-text">DOM</span>
           {activeSymbol && (
-            <span className="text-[11px] font-bold text-fw-accent truncate">{activeSymbol.symbol}</span>
+            <span className="tv-symbol text-fw-accent truncate">{activeSymbol.symbol}</span>
           )}
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
-          {/* Tape toggle */}
           <button
             onClick={() => setShowTape(v => !v)}
-            className={cn('text-[9px] font-bold px-1.5 py-0.5 rounded border transition-colors',
+            className={cn('tv-support font-bold px-1.5 py-0.5 rounded border transition-colors',
               showTape ? 'border-fw-accent text-fw-accent bg-fw-accent/10' : 'border-fw-border/40 text-fw-text-muted hover:border-fw-accent/40'
             )}
           >T&amp;S</button>
-          {/* Cumulative toggle */}
           <button
             onClick={() => setShowCumulative(v => !v)}
-            className={cn('text-[9px] font-bold px-1.5 py-0.5 rounded border transition-colors',
+            className={cn('tv-support font-bold px-1.5 py-0.5 rounded border transition-colors',
               showCumulative ? 'border-fw-accent text-fw-accent bg-fw-accent/10' : 'border-fw-border/40 text-fw-text-muted hover:border-fw-accent/40'
             )}
           >CUM</button>
           {quote && (
-            <span className={cn('font-mono font-black text-[13px] tabular-nums ml-1',
+            <span className={cn('dom-price ml-1 tv-smooth-value',
               (quote.changePercent || 0) >= 0 ? 'text-green' : 'text-red'
             )}>
               {formatPrice(quote.ltp)}
@@ -340,54 +338,54 @@ export function MarketDepthPanel() {
         </div>
       </div>
 
-      {/* ── BEST BID / ASK STRIP ── */}
+      {/* ── BEST BID / ASK STRIP — L1 prices, L4 qty labels ── */}
       <div className="grid grid-cols-2 gap-px border-b border-fw-border/30 flex-shrink-0">
         <div
-          className="flex flex-col items-center py-1.5 bg-green/[0.05] border-r border-fw-border/30 cursor-pointer hover:bg-green/[0.10] transition-colors"
+          className="flex flex-col items-center py-2 bg-green/[0.05] border-r border-fw-border/30 cursor-pointer hover:bg-green/[0.10] transition-colors"
           onClick={() => bestBid && onBidClick(bestBid.price)}
           style={{ boxShadow: 'inset 0 -2px 0 rgba(34,197,94,0.4)' }}
         >
-          <span className="text-[8px] text-green/60 font-bold uppercase tracking-wider">Best Bid</span>
-          <span className="text-[14px] font-black font-mono text-green tabular-nums" style={{ textShadow: '0 0 12px rgba(34,197,94,0.5)' }}>
+          <span className="tv-label-sm text-green/70 uppercase tracking-widest">Best Bid</span>
+          <span className="tv-price-secondary-sm text-green tabular-nums" style={{ textShadow: '0 0 12px rgba(34,197,94,0.4)' }}>
             {bestBid ? formatPrice(bestBid.price) : '—'}
           </span>
-          <span className="text-[9px] text-green/50 font-mono">{bestBid ? fmtQty(bestBid.qty) : ''}</span>
+          <span className="dom-qty text-green/50">{bestBid ? fmtQty(bestBid.qty) : ''}</span>
         </div>
         <div
-          className="flex flex-col items-center py-1.5 bg-red/[0.05] cursor-pointer hover:bg-red/[0.10] transition-colors"
+          className="flex flex-col items-center py-2 bg-red/[0.05] cursor-pointer hover:bg-red/[0.10] transition-colors"
           onClick={() => bestAsk && onAskClick(bestAsk.price)}
           style={{ boxShadow: 'inset 0 -2px 0 rgba(239,68,68,0.4)' }}
         >
-          <span className="text-[8px] text-red/60 font-bold uppercase tracking-wider">Best Ask</span>
-          <span className="text-[14px] font-black font-mono text-red tabular-nums" style={{ textShadow: '0 0 12px rgba(239,68,68,0.5)' }}>
+          <span className="tv-label-sm text-red/70 uppercase tracking-widest">Best Ask</span>
+          <span className="tv-price-secondary-sm text-red tabular-nums" style={{ textShadow: '0 0 12px rgba(239,68,68,0.4)' }}>
             {bestAsk ? formatPrice(bestAsk.price) : '—'}
           </span>
-          <span className="text-[9px] text-red/50 font-mono">{bestAsk ? fmtQty(bestAsk.qty) : ''}</span>
+          <span className="dom-qty text-red/50">{bestAsk ? fmtQty(bestAsk.qty) : ''}</span>
         </div>
       </div>
 
       {/* ── MID PRICE + SPREAD ── */}
       <div className="flex items-center justify-between px-3 py-1 border-b border-fw-border/20 bg-[#0b0d14] flex-shrink-0">
         <div className="flex items-center gap-1.5">
-          <span className="text-[8px] text-fw-text-muted uppercase tracking-wider">Mid</span>
-          <span className="text-[12px] font-mono font-bold text-fw-text tabular-nums">
+          <span className="tv-label-sm uppercase tracking-wider">Mid</span>
+          <span className="font-mono text-[12px] font-bold text-fw-text tabular-nums">
             {midPrice > 0 ? formatPrice(midPrice) : '—'}
           </span>
         </div>
         <div className="flex items-center gap-1">
-          <span className="text-[8px] text-fw-text-muted uppercase tracking-wider">Spread</span>
-          <span className={cn('text-[11px] font-mono font-bold tabular-nums', spreadColor)}>
+          <span className="tv-label-sm uppercase tracking-wider">Spread</span>
+          <span className={cn('font-mono text-[11px] font-bold tabular-nums', spreadColor)}>
             {spread > 0 ? `₹${formatPrice(spread)}` : '—'}
           </span>
         </div>
       </div>
 
-      {/* ── COLUMN HEADERS ── */}
+      {/* ── COLUMN HEADERS — L4 style ── */}
       <div className="grid grid-cols-[72px_1fr_72px_1fr] px-0 py-[3px] border-b border-fw-border/30 bg-[#090b10] flex-shrink-0">
-        <span className="text-[8px] text-green/60 font-bold text-right pr-2 uppercase">Bid Qty</span>
-        <span className="text-[8px] text-green/60 font-bold text-center uppercase">Bid</span>
-        <span className="text-[8px] text-red/60 font-bold text-center uppercase">Ask</span>
-        <span className="text-[8px] text-red/60 font-bold text-left pl-2 uppercase">Ask Qty</span>
+        <span className="tv-label-sm text-green/60 text-right pr-2 uppercase tracking-wider">Bid Qty</span>
+        <span className="tv-label-sm text-green/60 text-center uppercase tracking-wider">Bid</span>
+        <span className="tv-label-sm text-red/60 text-center uppercase tracking-wider">Ask</span>
+        <span className="tv-label-sm text-red/60 text-left pl-2 uppercase tracking-wider">Ask Qty</span>
       </div>
 
       {/* ── PRICE LADDER ── */}
@@ -457,16 +455,16 @@ export function MarketDepthPanel() {
             <div
               key={i}
               className={cn(
-                'flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold border',
+                'flex items-center gap-1 px-2 py-0.5 rounded border',
                 w.side === 'bid'
                   ? 'bg-green/10 border-green/30 text-green'
                   : 'bg-red/10 border-red/30 text-red'
               )}
               style={{ boxShadow: w.side === 'bid' ? '0 0 6px rgba(34,197,94,0.2)' : '0 0 6px rgba(239,68,68,0.2)' }}
             >
-              <span>{w.side === 'bid' ? '🟢' : '🔴'} {w.side === 'bid' ? 'BUY' : 'SELL'} WALL</span>
-              <span className="font-mono">{formatPrice(w.price)}</span>
-              <span className="opacity-70">{fmtQty(w.qty)}</span>
+              <span className="tv-label-sm font-bold">{w.side === 'bid' ? '🟢' : '🔴'} {w.side === 'bid' ? 'BUY' : 'SELL'} WALL</span>
+              <span className="dom-qty font-mono">{formatPrice(w.price)}</span>
+              <span className="dom-qty opacity-70">{fmtQty(w.qty)}</span>
             </div>
           ))}
         </div>
@@ -474,18 +472,18 @@ export function MarketDepthPanel() {
 
       {/* ── ORDER IMBALANCE METER ── */}
       <div className="px-3 py-1.5 border-t border-fw-border/20 bg-[#0b0d14] flex-shrink-0">
-        <div className="flex items-center justify-between text-[10px] mb-1">
-          <span className="font-bold text-green">
+        <div className="flex items-center justify-between mb-1">
+          <span className="tv-label-sm font-bold text-green">
             BUY {bidPct.toFixed(0)}%
             <span className="ml-1 font-mono text-green/60">{fmtQty(totalBid)}</span>
           </span>
-          <span className="text-fw-text-muted/60 text-[8px] uppercase tracking-wider">Imbalance</span>
-          <span className="font-bold text-red">
+          <span className="tv-label-sm uppercase tracking-widest text-fw-text-muted/60">Imbalance</span>
+          <span className="tv-label-sm font-bold text-red">
             <span className="mr-1 font-mono text-red/60">{fmtQty(totalAsk)}</span>
             SELL {(100 - bidPct).toFixed(0)}%
           </span>
         </div>
-        <div className="h-[6px] rounded-full overflow-hidden bg-fw-border/20 flex">
+        <div className="h-[5px] rounded-full overflow-hidden bg-fw-border/20 flex">
           <div
             className="h-full rounded-l-full transition-all duration-500"
             style={{ width: `${bidPct}%`, background: 'linear-gradient(to right, #16a34a, #22c55e)' }}
@@ -495,9 +493,8 @@ export function MarketDepthPanel() {
             style={{ background: 'linear-gradient(to right, #ef4444, #dc2626)' }}
           />
         </div>
-        {/* Pressure label */}
         <div className="flex justify-center mt-0.5">
-          <span className={cn('text-[8px] font-bold uppercase tracking-widest',
+          <span className={cn('tv-support font-bold uppercase tracking-widest',
             bidPct >= 60 ? 'text-green' : bidPct <= 40 ? 'text-red' : 'text-orange-400'
           )}>
             {bidPct >= 60 ? '▲ Buy Pressure' : bidPct <= 40 ? '▼ Sell Pressure' : '⬡ Balanced'}
@@ -505,16 +502,16 @@ export function MarketDepthPanel() {
         </div>
       </div>
 
-      {/* ── TIME & SALES TAPE (collapsible) ── */}
+      {/* ── TIME & SALES TAPE ── */}
       {showTape && (
         <div className="border-t border-fw-border/30 flex-shrink-0" style={{ maxHeight: 140 }}>
           <div className="flex items-center justify-between px-2 py-[3px] bg-[#0d0f18] border-b border-fw-border/20">
-            <span className="text-[8px] font-bold text-fw-text-muted uppercase tracking-wider">Time &amp; Sales</span>
-            <span className="text-[8px] text-fw-text-muted/50">{tape.length} ticks</span>
+            <span className="tv-label-sm uppercase tracking-widest">Time &amp; Sales</span>
+            <span className="tv-support text-fw-text-muted/50">{tape.length} ticks</span>
           </div>
           <div className="overflow-y-auto scrollbar-none" style={{ maxHeight: 115 }}>
             {tape.length === 0 ? (
-              <div className="text-center text-[10px] text-fw-text-muted/40 py-3">Waiting for trades…</div>
+              <div className="text-center tv-support text-fw-text-muted/40 py-3">Waiting for trades…</div>
             ) : (
               tape.map(entry => <TapeRow key={entry.id} entry={entry} />)
             )}
