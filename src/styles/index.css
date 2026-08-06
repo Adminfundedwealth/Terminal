@@ -1043,6 +1043,29 @@ button, [role="button"] {
   opacity: 0.7;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   TOOLBAR DESIGN TOKENS — Institutional-grade left chart toolbar
+   ═══════════════════════════════════════════════════════════════════════════ */
+:root {
+  --toolbar-width:            44px;
+  --toolbar-icon-size:        18px;
+  --toolbar-container-size:   36px;
+  --toolbar-radius:           8px;
+  --toolbar-gap:              2px;
+  --toolbar-hover-duration:   160ms;
+  /* Blue accent (default theme) */
+  --toolbar-active-bg:        rgba(59, 130, 246, 0.14);
+  --toolbar-active-border:    rgba(59, 130, 246, 0.35);
+  --toolbar-active-glow:      0 0 8px rgba(59, 130, 246, 0.25);
+  --toolbar-shadow:           0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme='fw-blue'] {
+  --toolbar-active-bg:        rgba(41, 98, 255, 0.14);
+  --toolbar-active-border:    rgba(41, 98, 255, 0.35);
+  --toolbar-active-glow:      0 0 8px rgba(41, 98, 255, 0.25);
+}
+
 /* ── Vertical alignment improvement for mixed-size number rows ─────── */
 .tv-metric-row {
   display: flex;
@@ -1088,3 +1111,14 @@ button, [role="button"] {
 
 .animate-flash-green { animation: priceFlashGreenSmooth 0.6s ease-out; }
 .animate-flash-red   { animation: priceFlashRedSmooth 0.6s ease-out; }
+
+/* ── DOM — LTP flash: yellow highlight on executed price level ── */
+@keyframes domLtpFlash {
+  0%   { background-color: rgba(234,179,8,0.35); }
+  60%  { background-color: rgba(234,179,8,0.18); }
+  100% { background-color: transparent; }
+}
+
+.dom-ltp-flash {
+  animation: domLtpFlash 350ms ease-out forwards;
+}

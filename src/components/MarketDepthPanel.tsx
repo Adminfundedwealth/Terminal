@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+﻿import { useEffect, useRef, useState, useCallback, useMemo, memo } from 'react';
 import { useAppStore } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
 import { useTradingStore } from '@/store/tradingStore';
@@ -6,7 +6,13 @@ import { wsService } from '@/services/websocket';
 import { cn, formatPrice } from '@/utils/helpers';
 import type { MarketDepthLevel } from '@/types';
 
-// ─── helpers ────────────────────────────────────────────────────────────────
+// ─── constants ────────────────────────────────────────────────────────────────
+const MAX_TAPE        = 150;
+const WALL_MULTIPLIER = 4;      // qty > 4× avg = liquidity wall
+const ROW_H           = 28;     // px — fixed row height for virtualization
+const FLASH_MS        = 350;    // LTP flash duration
+
+// ─── helpers ─────────────────────────────────────────────────────────────────
 function fmtQty(n: number): string {
   if (n >= 10_000_000) return (n / 10_000_000).toFixed(1) + 'Cr';
   if (n >= 100_000)    return (n / 100_000).toFixed(1) + 'L';
@@ -14,196 +20,283 @@ function fmtQty(n: number): string {
   return n.toString();
 }
 
-function fmtTime(ms: number): string {
+function fmtTimestamp(ms: number): string {
   const d = new Date(ms);
-  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  const ss = String(d.getSeconds()).padStart(2, '0');
+  const ms3 = String(d.getMilliseconds()).padStart(3, '0');
+  return `${hh}:${mm}:${ss}.${ms3}`;
 }
 
-// ─── types ───────────────────────────────────────────────────────────────────
+/** Heatmap intensity: returns css rgba string based on qty vs maxQty */
+function heatColor(qty: number, maxQty: number, side: 'bid' | 'ask'): string {
+  const ratio = Math.min(1, qty / maxQty);
+  if (side === 'bid') {
+    // green channel: 22,197,94
+    const a = ratio < 0.2 ? 0.03 : ratio < 0.5 ? 0.08 : ratio < 0.8 ? 0.15 : 0.28;
+    return `rgba(34,197,94,${a})`;
+  } else {
+    // red channel: 239,68,68
+    const a = ratio < 0.2 ? 0.03 : ratio < 0.5 ? 0.08 : ratio < 0.8 ? 0.15 : 0.28;
+    return `rgba(239,68,68,${a})`;
+  }
+}
+
+// ─── types ────────────────────────────────────────────────────────────────────
 interface DepthLevel extends MarketDepthLevel {
   cumQty?: number;
 }
 
 interface TapeEntry {
-  id: number;
-  time: number;
+  id:    number;
+  time:  number;
   price: number;
-  qty: number;
-  side: 'buy' | 'sell';
+  qty:   number;
+  side:  'buy' | 'sell';
 }
 
-interface LiqWall {
-  side: 'bid' | 'ask';
-  price: number;
-  qty: number;
+interface HoverInfo {
+  price:    number;
+  bidQty:   number;
+  askQty:   number;
+  cumQty:   number;
+  distPct:  number; // distance from mid as %
 }
 
-// ─── iceberg tracker ─────────────────────────────────────────────────────────
-const MAX_TAPE = 120;
-const WALL_MULTIPLIER = 4; // level is a "wall" if qty > 4× avg
-
-// ─── sub-components ──────────────────────────────────────────────────────────
-
-/** Animated liquidity bar — green (bid) or red (ask) */
-function LiqBar({ pct, side, isTop, isWall }: { pct: number; side: 'bid' | 'ask'; isTop: boolean; isWall: boolean }) {
-  const base = side === 'bid'
-    ? isTop ? 'rgba(34,197,94,0.55)' : 'rgba(34,197,94,0.22)'
-    : isTop ? 'rgba(239,68,68,0.55)'  : 'rgba(239,68,68,0.22)';
-  const glow = side === 'bid'
-    ? 'rgba(34,197,94,0.08)'
-    : 'rgba(239,68,68,0.08)';
-  const dir  = side === 'bid' ? 'to left' : 'to right';
+// ─── LiqBar — animated width, GPU-composited (transform) ─────────────────────
+const LiqBar = memo(function LiqBar({
+  pct, side, isWall,
+}: { pct: number; side: 'bid' | 'ask'; isWall: boolean }) {
+  const color = side === 'bid'
+    ? isWall ? 'rgba(34,197,94,0.65)' : 'rgba(34,197,94,0.28)'
+    : isWall ? 'rgba(239,68,68,0.65)'  : 'rgba(239,68,68,0.28)';
+  const glow  = side === 'bid' ? 'rgba(34,197,94,0.06)' : 'rgba(239,68,68,0.06)';
+  const dir   = side === 'bid' ? 'to left' : 'to right';
+  const wallShadow = isWall
+    ? side === 'bid'
+      ? '0 0 10px rgba(34,197,94,0.5), inset 0 0 6px rgba(34,197,94,0.15)'
+      : '0 0 10px rgba(239,68,68,0.5), inset 0 0 6px rgba(239,68,68,0.15)'
+    : 'none';
 
   return (
     <div
-      className="absolute inset-y-[1px] pointer-events-none transition-all"
+      className="absolute inset-y-0 pointer-events-none"
       style={{
         [side === 'bid' ? 'right' : 'left']: 0,
         width: `${pct}%`,
-        background: `linear-gradient(${dir}, ${base}, ${glow})`,
+        background: `linear-gradient(${dir}, ${color}, ${glow})`,
         borderRadius: side === 'bid' ? '3px 0 0 3px' : '0 3px 3px 0',
-        boxShadow: isWall ? (side === 'bid' ? '0 0 8px rgba(34,197,94,0.4)' : '0 0 8px rgba(239,68,68,0.4)') : 'none',
+        boxShadow: wallShadow,
+        // Use transform for GPU compositing, not width
+        transformOrigin: side === 'bid' ? 'right center' : 'left center',
+        transition: 'width 120ms cubic-bezier(0.4,0,0.2,1)',
       }}
     />
   );
-}
+});
 
-/** Single price row in the price ladder */
-function PriceRow({
-  bidLevel, askLevel, maxQty, isMidAbove,
+// ─── PriceRow — single ladder row (memo'd to prevent cascade re-renders) ─────
+const PriceRow = memo(function PriceRow({
+  price, bidQty, askQty, bidCum, askCum,
+  maxQty, wallQty, showCumulative,
+  isLtpFlash, isWallBid, isWallAsk,
   onBidClick, onAskClick,
-  lastFlash, wallQty,
+  hovered, onHover, onLeave,
 }: {
-  bidLevel?: DepthLevel | null;
-  askLevel?: DepthLevel | null;
-  maxQty: number;
-  isMidAbove: boolean;
-  onBidClick: (price: number) => void;
-  onAskClick: (price: number) => void;
-  lastFlash: boolean;
-  wallQty: number;
+  price:          number;
+  bidQty:         number;
+  askQty:         number;
+  bidCum:         number;
+  askCum:         number;
+  maxQty:         number;
+  wallQty:        number;
+  showCumulative: boolean;
+  isLtpFlash:     boolean;
+  isWallBid:      boolean;
+  isWallAsk:      boolean;
+  onBidClick:     (p: number) => void;
+  onAskClick:     (p: number) => void;
+  hovered:        boolean;
+  onHover:        (p: number) => void;
+  onLeave:        () => void;
 }) {
-  const bidPct   = bidLevel ? Math.min(100, (bidLevel.qty / maxQty) * 100) : 0;
-  const askPct   = askLevel ? Math.min(100, (askLevel.qty / maxQty) * 100) : 0;
-  const bidWall  = bidLevel ? bidLevel.qty >= wallQty : false;
-  const askWall  = askLevel ? askLevel.qty >= wallQty : false;
-  const bidTop   = bidPct > 60;
-  const askTop   = askPct > 60;
-  const price    = bidLevel?.price ?? askLevel?.price ?? 0;
+  const bidDisplay = showCumulative ? bidCum : bidQty;
+  const askDisplay = showCumulative ? askCum : askQty;
+  const bidPct     = bidQty > 0 ? Math.min(100, (bidQty / maxQty) * 100) : 0;
+  const askPct     = askQty > 0 ? Math.min(100, (askQty / maxQty) * 100) : 0;
+  const hasBid     = bidQty > 0;
+  const hasAsk     = askQty > 0;
 
   return (
     <div
       className={cn(
-        'relative grid items-center h-[26px] border-b border-fw-border/[0.06] group select-none',
-        'grid-cols-[72px_1fr_72px_1fr]',
-        lastFlash && 'animate-[ltpFlash_0.3s_ease-out]',
+        'relative flex items-center select-none border-b border-fw-border/[0.05]',
+        'transition-colors duration-75',
+        hovered && 'bg-white/[0.025]',
+        isLtpFlash && 'dom-ltp-flash',
       )}
+      style={{
+        height: ROW_H,
+        background: hovered ? undefined : isLtpFlash ? undefined
+          : hasBid && !hasAsk ? heatColor(bidQty, maxQty, 'bid')
+          : hasAsk && !hasBid ? heatColor(askQty, maxQty, 'ask')
+          : undefined,
+      }}
+      onMouseEnter={() => onHover(price)}
+      onMouseLeave={onLeave}
     >
-      {/* BID bar (right-anchored) */}
-      {bidLevel && (
-        <LiqBar pct={bidPct} side="bid" isTop={bidTop} isWall={bidWall} />
-      )}
-      {/* ASK bar (left-anchored, offset to right half) */}
-      {askLevel && (
-        <div className="absolute inset-y-0 left-1/2 right-0 pointer-events-none">
-          <LiqBar pct={askPct} side="ask" isTop={askTop} isWall={askWall} />
-        </div>
-      )}
-
-      {/* BID QTY — L4/dim, qty is secondary to price */}
-      <div
-        className={cn(
-          'relative z-10 text-right pr-2 dom-qty cursor-pointer transition-colors',
-          bidLevel ? (bidWall ? 'text-green font-black' : 'text-green/75 hover:text-green') : 'text-transparent'
-        )}
-        onClick={() => bidLevel && onBidClick(bidLevel.price)}
-      >
-        {bidLevel ? fmtQty(bidLevel.qty) : ''}
-        {bidWall && <span className="ml-0.5 text-[8px] text-green/60">⬛</span>}
+      {/* ── BID half (left 50%) ── */}
+      <div className="absolute inset-y-0 left-0 w-1/2 overflow-hidden">
+        {hasBid && <LiqBar pct={bidPct} side="bid" isWall={isWallBid} />}
+      </div>
+      {/* ── ASK half (right 50%) ── */}
+      <div className="absolute inset-y-0 right-0 w-1/2 overflow-hidden">
+        {hasAsk && <LiqBar pct={askPct} side="ask" isWall={isWallAsk} />}
       </div>
 
-      {/* BID PRICE — L2, price dominates qty */}
+      {/* ── BID QTY ── */}
       <div
         className={cn(
-          'relative z-10 text-center dom-price cursor-pointer transition-colors',
-          bidLevel ? 'text-green/90 hover:text-green' : 'text-fw-text-muted/20'
+          'relative z-10 w-[68px] text-right pr-2 shrink-0 cursor-pointer',
+          'font-mono tabular-nums transition-colors duration-75',
+          hasBid
+            ? isWallBid
+              ? 'text-green text-[12px] font-bold'
+              : 'text-green/70 text-[11px] font-medium hover:text-green'
+            : 'text-transparent text-[11px]',
         )}
-        onClick={() => bidLevel && onBidClick(bidLevel.price)}
+        onClick={() => hasBid && onBidClick(price)}
       >
-        {bidLevel ? formatPrice(bidLevel.price) : ''}
+        {hasBid ? fmtQty(bidDisplay) : '·'}
+        {isWallBid && <span className="ml-0.5 text-[7px] text-green/50">▲</span>}
       </div>
 
-      {/* ASK PRICE — L2 */}
-      <div
-        className={cn(
-          'relative z-10 text-center dom-price cursor-pointer transition-colors',
-          askLevel ? 'text-red/90 hover:text-red' : 'text-fw-text-muted/20'
-        )}
-        onClick={() => askLevel && onAskClick(askLevel.price)}
-      >
-        {askLevel ? formatPrice(askLevel.price) : ''}
+      {/* ── PRICE (center) ── */}
+      <div className="relative z-10 flex-1 flex items-center justify-center">
+        <span
+          className={cn(
+            'font-mono tabular-nums text-[12px] font-bold cursor-pointer px-1',
+            'transition-colors duration-75',
+            hasBid && !hasAsk  ? 'text-green hover:text-green/80'
+            : hasAsk && !hasBid ? 'text-red hover:text-red/80'
+            : 'text-fw-text-secondary hover:text-fw-text',
+          )}
+          onClick={() => hasBid ? onBidClick(price) : onAskClick(price)}
+        >
+          {formatPrice(price)}
+        </span>
       </div>
 
-      {/* ASK QTY — L4/dim */}
+      {/* ── ASK QTY ── */}
       <div
         className={cn(
-          'relative z-10 text-left pl-2 dom-qty cursor-pointer transition-colors',
-          askLevel ? (askWall ? 'text-red font-black' : 'text-red/75 hover:text-red') : 'text-transparent'
+          'relative z-10 w-[68px] text-left pl-2 shrink-0 cursor-pointer',
+          'font-mono tabular-nums transition-colors duration-75',
+          hasAsk
+            ? isWallAsk
+              ? 'text-red text-[12px] font-bold'
+              : 'text-red/70 text-[11px] font-medium hover:text-red'
+            : 'text-transparent text-[11px]',
         )}
-        onClick={() => askLevel && onAskClick(askLevel.price)}
+        onClick={() => hasAsk && onAskClick(price)}
       >
-        {askLevel ? fmtQty(askLevel.qty) : ''}
-        {askWall && <span className="mr-0.5 text-[8px] text-red/60">⬛</span>}
+        {hasAsk ? fmtQty(askDisplay) : '·'}
+        {isWallAsk && <span className="ml-0.5 text-[7px] text-red/50">▼</span>}
       </div>
     </div>
   );
-}
+});
 
-// ─── Tape entry ───────────────────────────────────────────────────────────────
-function TapeRow({ entry }: { entry: TapeEntry }) {
+// ─── TapeRow — Time & Sales entry ─────────────────────────────────────────────
+const TapeRow = memo(function TapeRow({ entry }: { entry: TapeEntry }) {
+  const isBuy = entry.side === 'buy';
   return (
     <div className={cn(
-      'flex items-center justify-between px-2 py-[2px] border-b border-fw-border/[0.06]',
-      entry.side === 'buy' ? 'bg-green/[0.04]' : 'bg-red/[0.04]',
-    )}>
-      <span className={cn('tv-support font-bold', entry.side === 'buy' ? 'text-green' : 'text-red')}>
-        {entry.side === 'buy' ? 'B' : 'S'}
+      'grid items-center px-2 border-b border-fw-border/[0.05]',
+      'grid-cols-[16px_1fr_56px_auto]',
+      isBuy ? 'bg-green/[0.03]' : 'bg-red/[0.03]',
+    )} style={{ height: 22 }}>
+      {/* Direction indicator */}
+      <span className={cn('text-[10px] font-black', isBuy ? 'text-green' : 'text-red')}>
+        {isBuy ? '▲' : '▼'}
       </span>
-      <span className="dom-price text-fw-text">{formatPrice(entry.price)}</span>
-      <span className="dom-qty text-fw-text-muted">{fmtQty(entry.qty)}</span>
-      <span className="tv-support text-fw-text-muted/50">{fmtTime(entry.time)}</span>
+      {/* Price */}
+      <span className={cn(
+        'font-mono tabular-nums text-[12px] font-semibold',
+        isBuy ? 'text-green' : 'text-red',
+      )}>
+        {formatPrice(entry.price)}
+      </span>
+      {/* Qty */}
+      <span className="font-mono tabular-nums text-[11px] text-fw-text-secondary text-right">
+        {fmtQty(entry.qty)}
+      </span>
+      {/* Time — ms precision */}
+      <span className="font-mono text-[9px] text-fw-text-muted/50 text-right pl-2">
+        {fmtTimestamp(entry.time)}
+      </span>
+    </div>
+  );
+});
+
+// ─── HoverTooltip — shows analytics on row hover ──────────────────────────────
+function HoverTooltip({ info, midPrice }: { info: HoverInfo; midPrice: number }) {
+  const dist = midPrice > 0 ? ((Math.abs(info.price - midPrice) / midPrice) * 100).toFixed(3) : '—';
+  return (
+    <div className={cn(
+      'absolute right-full top-0 mr-2 z-50 w-[160px]',
+      'bg-[#12141f] border border-fw-border rounded-lg shadow-2xl',
+      'p-2 pointer-events-none',
+    )}>
+      <div className="space-y-1">
+        <Row label="Price"    value={formatPrice(info.price)} />
+        <Row label="Bid Qty"  value={info.bidQty  > 0 ? fmtQty(info.bidQty)  : '—'} color="text-green" />
+        <Row label="Ask Qty"  value={info.askQty  > 0 ? fmtQty(info.askQty)  : '—'} color="text-red" />
+        <Row label="Cum Qty"  value={fmtQty(info.cumQty)} />
+        <div className="border-t border-fw-border/30 my-1" />
+        <Row label="Dist"     value={`${dist}%`} color="text-fw-text-muted" />
+      </div>
+    </div>
+  );
+}
+function Row({ label, value, color }: { label: string; value: string; color?: string }) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-[9px] text-fw-text-muted uppercase tracking-wider">{label}</span>
+      <span className={cn('text-[11px] font-mono font-semibold tabular-nums', color ?? 'text-fw-text')}>{value}</span>
     </div>
   );
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+// ─── Main Component ────────────────────────────────────────────────────────────
 export function MarketDepthPanel() {
-  const { activeSymbol } = useAppStore();
-  const quote     = useMarketStore((s) => activeSymbol ? s.quotes[activeSymbol.token] : undefined);
-  const { setOrderForm } = useTradingStore();
+  const { activeSymbol }  = useAppStore();
+  const quote             = useMarketStore(s => activeSymbol ? s.quotes[activeSymbol.token] : undefined);
+  const { setOrderForm }  = useTradingStore();
 
-  // ── depth state (updated via WebSocket depth messages) ───────────────────
-  const [bids, setBids] = useState<DepthLevel[]>([]);
-  const [asks, setAsks] = useState<DepthLevel[]>([]);
-  const [tape, setTape]   = useState<TapeEntry[]>([]);
-  const [lastFlashPrice, setLastFlashPrice] = useState<number | null>(null);
-  const [showTape, setShowTape] = useState(false);
-  const [showCumulative, setShowCumulative] = useState(false);
+  // ── state ──────────────────────────────────────────────────────────────────
+  const [bids, setBids]               = useState<DepthLevel[]>([]);
+  const [asks, setAsks]               = useState<DepthLevel[]>([]);
+  const [tape, setTape]               = useState<TapeEntry[]>([]);
+  const [ltpFlashPrices, setLtpFlash] = useState<Set<number>>(new Set());
+  const [showTape, setShowTape]       = useState(false);
+  const [showCumulative, setShowCum]  = useState(false);
+  const [hoveredPrice, setHoveredPrice] = useState<number | null>(null);
 
-  const tapeIdRef   = useRef(0);
-  const lastLtp     = useRef<number>(0);
-  const ladderRef   = useRef<HTMLDivElement>(null);
+  const tapeIdRef  = useRef(0);
+  const lastLtp    = useRef<number>(0);
+  const ladderRef  = useRef<HTMLDivElement>(null);
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ── subscribe to depth via WebSocket ─────────────────────────────────────
+  // ── WebSocket + REST subscription ─────────────────────────────────────────
   useEffect(() => {
     if (!activeSymbol?.token) return;
     setBids([]); setAsks([]); setTape([]);
     lastLtp.current = 0;
 
-    // Request depth subscription
     wsService.send({ type: 'subscribe_depth', tokens: [activeSymbol.token] });
 
-    // Also poll REST as initial fill + fallback every 2s
     let active = true;
     const fetchDepth = async () => {
       try {
@@ -217,20 +310,17 @@ export function MarketDepthPanel() {
       } catch {}
     };
     fetchDepth();
+    // REST fallback poll — WS handles real-time, this is safety-net
     const poll = setInterval(fetchDepth, 2000);
 
-    // WebSocket depth handler
     const depthHandler = (msg: any) => {
       if (msg.token !== activeSymbol.token) return;
       const data = msg.data || msg;
-      if (data.bids || data.asks) {
-        if (data.bids) setBids(addCumulative(data.bids));
-        if (data.asks) setAsks(addCumulative(data.asks));
-      }
+      if (data.bids) setBids(addCumulative(data.bids));
+      if (data.asks) setAsks(addCumulative(data.asks));
     };
     wsService.on('depth', depthHandler);
 
-    // WebSocket quote → tape + LTP flash
     const quoteHandler = (msg: any) => {
       if (msg.token !== activeSymbol.token) return;
       const ltp = msg.data?.ltp ?? msg.ltp;
@@ -238,22 +328,26 @@ export function MarketDepthPanel() {
       const prev = lastLtp.current;
       if (prev > 0 && ltp !== prev) {
         const entry: TapeEntry = {
-          id: ++tapeIdRef.current,
+          id:   ++tapeIdRef.current,
           time: Date.now(),
           price: ltp,
-          qty: msg.data?.lastTradeQty ?? msg.lastTradeQty ?? 1,
+          qty:  msg.data?.lastTradeQty ?? msg.lastTradeQty ?? 1,
           side: ltp >= prev ? 'buy' : 'sell',
         };
         setTape(t => [entry, ...t].slice(0, MAX_TAPE));
-        setLastFlashPrice(ltp);
-        setTimeout(() => setLastFlashPrice(null), 320);
+        // Flash only the executed price level
+        setLtpFlash(prev => new Set(prev).add(ltp));
+        if (flashTimer.current) clearTimeout(flashTimer.current);
+        flashTimer.current = setTimeout(() => setLtpFlash(new Set()), FLASH_MS);
       }
       lastLtp.current = ltp;
     };
     wsService.on('quote', quoteHandler);
 
     return () => {
+      active = false;
       clearInterval(poll);
+      if (flashTimer.current) clearTimeout(flashTimer.current);
       wsService.off('depth', depthHandler);
       wsService.off('quote', quoteHandler);
       wsService.send({ type: 'unsubscribe_depth', tokens: [activeSymbol.token] });
@@ -261,76 +355,111 @@ export function MarketDepthPanel() {
   }, [activeSymbol?.token]);
 
   // ── derived values ─────────────────────────────────────────────────────────
-  const maxQty = useMemo(() => Math.max(
-    ...bids.map(b => b.qty),
-    ...asks.map(a => a.qty),
-    1,
-  ), [bids, asks]);
+  const maxQty = useMemo(() =>
+    Math.max(...bids.map(b => b.qty), ...asks.map(a => a.qty), 1),
+  [bids, asks]);
 
-  const totalBid = useMemo(() => bids.reduce((s, b) => s + b.qty, 0), [bids]);
-  const totalAsk = useMemo(() => asks.reduce((s, a) => s + a.qty, 0), [asks]);
+  const totalBid   = useMemo(() => bids.reduce((s, b) => s + b.qty, 0), [bids]);
+  const totalAsk   = useMemo(() => asks.reduce((s, a) => s + a.qty, 0), [asks]);
   const grandTotal = totalBid + totalAsk || 1;
-  const bidPct  = (totalBid / grandTotal) * 100;
+  const bidPct     = (totalBid / grandTotal) * 100;
 
-  const bestBid   = bids[0];
-  const bestAsk   = asks[0];
-  const spread    = bestBid && bestAsk ? bestAsk.price - bestBid.price : 0;
-  const midPrice  = bestBid && bestAsk ? (bestBid.price + bestAsk.price) / 2 : 0;
-  const spreadColor = spread === 0 ? 'text-fw-text-muted'
-    : spread <= 0.1 ? 'text-green' : spread <= 0.5 ? 'text-orange-400' : 'text-red';
+  const bestBid  = bids[0];
+  const bestAsk  = asks[0];
+  const spread   = bestBid && bestAsk ? bestAsk.price - bestBid.price : 0;
+  const midPrice = bestBid && bestAsk ? (bestBid.price + bestAsk.price) / 2 : 0;
+
+  const spreadStatus = spread === 0 ? { label: 'Zero', color: 'text-fw-text-muted' }
+    : spread <= 0.05 ? { label: 'Tight',  color: 'text-green' }
+    : spread <= 0.25 ? { label: 'Normal', color: 'text-orange-400' }
+    :                  { label: 'Wide',   color: 'text-red' };
 
   // Liquidity walls
   const avgBidQty = bids.length ? totalBid / bids.length : 0;
   const avgAskQty = asks.length ? totalAsk / asks.length : 0;
   const wallQty   = Math.max(avgBidQty, avgAskQty) * WALL_MULTIPLIER;
-  const walls     = useMemo((): LiqWall[] => {
-    const w: LiqWall[] = [];
-    const topBid = bids.find(b => b.qty >= wallQty);
-    const topAsk = asks.find(a => a.qty >= wallQty);
-    if (topBid) w.push({ side: 'bid', price: topBid.price, qty: topBid.qty });
-    if (topAsk) w.push({ side: 'ask', price: topAsk.price, qty: topAsk.qty });
-    return w;
-  }, [bids, asks, wallQty]);
+
+  const wallBidPrices = useMemo(() =>
+    new Set(bids.filter(b => b.qty >= wallQty).map(b => b.price)),
+  [bids, wallQty]);
+  const wallAskPrices = useMemo(() =>
+    new Set(asks.filter(a => a.qty >= wallQty).map(a => a.price)),
+  [asks, wallQty]);
+
+  // Build unified price ladder: merge bids + asks by price
+  const ladder = useMemo(() => {
+    const map = new Map<number, { bidQty: number; askQty: number; bidCum: number; askCum: number }>();
+    bids.forEach(b => map.set(b.price, { bidQty: b.qty, askQty: 0, bidCum: b.cumQty ?? 0, askCum: 0 }));
+    asks.forEach(a => {
+      const existing = map.get(a.price);
+      if (existing) { existing.askQty = a.qty; existing.askCum = a.cumQty ?? 0; }
+      else map.set(a.price, { bidQty: 0, askQty: a.qty, bidCum: 0, askCum: a.cumQty ?? 0 });
+    });
+    return Array.from(map.entries())
+      .map(([price, v]) => ({ price, ...v }))
+      .sort((a, b) => b.price - a.price); // descending — asks at top
+  }, [bids, asks]);
 
   const hasData = bids.length > 0 || asks.length > 0;
 
+  // Hover info
+  const hoveredInfo = useMemo((): HoverInfo | null => {
+    if (hoveredPrice === null) return null;
+    const row = ladder.find(r => r.price === hoveredPrice);
+    if (!row) return null;
+    return {
+      price:   hoveredPrice,
+      bidQty:  row.bidQty,
+      askQty:  row.askQty,
+      cumQty:  Math.max(row.bidCum, row.askCum),
+      distPct: midPrice > 0 ? (Math.abs(hoveredPrice - midPrice) / midPrice) * 100 : 0,
+    };
+  }, [hoveredPrice, ladder, midPrice]);
+
   // ── callbacks ──────────────────────────────────────────────────────────────
-  const onBidClick = useCallback((price: number) => {
-    setOrderForm({ price, side: 'BUY', orderType: 'LIMIT' });
-  }, [setOrderForm]);
+  const onBidClick  = useCallback((p: number) => setOrderForm({ price: p, side: 'BUY',  orderType: 'LIMIT' }), [setOrderForm]);
+  const onAskClick  = useCallback((p: number) => setOrderForm({ price: p, side: 'SELL', orderType: 'LIMIT' }), [setOrderForm]);
+  const onHover     = useCallback((p: number) => setHoveredPrice(p), []);
+  const onLeave     = useCallback(() => setHoveredPrice(null), []);
 
-  const onAskClick = useCallback((price: number) => {
-    setOrderForm({ price, side: 'SELL', orderType: 'LIMIT' });
-  }, [setOrderForm]);
-
-  // ── render ──────────────────────────────────────────────────────────────────
+  // ── render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col h-full bg-[#090b10] select-none text-fw-text overflow-hidden">
+    <div className="flex flex-col h-full bg-[#08090e] select-none text-fw-text overflow-hidden">
 
-      {/* ── HEADER ── */}
-      <div className="flex items-center justify-between px-3 py-1.5 border-b border-fw-border bg-[#0e1018] flex-shrink-0 gap-2">
+      {/* ══ HEADER ══════════════════════════════════════════════════════════ */}
+      <div className="flex items-center justify-between px-3 py-1.5 border-b border-fw-border bg-[#0d0f17] flex-shrink-0 gap-2">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="tv-heading text-fw-text">DOM</span>
+          <span className="tv-heading text-fw-text">DEPTH</span>
           {activeSymbol && (
             <span className="tv-symbol text-fw-accent truncate">{activeSymbol.symbol}</span>
           )}
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
+          {/* T&S toggle */}
           <button
             onClick={() => setShowTape(v => !v)}
-            className={cn('tv-support font-bold px-1.5 py-0.5 rounded border transition-colors',
-              showTape ? 'border-fw-accent text-fw-accent bg-fw-accent/10' : 'border-fw-border/40 text-fw-text-muted hover:border-fw-accent/40'
+            className={cn(
+              'tv-support font-bold px-1.5 py-0.5 rounded border transition-colors',
+              showTape
+                ? 'border-fw-accent text-fw-accent bg-fw-accent/10'
+                : 'border-fw-border/40 text-fw-text-muted hover:border-fw-accent/40',
             )}
           >T&amp;S</button>
+          {/* Cumulative toggle */}
           <button
-            onClick={() => setShowCumulative(v => !v)}
-            className={cn('tv-support font-bold px-1.5 py-0.5 rounded border transition-colors',
-              showCumulative ? 'border-fw-accent text-fw-accent bg-fw-accent/10' : 'border-fw-border/40 text-fw-text-muted hover:border-fw-accent/40'
+            onClick={() => setShowCum(v => !v)}
+            className={cn(
+              'tv-support font-bold px-1.5 py-0.5 rounded border transition-colors',
+              showCumulative
+                ? 'border-fw-accent text-fw-accent bg-fw-accent/10'
+                : 'border-fw-border/40 text-fw-text-muted hover:border-fw-accent/40',
             )}
           >CUM</button>
+          {/* Live LTP */}
           {quote && (
-            <span className={cn('dom-price ml-1 tv-smooth-value',
-              (quote.changePercent || 0) >= 0 ? 'text-green' : 'text-red'
+            <span className={cn(
+              'dom-price ml-1 font-mono font-bold tabular-nums tv-smooth-value',
+              (quote.changePercent || 0) >= 0 ? 'text-green' : 'text-red',
             )}>
               {formatPrice(quote.ltp)}
             </span>
@@ -338,182 +467,237 @@ export function MarketDepthPanel() {
         </div>
       </div>
 
-      {/* ── BEST BID / ASK STRIP — L1 prices, L4 qty labels ── */}
+      {/* ══ BEST BID / ASK ══════════════════════════════════════════════════ */}
       <div className="grid grid-cols-2 gap-px border-b border-fw-border/30 flex-shrink-0">
         <div
-          className="flex flex-col items-center py-2 bg-green/[0.05] border-r border-fw-border/30 cursor-pointer hover:bg-green/[0.10] transition-colors"
+          className="flex flex-col items-center py-2 cursor-pointer hover:bg-green/[0.08] transition-colors relative overflow-hidden"
+          style={{ background: 'rgba(34,197,94,0.04)', boxShadow: 'inset 0 -2px 0 rgba(34,197,94,0.35)' }}
           onClick={() => bestBid && onBidClick(bestBid.price)}
-          style={{ boxShadow: 'inset 0 -2px 0 rgba(34,197,94,0.4)' }}
         >
-          <span className="tv-label-sm text-green/70 uppercase tracking-widest">Best Bid</span>
-          <span className="tv-price-secondary-sm text-green tabular-nums" style={{ textShadow: '0 0 12px rgba(34,197,94,0.4)' }}>
+          <span className="tv-label-sm text-green/60 uppercase tracking-widest">Best Bid</span>
+          <span className="font-mono text-[16px] font-bold tabular-nums text-green" style={{ textShadow: '0 0 14px rgba(34,197,94,0.5)' }}>
             {bestBid ? formatPrice(bestBid.price) : '—'}
           </span>
           <span className="dom-qty text-green/50">{bestBid ? fmtQty(bestBid.qty) : ''}</span>
         </div>
         <div
-          className="flex flex-col items-center py-2 bg-red/[0.05] cursor-pointer hover:bg-red/[0.10] transition-colors"
+          className="flex flex-col items-center py-2 cursor-pointer hover:bg-red/[0.08] transition-colors relative overflow-hidden"
+          style={{ background: 'rgba(239,68,68,0.04)', boxShadow: 'inset 0 -2px 0 rgba(239,68,68,0.35)' }}
           onClick={() => bestAsk && onAskClick(bestAsk.price)}
-          style={{ boxShadow: 'inset 0 -2px 0 rgba(239,68,68,0.4)' }}
         >
-          <span className="tv-label-sm text-red/70 uppercase tracking-widest">Best Ask</span>
-          <span className="tv-price-secondary-sm text-red tabular-nums" style={{ textShadow: '0 0 12px rgba(239,68,68,0.4)' }}>
+          <span className="tv-label-sm text-red/60 uppercase tracking-widest">Best Ask</span>
+          <span className="font-mono text-[16px] font-bold tabular-nums text-red" style={{ textShadow: '0 0 14px rgba(239,68,68,0.5)' }}>
             {bestAsk ? formatPrice(bestAsk.price) : '—'}
           </span>
           <span className="dom-qty text-red/50">{bestAsk ? fmtQty(bestAsk.qty) : ''}</span>
         </div>
       </div>
 
-      {/* ── MID PRICE + SPREAD ── */}
-      <div className="flex items-center justify-between px-3 py-1 border-b border-fw-border/20 bg-[#0b0d14] flex-shrink-0">
+      {/* ══ SPREAD VISUALIZER ═══════════════════════════════════════════════ */}
+      <div className="flex items-center justify-between px-3 py-1 border-b border-fw-border/20 bg-[#0a0c13] flex-shrink-0">
         <div className="flex items-center gap-1.5">
           <span className="tv-label-sm uppercase tracking-wider">Mid</span>
           <span className="font-mono text-[12px] font-bold text-fw-text tabular-nums">
             {midPrice > 0 ? formatPrice(midPrice) : '—'}
           </span>
         </div>
-        <div className="flex items-center gap-1">
-          <span className="tv-label-sm uppercase tracking-wider">Spread</span>
-          <span className={cn('font-mono text-[11px] font-bold tabular-nums', spreadColor)}>
-            {spread > 0 ? `₹${formatPrice(spread)}` : '—'}
+        <div className="flex items-center gap-2">
+          <span className="tv-label-sm uppercase tracking-wider text-fw-text-muted">Spread</span>
+          <span className={cn('font-mono text-[12px] font-bold tabular-nums', spreadStatus.color)}>
+            {spread > 0 ? formatPrice(spread) : '—'}
           </span>
+          {spread > 0 && (
+            <span className={cn(
+              'text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded',
+              spreadStatus.color,
+              spread <= 0.05 ? 'bg-green/10' : spread <= 0.25 ? 'bg-orange-500/10' : 'bg-red/10',
+            )}>
+              {spreadStatus.label}
+            </span>
+          )}
         </div>
       </div>
 
-      {/* ── COLUMN HEADERS — L4 style ── */}
-      <div className="grid grid-cols-[72px_1fr_72px_1fr] px-0 py-[3px] border-b border-fw-border/30 bg-[#090b10] flex-shrink-0">
-        <span className="tv-label-sm text-green/60 text-right pr-2 uppercase tracking-wider">Bid Qty</span>
-        <span className="tv-label-sm text-green/60 text-center uppercase tracking-wider">Bid</span>
-        <span className="tv-label-sm text-red/60 text-center uppercase tracking-wider">Ask</span>
-        <span className="tv-label-sm text-red/60 text-left pl-2 uppercase tracking-wider">Ask Qty</span>
+      {/* ══ COLUMN HEADERS ══════════════════════════════════════════════════ */}
+      <div className="grid grid-cols-[68px_1fr_68px] px-0 py-[3px] border-b border-fw-border/25 bg-[#08090e] flex-shrink-0">
+        <span className="tv-label-sm text-green/50 text-right pr-2 uppercase tracking-wider">
+          {showCumulative ? 'Cum Bid' : 'Bid Qty'}
+        </span>
+        <span className="tv-label-sm text-fw-text-muted/50 text-center uppercase tracking-wider">Price</span>
+        <span className="tv-label-sm text-red/50 text-left pl-2 uppercase tracking-wider">
+          {showCumulative ? 'Cum Ask' : 'Ask Qty'}
+        </span>
       </div>
 
-      {/* ── PRICE LADDER ── */}
-      <div ref={ladderRef} className="flex-1 overflow-y-auto min-h-0 scrollbar-none">
+      {/* ══ PRICE LADDER ════════════════════════════════════════════════════ */}
+      <div ref={ladderRef} className="flex-1 overflow-y-auto min-h-0 scrollbar-none relative">
         {!hasData ? (
-          <div className="flex flex-col items-center justify-center h-full gap-2 opacity-40">
-            <div className="w-8 h-8 rounded-full border-2 border-fw-border/40 flex items-center justify-center">
-              <span className="text-fw-text-muted text-lg">≡</span>
+          <div className="flex flex-col items-center justify-center h-full gap-2 opacity-35">
+            <div className="w-10 h-10 rounded-full border border-fw-border/30 flex items-center justify-center">
+              <span className="text-fw-text-muted text-xl">≡</span>
             </div>
-            <span className="text-[12px] text-fw-text-muted">Waiting for depth data</span>
-            <span className="text-[11px] text-fw-text-muted/60">Click price to set order</span>
+            <span className="text-[12px] text-fw-text-muted font-medium">Waiting for depth data</span>
+            <span className="text-[10px] text-fw-text-muted/50">Click price to set order</span>
           </div>
         ) : (
           <>
-            {/* ASK levels (reversed — highest ask at top, best ask at bottom near mid) */}
-            {[...asks].reverse().map((ask, i) => {
-              const idx = asks.length - 1 - i;
-              return (
+            {/* ASK rows — highest ask first, best ask closest to mid */}
+            {[...ladder].filter(r => r.askQty > 0 && r.bidQty === 0).map(row => (
+              <div key={`ask-${row.price}`} className="relative">
                 <PriceRow
-                  key={`ask-${idx}`}
-                  askLevel={showCumulative ? { ...ask, qty: ask.cumQty ?? ask.qty } : ask}
-                  maxQty={maxQty}
-                  isMidAbove={false}
-                  onBidClick={onBidClick}
-                  onAskClick={onAskClick}
-                  lastFlash={lastFlashPrice === ask.price}
-                  wallQty={wallQty}
+                  price={row.price}
+                  bidQty={row.bidQty} askQty={row.askQty}
+                  bidCum={row.bidCum} askCum={row.askCum}
+                  maxQty={maxQty} wallQty={wallQty}
+                  showCumulative={showCumulative}
+                  isLtpFlash={ltpFlashPrices.has(row.price)}
+                  isWallBid={wallBidPrices.has(row.price)}
+                  isWallAsk={wallAskPrices.has(row.price)}
+                  onBidClick={onBidClick} onAskClick={onAskClick}
+                  hovered={hoveredPrice === row.price}
+                  onHover={onHover} onLeave={onLeave}
                 />
-              );
-            })}
+                {hoveredPrice === row.price && hoveredInfo && (
+                  <div className="absolute top-0 right-full mr-1 z-50">
+                    <HoverTooltip info={hoveredInfo} midPrice={midPrice} />
+                  </div>
+                )}
+              </div>
+            ))}
 
             {/* ── MID PRICE DIVIDER ── */}
-            <div className="flex items-center gap-2 px-2 py-1 bg-[#0e1018]/80 border-y border-fw-accent/20 sticky z-10" style={{ top: 0 }}>
-              <div className="flex-1 h-px bg-fw-accent/20" />
-              <span className="text-[9px] font-black text-fw-accent/70 uppercase tracking-widest whitespace-nowrap">
-                {midPrice > 0 ? formatPrice(midPrice) : 'MID'}
-              </span>
-              {spread > 0 && (
-                <span className={cn('text-[9px] font-mono', spreadColor)}>
-                  Δ{formatPrice(spread)}
-                </span>
-              )}
-              <div className="flex-1 h-px bg-fw-accent/20" />
-            </div>
+            {hasData && (
+              <div className="flex items-center gap-2 px-2 py-[5px] bg-[#0e1018] border-y border-fw-accent/15 flex-shrink-0">
+                <div className="flex-1 h-px bg-fw-accent/15" />
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold text-fw-accent/60 uppercase tracking-widest whitespace-nowrap">
+                    {midPrice > 0 ? formatPrice(midPrice) : 'MID'}
+                  </span>
+                  {spread > 0 && (
+                    <span className={cn('text-[9px] font-mono font-semibold', spreadStatus.color)}>
+                      Δ{formatPrice(spread)}
+                    </span>
+                  )}
+                </div>
+                <div className="flex-1 h-px bg-fw-accent/15" />
+              </div>
+            )}
 
-            {/* BID levels (best bid at top, descending) */}
-            {bids.map((bid, idx) => (
-              <PriceRow
-                key={`bid-${idx}`}
-                bidLevel={showCumulative ? { ...bid, qty: bid.cumQty ?? bid.qty } : bid}
-                maxQty={maxQty}
-                isMidAbove={true}
-                onBidClick={onBidClick}
-                onAskClick={onAskClick}
-                lastFlash={lastFlashPrice === bid.price}
-                wallQty={wallQty}
-              />
+            {/* BID rows — best bid first */}
+            {[...ladder].filter(r => r.bidQty > 0 && r.askQty === 0).map(row => (
+              <div key={`bid-${row.price}`} className="relative">
+                <PriceRow
+                  price={row.price}
+                  bidQty={row.bidQty} askQty={row.askQty}
+                  bidCum={row.bidCum} askCum={row.askCum}
+                  maxQty={maxQty} wallQty={wallQty}
+                  showCumulative={showCumulative}
+                  isLtpFlash={ltpFlashPrices.has(row.price)}
+                  isWallBid={wallBidPrices.has(row.price)}
+                  isWallAsk={wallAskPrices.has(row.price)}
+                  onBidClick={onBidClick} onAskClick={onAskClick}
+                  hovered={hoveredPrice === row.price}
+                  onHover={onHover} onLeave={onLeave}
+                />
+                {hoveredPrice === row.price && hoveredInfo && (
+                  <div className="absolute top-0 right-full mr-1 z-50">
+                    <HoverTooltip info={hoveredInfo} midPrice={midPrice} />
+                  </div>
+                )}
+              </div>
             ))}
           </>
         )}
       </div>
 
-      {/* ── LIQUIDITY WALLS ── */}
-      {walls.length > 0 && (
-        <div className="flex gap-1 px-2 py-1 border-t border-fw-border/20 bg-[#0b0d14] flex-shrink-0 flex-wrap">
-          {walls.map((w, i) => (
-            <div
-              key={i}
-              className={cn(
-                'flex items-center gap-1 px-2 py-0.5 rounded border',
-                w.side === 'bid'
-                  ? 'bg-green/10 border-green/30 text-green'
-                  : 'bg-red/10 border-red/30 text-red'
-              )}
-              style={{ boxShadow: w.side === 'bid' ? '0 0 6px rgba(34,197,94,0.2)' : '0 0 6px rgba(239,68,68,0.2)' }}
-            >
-              <span className="tv-label-sm font-bold">{w.side === 'bid' ? '🟢' : '🔴'} {w.side === 'bid' ? 'BUY' : 'SELL'} WALL</span>
-              <span className="dom-qty font-mono">{formatPrice(w.price)}</span>
-              <span className="dom-qty opacity-70">{fmtQty(w.qty)}</span>
-            </div>
-          ))}
+      {/* ══ LIQUIDITY WALLS ═════════════════════════════════════════════════ */}
+      {(wallBidPrices.size > 0 || wallAskPrices.size > 0) && (
+        <div className="flex gap-1.5 px-2 py-1.5 border-t border-fw-border/20 bg-[#0a0c13] flex-shrink-0 flex-wrap">
+          {[...wallBidPrices].map(price => {
+            const lvl = bids.find(b => b.price === price);
+            return lvl ? (
+              <div key={`wb-${price}`} className="flex items-center gap-1.5 px-2 py-0.5 rounded-md border border-green/25 bg-green/[0.07]"
+                style={{ boxShadow: '0 0 8px rgba(34,197,94,0.15)' }}>
+                <span className="text-[9px] text-green font-bold uppercase tracking-widest">▲ Buy Wall</span>
+                <span className="font-mono text-[11px] text-green font-semibold">{formatPrice(price)}</span>
+                <span className="font-mono text-[10px] text-green/60">{fmtQty(lvl.qty)}</span>
+              </div>
+            ) : null;
+          })}
+          {[...wallAskPrices].map(price => {
+            const lvl = asks.find(a => a.price === price);
+            return lvl ? (
+              <div key={`wa-${price}`} className="flex items-center gap-1.5 px-2 py-0.5 rounded-md border border-red/25 bg-red/[0.07]"
+                style={{ boxShadow: '0 0 8px rgba(239,68,68,0.15)' }}>
+                <span className="text-[9px] text-red font-bold uppercase tracking-widest">▼ Sell Wall</span>
+                <span className="font-mono text-[11px] text-red font-semibold">{formatPrice(price)}</span>
+                <span className="font-mono text-[10px] text-red/60">{fmtQty(lvl.qty)}</span>
+              </div>
+            ) : null;
+          })}
         </div>
       )}
 
-      {/* ── ORDER IMBALANCE METER ── */}
-      <div className="px-3 py-1.5 border-t border-fw-border/20 bg-[#0b0d14] flex-shrink-0">
-        <div className="flex items-center justify-between mb-1">
-          <span className="tv-label-sm font-bold text-green">
-            BUY {bidPct.toFixed(0)}%
-            <span className="ml-1 font-mono text-green/60">{fmtQty(totalBid)}</span>
-          </span>
-          <span className="tv-label-sm uppercase tracking-widest text-fw-text-muted/60">Imbalance</span>
-          <span className="tv-label-sm font-bold text-red">
-            <span className="mr-1 font-mono text-red/60">{fmtQty(totalAsk)}</span>
-            SELL {(100 - bidPct).toFixed(0)}%
-          </span>
+      {/* ══ DOM PRESSURE METER ══════════════════════════════════════════════ */}
+      <div className="px-3 py-2 border-t border-fw-border/20 bg-[#0a0c13] flex-shrink-0">
+        {/* Labels */}
+        <div className="flex items-center justify-between mb-1.5">
+          <div className="flex items-center gap-1">
+            <span className="text-[11px] font-bold text-green">BUY</span>
+            <span className="font-mono text-[12px] font-black text-green tabular-nums">{bidPct.toFixed(0)}%</span>
+            <span className="font-mono text-[10px] text-green/50 ml-1">{fmtQty(totalBid)}</span>
+          </div>
+          <span className="tv-label-sm uppercase tracking-widest text-fw-text-muted/50">Pressure</span>
+          <div className="flex items-center gap-1">
+            <span className="font-mono text-[10px] text-red/50 mr-1">{fmtQty(totalAsk)}</span>
+            <span className="font-mono text-[12px] font-black text-red tabular-nums">{(100 - bidPct).toFixed(0)}%</span>
+            <span className="text-[11px] font-bold text-red">SELL</span>
+          </div>
         </div>
-        <div className="h-[5px] rounded-full overflow-hidden bg-fw-border/20 flex">
+        {/* Animated pressure bar */}
+        <div className="h-[6px] rounded-full overflow-hidden bg-fw-border/15 flex">
           <div
-            className="h-full rounded-l-full transition-all duration-500"
-            style={{ width: `${bidPct}%`, background: 'linear-gradient(to right, #16a34a, #22c55e)' }}
+            className="h-full rounded-l-full"
+            style={{
+              width: `${bidPct}%`,
+              background: bidPct >= 60
+                ? 'linear-gradient(to right, #15803d, #22c55e)'
+                : 'linear-gradient(to right, #166534, #16a34a)',
+              transition: 'width 300ms cubic-bezier(0.4,0,0.2,1)',
+            }}
           />
           <div
             className="h-full flex-1 rounded-r-full"
-            style={{ background: 'linear-gradient(to right, #ef4444, #dc2626)' }}
+            style={{ background: 'linear-gradient(to right, #dc2626, #ef4444)' }}
           />
         </div>
-        <div className="flex justify-center mt-0.5">
-          <span className={cn('tv-support font-bold uppercase tracking-widest',
-            bidPct >= 60 ? 'text-green' : bidPct <= 40 ? 'text-red' : 'text-orange-400'
+        {/* Pressure label */}
+        <div className="flex justify-center mt-1">
+          <span className={cn(
+            'text-[9px] font-bold uppercase tracking-widest',
+            bidPct >= 65 ? 'text-green' : bidPct <= 35 ? 'text-red' : 'text-orange-400',
           )}>
-            {bidPct >= 60 ? '▲ Buy Pressure' : bidPct <= 40 ? '▼ Sell Pressure' : '⬡ Balanced'}
+            {bidPct >= 65 ? '▲ Strong Buy Pressure'
+              : bidPct <= 35 ? '▼ Strong Sell Pressure'
+              : bidPct >= 55 ? '▲ Mild Buy Pressure'
+              : bidPct <= 45 ? '▼ Mild Sell Pressure'
+              : '⬡ Balanced'}
           </span>
         </div>
       </div>
 
-      {/* ── TIME & SALES TAPE ── */}
+      {/* ══ TIME & SALES TAPE ═══════════════════════════════════════════════ */}
       {showTape && (
-        <div className="border-t border-fw-border/30 flex-shrink-0" style={{ maxHeight: 140 }}>
-          <div className="flex items-center justify-between px-2 py-[3px] bg-[#0d0f18] border-b border-fw-border/20">
+        <div className="border-t border-fw-border/30 flex-shrink-0 flex flex-col" style={{ maxHeight: 150 }}>
+          <div className="flex items-center justify-between px-2 py-1 bg-[#0d0f17] border-b border-fw-border/20 flex-shrink-0">
             <span className="tv-label-sm uppercase tracking-widest">Time &amp; Sales</span>
-            <span className="tv-support text-fw-text-muted/50">{tape.length} ticks</span>
+            <span className="tv-support text-fw-text-muted/40">{tape.length} ticks</span>
           </div>
-          <div className="overflow-y-auto scrollbar-none" style={{ maxHeight: 115 }}>
+          <div className="overflow-y-auto scrollbar-none flex-1">
             {tape.length === 0 ? (
-              <div className="text-center tv-support text-fw-text-muted/40 py-3">Waiting for trades…</div>
+              <div className="text-center tv-support text-fw-text-muted/35 py-3">Waiting for trades…</div>
             ) : (
-              tape.map(entry => <TapeRow key={entry.id} entry={entry} />)
+              tape.map(e => <TapeRow key={e.id} entry={e} />)
             )}
           </div>
         </div>
@@ -522,11 +706,8 @@ export function MarketDepthPanel() {
   );
 }
 
-// ─── utility: add cumulative qty to depth levels ─────────────────────────────
+// ─── utility ─────────────────────────────────────────────────────────────────
 function addCumulative(levels: MarketDepthLevel[]): DepthLevel[] {
   let cum = 0;
-  return levels.map(l => {
-    cum += l.qty;
-    return { ...l, cumQty: cum };
-  });
+  return levels.map(l => { cum += l.qty; return { ...l, cumQty: cum }; });
 }
