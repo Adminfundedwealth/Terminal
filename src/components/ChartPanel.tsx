@@ -160,6 +160,7 @@ export function ChartPanel() {
       grid: { vertLines: { color: 'rgba(38, 42, 54, 0.4)' }, horzLines: { color: 'rgba(38, 42, 54, 0.4)' } },
       crosshair: { mode: CrosshairMode.Normal, vertLine: { color: '#6b7280', width: 1, style: 3 }, horzLine: { color: '#6b7280', width: 1, style: 3 } },
       rightPriceScale: { borderColor: '#262a36', scaleMargins: { top: 0.06, bottom: 0.22 } },
+      leftPriceScale: { visible: false, borderVisible: false },
       timeScale: { borderColor: '#262a36', timeVisible: true, secondsVisible: false },
       handleScale: { axisPressedMouseMove: true },
       handleScroll: { mouseWheel: true, pressedMouseMove: true },
@@ -775,12 +776,12 @@ export function ChartPanel() {
     }
 
     // ── Permanent volume bars (always visible, bottom 20% of main chart) ──
-    // lightweight-charts v4: use priceScaleId '' (overlay/left scale) and set
-    // scaleMargins on the series. The chart rightPriceScale bottom margin (0.22)
-    // reserves space so volume bars don't overlap candlesticks.
+    // Use dedicated priceScaleId 'vol' so it never conflicts with overlay
+    // indicators (priceScaleId:'') or the right price scale.
+    // rightPriceScale bottom:0.22 reserves the space; 'vol' scale fills it.
     const vs = chartRef.current.addHistogramSeries({
       priceFormat: { type: 'volume' },
-      priceScaleId: '',
+      priceScaleId: 'vol',
       lastValueVisible: false,
       priceLineVisible: false,
       color: 'rgba(38,166,154,0.4)',
@@ -791,10 +792,7 @@ export function ChartPanel() {
     });
     const volData = extractVolume(data);
     if (volData.length > 0) {
-      console.log(`[Volume] ${volData.length} bars, sample volumes:`, volData.slice(0, 3).map(v => v.value));
       vs.setData(volData as any);
-    } else {
-      console.warn('[Volume] extractVolume returned empty array');
     }
     volumeSeriesRef.current = vs;
 
@@ -1164,11 +1162,12 @@ export function ChartPanel() {
       liveBarRef.current = updatedBar;
       (seriesRef.current as any).update(updatedBar);
 
-      // Update permanent volume histogram with live candle volume
-      if (volumeSeriesRef.current && updatedBar.volume > 0) {
+      // Update permanent volume histogram with live candle volume.
+      // Always update even when volume is 0 (indices) so the bar is visible.
+      if (volumeSeriesRef.current) {
         volumeSeriesRef.current.update({
           time: candleTime,
-          value: updatedBar.volume,
+          value: updatedBar.volume > 0 ? updatedBar.volume : 1,
           color: ltp >= updatedBar.open ? 'rgba(38,166,154,0.5)' : 'rgba(239,83,80,0.5)',
         });
       }

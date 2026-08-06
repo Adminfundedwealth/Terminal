@@ -177,9 +177,13 @@ export function calculateVWAP(data: OHLC[]): { time: number; value: number }[] {
 // ─── Volume ──────────────────────────────────────────────────
 
 export function extractVolume(data: OHLC[]): { time: number; value: number; color: string }[] {
+  // Find max volume across all bars so we can normalize. For indices that
+  // report 0 volume from the broker, fall back to a placeholder of 1 so
+  // the bar is still rendered (otherwise value:0 = invisible histogram bar).
+  const maxVol = data.reduce((m, b) => Math.max(m, b.volume || 0), 0);
   return data.map(bar => ({
     time: bar.time,
-    value: bar.volume || 0,
+    value: bar.volume > 0 ? bar.volume : (maxVol === 0 ? 1 : 0),
     color: bar.close >= bar.open ? 'rgba(38,166,154,0.5)' : 'rgba(239,83,80,0.5)',
   }));
 }
