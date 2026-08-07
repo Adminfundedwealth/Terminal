@@ -269,6 +269,7 @@ export function PositionCanvas({
       if (!dragRef.current) return;
       const r = el.getBoundingClientRect();
       const p = y2p(e.clientY - r.top);
+      console.log('[POS] drag move clientY=', e.clientY, 'canvasY=', (e.clientY - r.top).toFixed(0), 'price=', p?.toFixed(2) ?? 'null');
       if (p != null) {
         dragRef.current.livePrice = p;
         cbDragMove.current(p);
@@ -280,12 +281,17 @@ export function PositionCanvas({
       if (e.button !== 0) return;
       const r = el.getBoundingClientRect();
       const mx = e.clientX - r.left, my = e.clientY - r.top;
+      console.log('[POS] mousedown canvas mx=', mx.toFixed(0), 'my=', my.toFixed(0),
+        'hits=', hitsRef.current.map(h => `${h.role}@y${h.y.toFixed(0)}`).join(','),
+        'pointerEvents=', el.style.pointerEvents);
       const h = find(mx, my);
+      console.log('[POS] hit=', h?.role ?? 'none');
       if (!h) return;
       if (h.role === 'sl_drag' || h.role === 'tp_drag') {
         e.preventDefault(); e.stopPropagation();
         const type = h.role === 'sl_drag' ? 'sl' : 'tp';
         const price = y2p(my) ?? 0;
+        console.log('[POS] DRAG START', type, 'price=', price);
         dragRef.current = { pid: h.pid, type, livePrice: price };
         cbDragStart.current(h.pid, type, price, e);
         document.body.style.cursor = 'ns-resize';
