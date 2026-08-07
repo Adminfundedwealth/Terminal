@@ -11,8 +11,7 @@ import { type DrawingMode } from './DrawingTools';
 import { ChartDrawingToolbar, DrawingToolbarToggle } from './ChartDrawingToolbar';
 import { DrawingLayersPanel } from './DrawingLayersPanel';
 import { EmojiMarkerPicker } from './EmojiMarkerPicker';
-import { PositionOverlay } from '@/features/chart-trading';
-import { notifyChartReady } from '@/features/chart-trading';
+import { PositionManager } from './chart/PositionManager';
 import { DrawingToolbar } from './chart/DrawingToolbar';
 import {
   calculateSMA, calculateEMA, calculateRSI, calculateMACD, calculateBollinger,
@@ -918,8 +917,7 @@ export function ChartPanel() {
         applyOverlayDrawings(drawings);
         applyTextMarkers(drawings);
         setNoData(false);
-        // Notify overlay engine that chart is ready — triggers overlay replay
-        notifyChartReady();
+        // notifyChartReady handled by PositionManager on next render
       } else {
         setNoData(true);
       }
@@ -1750,22 +1748,13 @@ export function ChartPanel() {
             )}
 
             {/* ═══════════════════════════════════════════════════════════════════
-                PROFESSIONAL INTERACTIVE POSITION OVERLAY ENGINE
-                ═══════════════════════════════════════════════════════════════════
-                Core terminal feature — works for every market automatically.
-                Renders on-chart overlays using OverlayEngine (canvas-based):
-                - Entry line  — solid, colored by side
-                - Stop Loss   — dashed red, draggable with confirmation
-                - Take Profit — dashed green, draggable with confirmation
-                - Risk/Reward zone fills
-                - Compact P&L label updating at 60 FPS
-                - Entry markers on execution candle
+                POSITION MANAGER — Interactive on-chart overlay
+                Entry line · SL drag · TP drag · P&L · Risk zones
                 ═══════════════════════════════════════════════════════════════════ */}
-            <PositionOverlay
+            <PositionManager
               chart={chartRef.current}
               series={seriesRef.current}
               containerRef={chartContainerRef}
-              activeToken={activeSymbol?.token ?? ''}
             />
           </div>
 

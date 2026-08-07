@@ -484,11 +484,13 @@ export function PositionCanvas({
     const resize = () => {
       const dpr = window.devicePixelRatio || 1;
       const rect = container.getBoundingClientRect();
-      canvas.width = rect.width * dpr;
-      canvas.height = rect.height * dpr;
+      // Reset transform BEFORE resizing to avoid compounding scale on repeated calls
+      const ctx = canvas.getContext('2d');
+      if (ctx) ctx.setTransform(1, 0, 0, 1, 0, 0);
+      canvas.width = Math.round(rect.width * dpr);
+      canvas.height = Math.round(rect.height * dpr);
       canvas.style.width = `${rect.width}px`;
       canvas.style.height = `${rect.height}px`;
-      const ctx = canvas.getContext('2d');
       if (ctx) ctx.scale(dpr, dpr);
     };
 
@@ -511,7 +513,7 @@ export function PositionCanvas({
       const my = e.clientY - rect.top;
 
       if (draggingRef.current) {
-        // Update drag price
+        // Active drag — consume event and update price
         const price = yToPrice(my);
         if (price != null) {
           draggingRef.current.currentY = my;
@@ -538,22 +540,22 @@ export function PositionCanvas({
       } else if (found) {
         canvas.style.cursor = 'pointer';
       } else {
+        // Not near any line — clear cursor and let chart handle pan
         canvas.style.cursor = '';
       }
     };
 
     const handleMouseDown = (e: MouseEvent) => {
+      if (e.button !== 0) return;
       const rect = canvas.getBoundingClientRect();
       const my = e.clientY - rect.top;
 
-      if (e.button !== 0) return;
-
       for (const region of hitRegionsRef.current) {
-        if (Math.abs(my - region.y) < 8) {
+        if (Math.abs(my - region.y) < HIT_TOLERANCE) {
           if (region.type === 'sl' || region.type === 'tp') {
+            // This IS a drag target — consume the event
             e.preventDefault();
             e.stopPropagation();
-
             const price = yToPrice(my) ?? 0;
             draggingRef.current = {
               positionId: region.positionId,
@@ -565,8 +567,14 @@ export function PositionCanvas({
             canvas.style.cursor = 'ns-resize';
             return;
           }
+          // Near a label/close button — consume
+          if (region.type === 'close_entry' || region.type === 'close_sl' || region.type === 'close_tp') {
+            e.stopPropagation();
+            return;
+          }
         }
       }
+      // Not near any line — DO NOT stopPropagation so chart panning works
     };
 
     const handleMouseUp = (e: MouseEvent) => {
@@ -647,8 +655,11 @@ export function PositionCanvas({
         position: 'absolute',
         top: 0,
         left: 0,
+        // z-index 20 — must be above the SVG drawing overlay (z-[15])
+        // so drag events reach the canvas even when drawings exist
+        zIndex: 20,
+        // Always capture pointer events when positions are visible
         pointerEvents: positions.length > 0 ? 'auto' : 'none',
-        zIndex: 10,
       }}
     />
   );
