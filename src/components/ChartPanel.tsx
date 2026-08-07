@@ -11,7 +11,8 @@ import { type DrawingMode } from './DrawingTools';
 import { ChartDrawingToolbar, DrawingToolbarToggle } from './ChartDrawingToolbar';
 import { DrawingLayersPanel } from './DrawingLayersPanel';
 import { EmojiMarkerPicker } from './EmojiMarkerPicker';
-import { PositionManager } from './chart/PositionManager';
+import { PositionOverlay } from '@/features/chart-trading';
+import { notifyChartReady } from '@/features/chart-trading';
 import { DrawingToolbar } from './chart/DrawingToolbar';
 import {
   calculateSMA, calculateEMA, calculateRSI, calculateMACD, calculateBollinger,
@@ -917,6 +918,8 @@ export function ChartPanel() {
         applyOverlayDrawings(drawings);
         applyTextMarkers(drawings);
         setNoData(false);
+        // Notify overlay engine that chart is ready — triggers overlay replay
+        notifyChartReady();
       } else {
         setNoData(true);
       }
@@ -1747,20 +1750,22 @@ export function ChartPanel() {
             )}
 
             {/* ═══════════════════════════════════════════════════════════════════
-                PROFESSIONAL INTERACTIVE POSITION MANAGER
+                PROFESSIONAL INTERACTIVE POSITION OVERLAY ENGINE
                 ═══════════════════════════════════════════════════════════════════
-                Renders on-chart position visualization with:
-                - Entry line (blue) with floating P/L
-                - Stop Loss (red, draggable)
-                - Take Profit (green, draggable)
-                - Risk/Reward zones
-                - Right-click context menu
-                - 60 FPS canvas rendering
+                Core terminal feature — works for every market automatically.
+                Renders on-chart overlays using OverlayEngine (canvas-based):
+                - Entry line  — solid, colored by side
+                - Stop Loss   — dashed red, draggable with confirmation
+                - Take Profit — dashed green, draggable with confirmation
+                - Risk/Reward zone fills
+                - Compact P&L label updating at 60 FPS
+                - Entry markers on execution candle
                 ═══════════════════════════════════════════════════════════════════ */}
-            <PositionManager
+            <PositionOverlay
               chart={chartRef.current}
               series={seriesRef.current}
               containerRef={chartContainerRef}
+              activeToken={activeSymbol?.token ?? ''}
             />
           </div>
 
