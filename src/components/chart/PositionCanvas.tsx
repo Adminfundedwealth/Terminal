@@ -58,7 +58,7 @@ const TP_COL = '#22c55e';
 const LABEL_BG = 'rgba(13,15,24,0.95)';
 const TEXT_DIM = '#6b7280';
 const FONT_B = 'bold 11px "Inter",ui-sans-serif,sans-serif';
-const HIT = 60;   // TEMP: large tolerance to confirm hit detection works
+const HIT = 10;   // hit tolerance in CSS pixels
 
 function rrect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   ctx.beginPath();
@@ -127,8 +127,8 @@ export function PositionCanvas({
       const ctx = el.getContext('2d');
       if (!ctx || !seriesRef.current) return;
 
-      const dpr = window.devicePixelRatio || 1;
-      const W = el.width / dpr, H = el.height / dpr;
+      // Canvas is sized in CSS pixels (no DPR scaling) so width/height = CSS pixels directly
+      const W = el.width, H = el.height;
       ctx.clearRect(0, 0, W, H);
 
       const newHits: HR[] = [];
@@ -218,15 +218,16 @@ export function PositionCanvas({
     const el = cvs.current, ct = containerRef.current;
     if (!el || !ct) return;
     const resize = () => {
-      const dpr = window.devicePixelRatio || 1;
       const r = ct.getBoundingClientRect();
-      const ctx = el.getContext('2d');
-      if (ctx) ctx.setTransform(1, 0, 0, 1, 0, 0);
-      el.width  = Math.round(r.width  * dpr);
-      el.height = Math.round(r.height * dpr);
+      // NO DPR scaling — priceToCoordinate returns CSS pixels,
+      // mouse events return CSS pixels, canvas must match CSS pixels exactly.
+      el.width  = Math.round(r.width);
+      el.height = Math.round(r.height);
       el.style.width  = `${r.width}px`;
       el.style.height = `${r.height}px`;
-      if (ctx) ctx.scale(dpr, dpr);
+      // Reset any transform that may have accumulated
+      const ctx = el.getContext('2d');
+      if (ctx) ctx.setTransform(1, 0, 0, 1, 0, 0);
     };
     resize();
     const ro = new ResizeObserver(resize);
