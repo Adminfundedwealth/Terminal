@@ -58,7 +58,7 @@ const TP_COL = '#22c55e';
 const LABEL_BG = 'rgba(13,15,24,0.95)';
 const TEXT_DIM = '#6b7280';
 const FONT_B = 'bold 11px "Inter",ui-sans-serif,sans-serif';
-const HIT = 14;
+const HIT = 60;   // TEMP: large tolerance to confirm hit detection works
 
 function rrect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   ctx.beginPath();
@@ -283,7 +283,8 @@ export function PositionCanvas({
       const mx = e.clientX - r.left, my = e.clientY - r.top;
       console.log('[POS] mousedown canvas mx=', mx.toFixed(0), 'my=', my.toFixed(0),
         'hits=', hitsRef.current.map(h => `${h.role}@y${h.y.toFixed(0)}`).join(','),
-        'pointerEvents=', el.style.pointerEvents);
+        'pointerEvents=', el.style.pointerEvents,
+        'canvasRect top=', r.top.toFixed(0), 'containerRect top=', (containerRef.current?.getBoundingClientRect().top ?? 0).toFixed(0));
       const h = find(mx, my);
       console.log('[POS] hit=', h?.role ?? 'none');
       if (!h) return;
