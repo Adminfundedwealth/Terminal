@@ -1,16 +1,20 @@
 /**
- * POSITION CANVAS
+ * POSITION CANVAS — SL/TP drag that actually works
  *
- * Self-contained 60 FPS canvas overlay.
- * Drag state lives ENTIRELY in this component via refs.
- * Parent (PositionManager) only passes position data and callbacks.
- * Parent never needs to know about drag state mid-flight.
+ * Root cause of all previous failures:
+ *   useCallback(y2p, [series]) + useEffect([..., y2p]) = stale closure
+ *   When series changes, y2p gets a new reference, effect re-runs,
+ *   re-registers handlers — but during a fast drag the closure still
+ *   holds the OLD y2p. Fix: store series in a ref, read it directly.
  *
- * TradeLocker-style label: compact single-line badge
- *   [LONG 50 @ 344.70]  [-₹2.50 ▼]  [SL] [TP] [×]
+ * Design:
+ *  - seriesRef always points to the live series
+ *  - All coordinate math reads seriesRef.current directly — never stale
+ *  - Drag state in dragRef — zero React state during drag
+ *  - window mousemove/mouseup so drag works outside the canvas bounds
  */
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef } from 'react';
 import type { ISeriesApi } from 'lightweight-charts';
 import type { Position } from '@/types';
 import { formatPrice } from '@/utils/helpers';
@@ -20,7 +24,6 @@ export interface PositionVisual {
   slPrice?: number;
   tpPrice?: number;
   ltp: number;
-  // NOT used for drag — canvas owns drag internally
   isDraggingSlThis?: boolean;
   isDraggingTpThis?: boolean;
 }
@@ -40,7 +43,6 @@ interface Props {
   onContextMenu: (pid: string, type: 'entry' | 'sl' | 'tp', x: number, y: number) => void;
 }
 
-// Hit region
 interface HR {
   pid: string;
   role: 'sl_drag' | 'tp_drag' | 'close_pos' | 'add_sl' | 'add_tp' | 'entry';
@@ -48,300 +50,176 @@ interface HR {
   x1?: number; x2?: number;
 }
 
-// ─── Colors ───────────────────────────────────────────────────────────────────
-const LONG_COL  = '#2962ff';
+// Colors
+const LONG_COL = '#2962ff';
 const SHORT_COL = '#f7525f';
-const SL_COL    = '#ef4444';
-const TP_COL    = '#22c55e';
-const SL_ZONE   = 'rgba(239,68,68,0.06)';
-const TP_ZONE   = 'rgba(34,197,94,0.06)';
-const LABEL_BG  = 'rgba(13,15,24,0.95)';
-const TEXT_DIM  = '#6b7280';
-const FONT      = '11px "Inter",ui-sans-serif,sans-serif';
-const FONT_B    = 'bold 11px "Inter",ui-sans-serif,sans-serif';
-const HIT_PX = 16;   // hit tolerance pixels — generous so drag is easy to grab
+const SL_COL = '#ef4444';
+const TP_COL = '#22c55e';
+const LABEL_BG = 'rgba(13,15,24,0.95)';
+const TEXT_DIM = '#6b7280';
+const FONT_B = 'bold 11px "Inter",ui-sans-serif,sans-serif';
+const HIT = 14;
 
 function rrect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
-  const cr = Math.min(r, w / 2, h / 2);
   ctx.beginPath();
-  ctx.roundRect(x, y, w, h, cr);
+  ctx.roundRect(x, y, w, h, Math.min(r, w / 2, h / 2));
 }
 
 function pnlStr(val: number, sym: string): string {
-  const isUSD = /USD|EUR|GBP|BTC|ETH|USDT/i.test(sym);
-  const sign  = val >= 0 ? '+' : '';
+  const isUSD = /USD|EUR|GBP|BTC|ETH|USDT|CRYPTO/i.test(sym);
+  const sign = val >= 0 ? '+' : '';
   if (isUSD) return `${sign}$${val.toFixed(2)}`;
-  const abs = Math.abs(val);
-  const s   = val >= 0 ? '+' : '-';
-  if (abs >= 100000) return `${s}₹${(abs/100000).toFixed(1)}L`;
-  if (abs >= 1000)   return `${s}₹${(abs/1000).toFixed(1)}K`;
+  const abs = Math.abs(val), s = val >= 0 ? '+' : '-';
+  if (abs >= 100000) return `${s}₹${(abs / 100000).toFixed(1)}L`;
+  if (abs >= 1000) return `${s}₹${(abs / 1000).toFixed(1)}K`;
   return `${s}₹${Math.round(abs)}`;
 }
 
-export function PositionCanvas({ series, containerRef, positions,
-  onDragStart, onDragMove, onDragEnd, onClose, onContextMenu,
-  onPartialClose, onReversePosition, onMoveBreakeven }: Props) {
+export function PositionCanvas({
+  series, containerRef, positions,
+  onDragStart, onDragMove, onDragEnd,
+  onClose, onPartialClose, onReversePosition, onMoveBreakeven, onContextMenu,
+}: Props) {
+  const cvs = useRef<HTMLCanvasElement>(null);
+  const raf = useRef(0);
 
-  const cvs   = useRef<HTMLCanvasElement>(null);
-  const raf   = useRef(0);
-  const hits  = useRef<HR[]>([]);
-  const hov   = useRef<HR | null>(null);
-  const posR  = useRef(positions);
-  posR.current = positions;
+  // ── All mutable state in refs — never stale ──────────────────────────────
+  const seriesRef   = useRef<ISeriesApi<any> | null>(null);
+  const posRef      = useRef<PositionVisual[]>([]);
+  const hitsRef     = useRef<HR[]>([]);
+  const hovRef      = useRef<HR | null>(null);
+  const dragRef     = useRef<{ pid: string; type: 'sl'|'tp'; livePrice: number } | null>(null);
 
-  // ── DRAG STATE — owned here, never in parent ──────────────────────────────
-  const drag = useRef<{
-    pid: string; type: 'sl' | 'tp';
-    startPrice: number; livePrice: number; liveY: number;
-  } | null>(null);
+  // Callback refs — always current, never cause effect re-runs
+  const cbDragEnd   = useRef(onDragEnd);
+  const cbDragMove  = useRef(onDragMove);
+  const cbDragStart = useRef(onDragStart);
+  const cbClose     = useRef(onClose);
+  const cbCtx       = useRef(onContextMenu);
 
-  const p2y = useCallback((price: number) =>
-    series ? (series.priceToCoordinate(price) ?? null) : null, [series]);
+  // Keep all refs current every render
+  seriesRef.current = series;
+  posRef.current    = positions;
+  cbDragEnd.current   = onDragEnd;
+  cbDragMove.current  = onDragMove;
+  cbDragStart.current = onDragStart;
+  cbClose.current     = onClose;
+  cbCtx.current       = onContextMenu;
 
-  const y2p = useCallback((y: number) =>
-    series ? (series.coordinateToPrice(y) ?? null) : null, [series]);
+  // ── Coordinate helpers — always read from ref ────────────────────────────
+  const p2y = (price: number): number | null => {
+    const s = seriesRef.current;
+    if (!s) return null;
+    return s.priceToCoordinate(price) ?? null;
+  };
+  const y2p = (y: number): number | null => {
+    const s = seriesRef.current;
+    if (!s) return null;
+    return s.coordinateToPrice(y) ?? null;
+  };
 
-  // ─── RENDER ────────────────────────────────────────────────────────────────
-  const render = useCallback(() => {
-    const el  = cvs.current;
-    const ctx = el?.getContext('2d');
-    if (!el || !ctx || !series) return;
-
-    const dpr = window.devicePixelRatio || 1;
-    const W   = el.width  / dpr;
-    const H   = el.height / dpr;
-    ctx.clearRect(0, 0, W, H);
-
-    const newHits: HR[] = [];
-    const RE = W - 72;   // right edge (before price scale)
-
-    posR.current.forEach(({ position: pos, slPrice: slP, tpPrice: tpP, ltp }) => {
-      const ey = p2y(pos.avgPrice);
-      if (ey == null) return;
-
-      const isLong    = pos.side === 'LONG' || pos.buyQty > pos.sellQty;
-      const entryCol  = isLong ? LONG_COL : SHORT_COL;
-
-      // Drag overrides — read directly from drag ref
-      const sl = (drag.current?.pid === pos.id && drag.current.type === 'sl')
-        ? drag.current.livePrice : (slP ?? 0);
-      const tp = (drag.current?.pid === pos.id && drag.current.type === 'tp')
-        ? drag.current.livePrice : (tpP ?? 0);
-
-      const hasSL = sl > 0;
-      const hasTP = tp > 0;
-
-      // ── Zone fills ─────────────────────────────────────────────────────────
-      if (hasSL) {
-        const sy = p2y(sl);
-        if (sy != null) {
-          ctx.fillStyle = SL_ZONE;
-          ctx.fillRect(0, Math.min(ey, sy), RE, Math.abs(ey - sy));
-        }
-      }
-      if (hasTP) {
-        const ty = p2y(tp);
-        if (ty != null) {
-          ctx.fillStyle = TP_ZONE;
-          ctx.fillRect(0, Math.min(ey, ty), RE, Math.abs(ey - ty));
-        }
-      }
-
-      // ── SL line ────────────────────────────────────────────────────────────
-      if (hasSL) {
-        const sy  = p2y(sl)!;
-        const act = drag.current?.pid === pos.id && drag.current.type === 'sl';
-        const hovered = hov.current?.pid === pos.id && hov.current.role === 'sl_drag';
-        drawDragLine(ctx, sy, RE, SL_COL, act || hovered);
-        drawLineLabel(ctx, sy, RE, `SL  ${formatPrice(sl)}`, SL_COL, pos.id, 'sl_drag', newHits, act || hovered);
-        newHits.push({ pid: pos.id, role: 'sl_drag', y: sy });
-      }
-
-      // ── TP line ────────────────────────────────────────────────────────────
-      if (hasTP) {
-        const ty  = p2y(tp)!;
-        const act = drag.current?.pid === pos.id && drag.current.type === 'tp';
-        const hovered = hov.current?.pid === pos.id && hov.current.role === 'tp_drag';
-        drawDragLine(ctx, ty, RE, TP_COL, act || hovered);
-        drawLineLabel(ctx, ty, RE, `TP  ${formatPrice(tp)}`, TP_COL, pos.id, 'tp_drag', newHits, act || hovered);
-        newHits.push({ pid: pos.id, role: 'tp_drag', y: ty });
-      }
-
-      // ── Entry line ─────────────────────────────────────────────────────────
-      ctx.save();
-      ctx.strokeStyle = entryCol;
-      ctx.lineWidth   = 1.5;
-      ctx.setLineDash([]);
-      ctx.beginPath();
-      ctx.moveTo(0, ey); ctx.lineTo(RE, ey);
-      ctx.stroke();
-      ctx.restore();
-
-      // ── Compact entry label — TradeLocker style ─────────────────────────────
-      const pnlPer = isLong ? ltp - pos.avgPrice : pos.avgPrice - ltp;
-      const pnl    = pnlPer * pos.qty;
-      const pnlC   = pnl >= 0 ? TP_COL : SL_COL;
-      const pnlTxt = pnlStr(pnl, pos.symbol);
-      const sideTxt = `${isLong ? 'LONG' : 'SHORT'} ${pos.qty}`;
-      drawEntryBadge(ctx, ey, RE, sideTxt, pnlTxt, entryCol, pnlC, pos.id,
-        newHits, !hasSL, !hasTP);
-
-      // ── Live drag tooltip ──────────────────────────────────────────────────
-      if (drag.current?.pid === pos.id) {
-        const dp  = drag.current.livePrice;
-        const dy  = p2y(dp);
-        const isSL = drag.current.type === 'sl';
-        if (dy != null) {
-          const dist = Math.abs(pos.avgPrice - dp);
-          const val  = dist * pos.qty;
-          const txt  = isSL
-            ? `SL ${formatPrice(dp)}  Risk ${pnlStr(-val, pos.symbol)}  ${dist.toFixed(2)} pts`
-            : `TP ${formatPrice(dp)}  Reward ${pnlStr(val, pos.symbol)}  ${dist.toFixed(2)} pts`;
-          ctx.save();
-          rrect(ctx, 46, dy - 22, 380, 20, 3);
-          ctx.fillStyle = isSL ? 'rgba(239,68,68,0.93)' : 'rgba(34,197,94,0.93)';
-          ctx.fill();
-          ctx.fillStyle = '#fff';
-          ctx.font = 'bold 10px "Inter",monospace';
-          ctx.textBaseline = 'middle';
-          ctx.textAlign    = 'left';
-          ctx.fillText(txt, 56, dy - 12);
-          ctx.restore();
-        }
-      }
-    });
-
-    hits.current = newHits;
-  }, [series, p2y]);
-
-  // ── Draw dashed line + drag handle circle ──────────────────────────────────
-  function drawDragLine(ctx: CanvasRenderingContext2D, y: number, RE: number,
-    col: string, active: boolean) {
-    ctx.save();
-    ctx.strokeStyle = col;
-    ctx.lineWidth   = active ? 2 : 1.5;
-    ctx.setLineDash([6, 4]);
-    ctx.beginPath(); ctx.moveTo(42, y); ctx.lineTo(RE, y); ctx.stroke();
-    ctx.setLineDash([]);
-    // Handle circle
-    const r = active ? 9 : 7;
-    ctx.fillStyle = col;
-    ctx.beginPath(); ctx.arc(20, y, r, 0, Math.PI * 2); ctx.fill();
-    // Grip lines
-    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-    ctx.lineWidth = 1;
-    [-2.5, 0, 2.5].forEach(o => {
-      ctx.beginPath(); ctx.moveTo(14, y + o); ctx.lineTo(26, y + o); ctx.stroke();
-    });
-    ctx.restore();
-  }
-
-  // ── Draw compact SL/TP label ───────────────────────────────────────────────
-  function drawLineLabel(ctx: CanvasRenderingContext2D, y: number, RE: number,
-    txt: string, col: string, pid: string, role: HR['role'],
-    newHits: HR[], active: boolean) {
-    const H  = 22, PAD = 8, CW = 18;
-    ctx.save();
-    ctx.font = FONT_B;
-    const tw = ctx.measureText(txt).width;
-    const BW = tw + PAD * 2 + CW + 2;
-    const BX = RE - BW - 2;
-    const BY = y - H / 2;
-    rrect(ctx, BX, BY, BW, H, 3);
-    ctx.fillStyle = LABEL_BG; ctx.fill();
-    rrect(ctx, BX, BY, BW, H, 3);
-    ctx.strokeStyle = col; ctx.lineWidth = active ? 1.5 : 1; ctx.setLineDash([]); ctx.stroke();
-    ctx.fillStyle = col; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
-    ctx.fillText(txt, BX + PAD, y);
-    // ✕
-    const cx = BX + BW - CW + 1;
-    ctx.fillStyle = active ? '#e2e8f0' : TEXT_DIM;
-    ctx.font = '10px monospace'; ctx.textAlign = 'center';
-    ctx.fillText('✕', cx + 7, y);
-    ctx.restore();
-    newHits.push({ pid, role, y, x1: cx, x2: cx + 14 });
-  }
-
-  // ── Draw compact entry badge — TradeLocker style ───────────────────────────
-  function drawEntryBadge(ctx: CanvasRenderingContext2D, y: number, RE: number,
-    sideTxt: string, pnlTxt: string, entryCol: string, pnlCol: string,
-    pid: string, newHits: HR[], needSL: boolean, needTP: boolean) {
-    const H = 22, PAD = 8;
-    ctx.save();
-    ctx.font = FONT_B;
-    const sw = ctx.measureText(sideTxt).width;
-    const pw = ctx.measureText(pnlTxt).width;
-    // badge segments: [side] [pnl] [+SL?] [+TP?] [×]
-    const slW  = needSL ? 28 : 0;
-    const tpW  = needTP ? 28 : 0;
-    const CW   = 20;
-    const BW   = PAD + sw + PAD + pw + PAD + slW + tpW + CW;
-    const BX   = RE - BW - 4;
-    const BY   = y - H / 2;
-
-    // Background
-    rrect(ctx, BX, BY, BW, H, 3);
-    ctx.fillStyle = LABEL_BG; ctx.fill();
-    rrect(ctx, BX, BY, BW, H, 3);
-    ctx.strokeStyle = entryCol; ctx.lineWidth = 1; ctx.setLineDash([]); ctx.stroke();
-
-    // Side text — colored badge segment
-    ctx.fillStyle = entryCol;
-    rrect(ctx, BX, BY, sw + PAD * 2, H, 3);
-    ctx.fill();
-    ctx.fillStyle = '#fff';
-    ctx.font = FONT_B; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
-    ctx.fillText(sideTxt, BX + PAD, y);
-
-    // P&L text
-    ctx.fillStyle = pnlCol;
-    ctx.font = FONT_B; ctx.textAlign = 'left';
-    ctx.fillText(pnlTxt, BX + sw + PAD * 2 + PAD, y);
-
-    // +SL button
-    let bx = BX + sw + PAD * 2 + pw + PAD * 2;
-    if (needSL) {
-      rrect(ctx, bx, BY + 3, 26, H - 6, 2);
-      ctx.fillStyle = 'rgba(239,68,68,0.18)'; ctx.fill();
-      ctx.fillStyle = SL_COL; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
-      ctx.fillText('+SL', bx + 13, y);
-      newHits.push({ pid, role: 'add_sl', y, x1: bx, x2: bx + 26 });
-      bx += 30;
-    }
-    if (needTP) {
-      rrect(ctx, bx, BY + 3, 26, H - 6, 2);
-      ctx.fillStyle = 'rgba(34,197,94,0.18)'; ctx.fill();
-      ctx.fillStyle = TP_COL; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
-      ctx.fillText('+TP', bx + 13, y);
-      newHits.push({ pid, role: 'add_tp', y, x1: bx, x2: bx + 26 });
-      bx += 30;
-    }
-
-    // ✕ close button
-    const cx = BX + BW - CW + 2;
-    ctx.fillStyle = TEXT_DIM; ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
-    ctx.fillText('✕', cx + 7, y);
-    newHits.push({ pid, role: 'close_pos', y, x1: cx, x2: cx + 14 });
-
-    ctx.restore();
-    newHits.push({ pid, role: 'entry', y });
-  }
-
-  // ─── RAF ──────────────────────────────────────────────────────────────────
+  // ── RENDER LOOP ──────────────────────────────────────────────────────────
   useEffect(() => {
+    const el = cvs.current;
+    if (!el) return;
+
+    const render = () => {
+      const ctx = el.getContext('2d');
+      if (!ctx || !seriesRef.current) return;
+
+      const dpr = window.devicePixelRatio || 1;
+      const W = el.width / dpr, H = el.height / dpr;
+      ctx.clearRect(0, 0, W, H);
+
+      const newHits: HR[] = [];
+      const RE = W - 72; // right edge before price scale
+
+      posRef.current.forEach(({ position: pos, slPrice: slP, tpPrice: tpP, ltp }) => {
+        const ey = p2y(pos.avgPrice);
+        if (ey == null) return;
+
+        const isLong = pos.side === 'LONG' || pos.buyQty > pos.sellQty;
+        const entryCol = isLong ? LONG_COL : SHORT_COL;
+
+        // Live drag overrides
+        const d = dragRef.current;
+        const sl = (d?.pid === pos.id && d.type === 'sl') ? d.livePrice : (slP ?? 0);
+        const tp = (d?.pid === pos.id && d.type === 'tp') ? d.livePrice : (tpP ?? 0);
+        const hasSL = sl > 0, hasTP = tp > 0;
+
+        // Zone fills
+        if (hasSL) { const sy = p2y(sl); if (sy != null) { ctx.fillStyle = 'rgba(239,68,68,0.07)'; ctx.fillRect(0, Math.min(ey, sy), RE, Math.abs(ey - sy)); } }
+        if (hasTP) { const ty = p2y(tp); if (ty != null) { ctx.fillStyle = 'rgba(34,197,94,0.07)'; ctx.fillRect(0, Math.min(ey, ty), RE, Math.abs(ey - ty)); } }
+
+        // SL line
+        if (hasSL) {
+          const sy = p2y(sl)!;
+          const act = d?.pid === pos.id && d.type === 'sl';
+          const hov = hovRef.current?.pid === pos.id && hovRef.current.role === 'sl_drag';
+          drawHandle(ctx, sy, RE, SL_COL, act || hov);
+          drawTag(ctx, sy, RE, `SL  ${formatPrice(sl)}`, SL_COL, pos.id, 'sl_drag', newHits, act || hov);
+          newHits.push({ pid: pos.id, role: 'sl_drag', y: sy });
+        }
+
+        // TP line
+        if (hasTP) {
+          const ty = p2y(tp)!;
+          const act = d?.pid === pos.id && d.type === 'tp';
+          const hov = hovRef.current?.pid === pos.id && hovRef.current.role === 'tp_drag';
+          drawHandle(ctx, ty, RE, TP_COL, act || hov);
+          drawTag(ctx, ty, RE, `TP  ${formatPrice(tp)}`, TP_COL, pos.id, 'tp_drag', newHits, act || hov);
+          newHits.push({ pid: pos.id, role: 'tp_drag', y: ty });
+        }
+
+        // Entry line
+        ctx.save();
+        ctx.strokeStyle = entryCol; ctx.lineWidth = 1.5; ctx.setLineDash([]);
+        ctx.beginPath(); ctx.moveTo(0, ey); ctx.lineTo(RE, ey); ctx.stroke();
+        ctx.restore();
+
+        // Entry badge
+        const pnl = (isLong ? ltp - pos.avgPrice : pos.avgPrice - ltp) * pos.qty;
+        drawBadge(ctx, ey, RE, `${isLong ? 'LONG' : 'SHORT'} ${pos.qty}`,
+          pnlStr(pnl, pos.symbol), entryCol, pnl >= 0 ? TP_COL : SL_COL,
+          pos.id, newHits, !hasSL, !hasTP);
+
+        // Drag tooltip
+        if (d?.pid === pos.id) {
+          const dy = p2y(d.livePrice);
+          if (dy != null) {
+            const dist = Math.abs(pos.avgPrice - d.livePrice) * pos.qty;
+            const txt = d.type === 'sl'
+              ? `SL ${formatPrice(d.livePrice)}  Risk ${pnlStr(-dist, pos.symbol)}`
+              : `TP ${formatPrice(d.livePrice)}  Reward ${pnlStr(dist, pos.symbol)}`;
+            ctx.save();
+            rrect(ctx, 46, dy - 22, 340, 20, 3);
+            ctx.fillStyle = d.type === 'sl' ? 'rgba(239,68,68,0.93)' : 'rgba(34,197,94,0.93)';
+            ctx.fill();
+            ctx.fillStyle = '#fff'; ctx.font = 'bold 10px monospace';
+            ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+            ctx.fillText(txt, 56, dy - 12);
+            ctx.restore();
+          }
+        }
+      });
+
+      hitsRef.current = newHits;
+      el.style.pointerEvents = posRef.current.length > 0 ? 'auto' : 'none';
+    };
+
     let on = true;
     const loop = () => { if (!on) return; render(); raf.current = requestAnimationFrame(loop); };
     raf.current = requestAnimationFrame(loop);
     return () => { on = false; cancelAnimationFrame(raf.current); };
-  }, [render]);
+  }, []); // ← empty deps — render reads everything from refs, never stale
 
-  // ─── Resize ───────────────────────────────────────────────────────────────
+  // ── RESIZE ───────────────────────────────────────────────────────────────
   useEffect(() => {
     const el = cvs.current, ct = containerRef.current;
     if (!el || !ct) return;
     const resize = () => {
       const dpr = window.devicePixelRatio || 1;
-      const r   = ct.getBoundingClientRect();
+      const r = ct.getBoundingClientRect();
       const ctx = el.getContext('2d');
       if (ctx) ctx.setTransform(1, 0, 0, 1, 0, 0);
       el.width  = Math.round(r.width  * dpr);
@@ -354,69 +232,62 @@ export function PositionCanvas({ series, containerRef, positions,
     const ro = new ResizeObserver(resize);
     ro.observe(ct);
     return () => ro.disconnect();
-  }, [containerRef]);
+  }, []); // ← empty deps
 
-  // ─── Mouse ────────────────────────────────────────────────────────────────
+  // ── MOUSE EVENTS ─────────────────────────────────────────────────────────
   useEffect(() => {
     const el = cvs.current;
     if (!el) return;
 
     const find = (mx: number, my: number): HR | null => {
-      // 1. Button regions with exact x bounds (close, add_sl, add_tp)
-      for (const h of hits.current) {
-        if (Math.abs(my - h.y) > HIT_PX) continue;
+      // Priority 1: buttons with exact x bounds
+      for (const h of hitsRef.current) {
+        if (Math.abs(my - h.y) > HIT) continue;
         if (h.x1 != null && h.x2 != null && mx >= h.x1 - 4 && mx <= h.x2 + 4) return h;
       }
-      // 2. SL/TP drag — entire line width is a drag target
-      for (const h of hits.current) {
-        if (h.role !== 'sl_drag' && h.role !== 'tp_drag') continue;
-        if (Math.abs(my - h.y) <= HIT_PX) return h;
+      // Priority 2: SL/TP drag — full line width
+      for (const h of hitsRef.current) {
+        if ((h.role === 'sl_drag' || h.role === 'tp_drag') && Math.abs(my - h.y) <= HIT) return h;
       }
-      // 3. Entry
-      for (const h of hits.current) {
-        if (h.role === 'entry' && Math.abs(my - h.y) <= HIT_PX) return h;
+      // Priority 3: entry
+      for (const h of hitsRef.current) {
+        if (h.role === 'entry' && Math.abs(my - h.y) <= HIT) return h;
       }
       return null;
     };
 
-    // Canvas hover / cursor
     const onCanvasMove = (e: MouseEvent) => {
-      if (drag.current) return; // window handles it during drag
-      const r  = el.getBoundingClientRect();
-      const mx = e.clientX - r.left, my = e.clientY - r.top;
-      const h  = find(mx, my);
-      hov.current = h;
-      el.style.cursor = (h?.role === 'sl_drag' || h?.role === 'tp_drag')
-        ? 'ns-resize' : h ? 'pointer' : '';
+      if (dragRef.current) return;
+      const r = el.getBoundingClientRect();
+      const h = find(e.clientX - r.left, e.clientY - r.top);
+      hovRef.current = h;
+      el.style.cursor = (h?.role === 'sl_drag' || h?.role === 'tp_drag') ? 'ns-resize'
+        : h ? 'pointer' : '';
     };
 
-    // Window move — fires during drag even when mouse leaves canvas
     const onWindowMove = (e: MouseEvent) => {
-      if (!drag.current) return;
-      const r      = el.getBoundingClientRect();
-      const canvasY = e.clientY - r.top;
-      const p      = y2p(canvasY);
+      if (!dragRef.current) return;
+      const r = el.getBoundingClientRect();
+      const p = y2p(e.clientY - r.top);
       if (p != null) {
-        drag.current.liveY    = canvasY;
-        drag.current.livePrice = p;
-        onDragMove(p);
+        dragRef.current.livePrice = p;
+        cbDragMove.current(p);
       }
       document.body.style.cursor = 'ns-resize';
     };
 
     const onDown = (e: MouseEvent) => {
       if (e.button !== 0) return;
-      const r  = el.getBoundingClientRect();
+      const r = el.getBoundingClientRect();
       const mx = e.clientX - r.left, my = e.clientY - r.top;
-      const h  = find(mx, my);
+      const h = find(mx, my);
       if (!h) return;
       if (h.role === 'sl_drag' || h.role === 'tp_drag') {
-        e.preventDefault();
-        e.stopPropagation();
-        const type  = h.role === 'sl_drag' ? 'sl' : 'tp';
+        e.preventDefault(); e.stopPropagation();
+        const type = h.role === 'sl_drag' ? 'sl' : 'tp';
         const price = y2p(my) ?? 0;
-        drag.current = { pid: h.pid, type, startPrice: price, livePrice: price, liveY: my };
-        onDragStart(h.pid, type, price, e);
+        dragRef.current = { pid: h.pid, type, livePrice: price };
+        cbDragStart.current(h.pid, type, price, e);
         document.body.style.cursor = 'ns-resize';
         return;
       }
@@ -424,69 +295,136 @@ export function PositionCanvas({ series, containerRef, positions,
     };
 
     const onWindowUp = () => {
-      if (!drag.current) return;
-      const { pid, type, livePrice } = drag.current;
-      drag.current = null;
+      if (!dragRef.current) return;
+      const { pid, type, livePrice } = dragRef.current;
+      dragRef.current = null;
       document.body.style.cursor = '';
       el.style.cursor = '';
-      onDragEnd(pid, type, livePrice);
+      cbDragEnd.current(pid, type, livePrice);
     };
 
     const onClick = (e: MouseEvent) => {
-      if (drag.current) return;
-      const r  = el.getBoundingClientRect();
-      const mx = e.clientX - r.left, my = e.clientY - r.top;
-      const h  = find(mx, my);
+      if (dragRef.current) return;
+      const r = el.getBoundingClientRect();
+      const h = find(e.clientX - r.left, e.clientY - r.top);
       if (!h) return;
-      if (h.role === 'close_pos') { onClose(h.pid); return; }
+      if (h.role === 'close_pos') { cbClose.current(h.pid); return; }
       if (h.role === 'add_sl' || h.role === 'add_tp') {
-        const vis = posR.current.find(p => p.position.id === h.pid);
+        const vis = posRef.current.find(p => p.position.id === h.pid);
         if (!vis) return;
-        const entry  = vis.position.avgPrice;
+        const entry = vis.position.avgPrice;
         const isLong = vis.position.side === 'LONG' || vis.position.buyQty > vis.position.sellQty;
-        onDragEnd(h.pid,
+        cbDragEnd.current(h.pid,
           h.role === 'add_sl' ? 'sl' : 'tp',
-          h.role === 'add_sl'
-            ? (isLong ? entry * 0.98 : entry * 1.02)
-            : (isLong ? entry * 1.04 : entry * 0.96)
+          h.role === 'add_sl' ? (isLong ? entry * 0.98 : entry * 1.02)
+                              : (isLong ? entry * 1.04 : entry * 0.96)
         );
       }
     };
 
     const onCtx = (e: MouseEvent) => {
-      const r  = el.getBoundingClientRect();
-      const mx = e.clientX - r.left, my = e.clientY - r.top;
-      const h  = find(mx, my);
+      const r = el.getBoundingClientRect();
+      const h = find(e.clientX - r.left, e.clientY - r.top);
       if (!h) return;
       if (h.role === 'entry' || h.role === 'sl_drag' || h.role === 'tp_drag') {
         e.preventDefault();
-        const lt = h.role === 'sl_drag' ? 'sl' : h.role === 'tp_drag' ? 'tp' : 'entry';
-        onContextMenu(h.pid, lt, e.clientX, e.clientY);
+        cbCtx.current(h.pid,
+          h.role === 'sl_drag' ? 'sl' : h.role === 'tp_drag' ? 'tp' : 'entry',
+          e.clientX, e.clientY);
       }
     };
 
-    el.addEventListener('mousemove',   onCanvasMove);
-    el.addEventListener('mousedown',   onDown);
-    el.addEventListener('click',       onClick);
-    el.addEventListener('contextmenu', onCtx);
+    el.addEventListener('mousemove',    onCanvasMove);
+    el.addEventListener('mousedown',    onDown);
+    el.addEventListener('click',        onClick);
+    el.addEventListener('contextmenu',  onCtx);
     window.addEventListener('mousemove', onWindowMove);
     window.addEventListener('mouseup',   onWindowUp);
 
     return () => {
-      el.removeEventListener('mousemove',   onCanvasMove);
-      el.removeEventListener('mousedown',   onDown);
-      el.removeEventListener('click',       onClick);
-      el.removeEventListener('contextmenu', onCtx);
+      el.removeEventListener('mousemove',    onCanvasMove);
+      el.removeEventListener('mousedown',    onDown);
+      el.removeEventListener('click',        onClick);
+      el.removeEventListener('contextmenu',  onCtx);
       window.removeEventListener('mousemove', onWindowMove);
       window.removeEventListener('mouseup',   onWindowUp);
     };
-  }, [y2p, onDragStart, onDragMove, onDragEnd, onClose, onContextMenu]);
+  }, []); // ← empty deps — all callbacks read from refs, never stale
+
+  // ── DRAWING HELPERS ──────────────────────────────────────────────────────
+  function drawHandle(ctx: CanvasRenderingContext2D, y: number, RE: number, col: string, active: boolean) {
+    ctx.save();
+    ctx.strokeStyle = col; ctx.lineWidth = active ? 2 : 1.5; ctx.setLineDash([6, 4]);
+    ctx.beginPath(); ctx.moveTo(36, y); ctx.lineTo(RE, y); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = col;
+    ctx.beginPath(); ctx.arc(18, y, active ? 8 : 6, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 1;
+    [-2.5, 0, 2.5].forEach(o => { ctx.beginPath(); ctx.moveTo(12, y + o); ctx.lineTo(24, y + o); ctx.stroke(); });
+    ctx.restore();
+  }
+
+  function drawTag(ctx: CanvasRenderingContext2D, y: number, RE: number,
+    txt: string, col: string, pid: string, role: HR['role'], newHits: HR[], active: boolean) {
+    const H = 22, PAD = 8, CW = 18;
+    ctx.save();
+    ctx.font = FONT_B;
+    const tw = ctx.measureText(txt).width;
+    const BW = tw + PAD * 2 + CW + 2, BX = RE - BW - 2, BY = y - H / 2;
+    rrect(ctx, BX, BY, BW, H, 3); ctx.fillStyle = LABEL_BG; ctx.fill();
+    rrect(ctx, BX, BY, BW, H, 3); ctx.strokeStyle = col; ctx.lineWidth = active ? 1.5 : 1; ctx.setLineDash([]); ctx.stroke();
+    ctx.fillStyle = col; ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.fillText(txt, BX + PAD, y);
+    const cx = BX + BW - CW + 1;
+    ctx.fillStyle = active ? '#e2e8f0' : TEXT_DIM; ctx.font = '10px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('✕', cx + 7, y);
+    ctx.restore();
+    newHits.push({ pid, role, y, x1: cx, x2: cx + 14 });
+  }
+
+  function drawBadge(ctx: CanvasRenderingContext2D, y: number, RE: number,
+    side: string, pnl: string, sCol: string, pCol: string,
+    pid: string, newHits: HR[], needSL: boolean, needTP: boolean) {
+    const H = 22, PAD = 8, CW = 20;
+    ctx.save(); ctx.font = FONT_B;
+    const sw = ctx.measureText(side).width, pw = ctx.measureText(pnl).width;
+    const BW = PAD + sw + PAD + pw + PAD + (needSL ? 30 : 0) + (needTP ? 30 : 0) + CW;
+    const BX = RE - BW - 4, BY = y - H / 2;
+    rrect(ctx, BX, BY, BW, H, 3); ctx.fillStyle = LABEL_BG; ctx.fill();
+    rrect(ctx, BX, BY, BW, H, 3); ctx.strokeStyle = sCol; ctx.lineWidth = 1; ctx.setLineDash([]); ctx.stroke();
+    // Side badge
+    rrect(ctx, BX, BY, sw + PAD * 2, H, 3); ctx.fillStyle = sCol; ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+    ctx.fillText(side, BX + PAD, y);
+    // P&L
+    ctx.fillStyle = pCol; ctx.fillText(pnl, BX + sw + PAD * 2 + PAD, y);
+    // +SL / +TP
+    let bx = BX + sw + PAD * 2 + pw + PAD * 2;
+    if (needSL) {
+      rrect(ctx, bx, BY + 3, 26, H - 6, 2); ctx.fillStyle = 'rgba(239,68,68,0.18)'; ctx.fill();
+      ctx.fillStyle = SL_COL; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
+      ctx.fillText('+SL', bx + 13, y);
+      newHits.push({ pid, role: 'add_sl', y, x1: bx, x2: bx + 26 }); bx += 30;
+    }
+    if (needTP) {
+      rrect(ctx, bx, BY + 3, 26, H - 6, 2); ctx.fillStyle = 'rgba(34,197,94,0.18)'; ctx.fill();
+      ctx.fillStyle = TP_COL; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
+      ctx.fillText('+TP', bx + 13, y);
+      newHits.push({ pid, role: 'add_tp', y, x1: bx, x2: bx + 26 }); bx += 30;
+    }
+    // ✕
+    const cx = BX + BW - CW + 2;
+    ctx.fillStyle = TEXT_DIM; ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('✕', cx + 7, y);
+    newHits.push({ pid, role: 'close_pos', y, x1: cx, x2: cx + 14 });
+    ctx.restore();
+    newHits.push({ pid, role: 'entry', y });
+  }
 
   return (
     <canvas ref={cvs} style={{
       position: 'absolute', top: 0, left: 0,
       zIndex: 20,
-      pointerEvents: positions.length > 0 ? 'auto' : 'none',
+      pointerEvents: 'none', // toggled in RAF loop
     }} />
   );
 }
