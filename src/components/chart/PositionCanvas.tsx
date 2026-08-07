@@ -59,7 +59,7 @@ const LABEL_BG  = 'rgba(13,15,24,0.95)';
 const TEXT_DIM  = '#6b7280';
 const FONT      = '11px "Inter",ui-sans-serif,sans-serif';
 const FONT_B    = 'bold 11px "Inter",ui-sans-serif,sans-serif';
-const HIT_PX    = 12;   // hit tolerance pixels
+const HIT_PX = 16;   // hit tolerance pixels — generous so drag is easy to grab
 
 function rrect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   const cr = Math.min(r, w / 2, h / 2);
@@ -362,40 +362,46 @@ export function PositionCanvas({ series, containerRef, positions,
     if (!el) return;
 
     const find = (mx: number, my: number): HR | null => {
-      // Prioritise drag handles — they have no x1/x2
+      // 1. Button regions with exact x bounds (close, add_sl, add_tp)
       for (const h of hits.current) {
         if (Math.abs(my - h.y) > HIT_PX) continue;
-        if (h.role === 'sl_drag' || h.role === 'tp_drag') {
-          // Handle circle is at x=20 ± 12
-          if (mx <= 40) return h;
-        }
+        if (h.x1 != null && h.x2 != null && mx >= h.x1 - 4 && mx <= h.x2 + 4) return h;
       }
-      // Then check button regions (x1/x2 defined)
+      // 2. SL/TP drag — entire line width is a drag target
       for (const h of hits.current) {
-        if (Math.abs(my - h.y) > HIT_PX) continue;
-        if (h.x1 != null && h.x2 != null && mx >= h.x1 && mx <= h.x2) return h;
+        if (h.role !== 'sl_drag' && h.role !== 'tp_drag') continue;
+        if (Math.abs(my - h.y) <= HIT_PX) return h;
       }
-      // Finally any line region
+      // 3. Entry
       for (const h of hits.current) {
-        if (Math.abs(my - h.y) > HIT_PX) continue;
-        return h;
+        if (h.role === 'entry' && Math.abs(my - h.y) <= HIT_PX) return h;
       }
       return null;
     };
 
-    const onMove = (e: MouseEvent) => {
+    // Canvas hover / cursor
+    const onCanvasMove = (e: MouseEvent) => {
+      if (drag.current) return; // window handles it during drag
       const r  = el.getBoundingClientRect();
       const mx = e.clientX - r.left, my = e.clientY - r.top;
-      if (drag.current) {
-        const p = y2p(my);
-        if (p != null) { drag.current.liveY = my; drag.current.livePrice = p; onDragMove(p); }
-        el.style.cursor = 'ns-resize';
-        return;
-      }
-      const h = find(mx, my);
+      const h  = find(mx, my);
       hov.current = h;
-      el.style.cursor = (h?.role === 'sl_drag' || h?.role === 'tp_drag') ? 'ns-resize'
-                      : h ? 'pointer' : '';
+      el.style.cursor = (h?.role === 'sl_drag' || h?.role === 'tp_drag')
+        ? 'ns-resize' : h ? 'pointer' : '';
+    };
+
+    // Window move — fires during drag even when mouse leaves canvas
+    const onWindowMove = (e: MouseEvent) => {
+      if (!drag.current) return;
+      const r      = el.getBoundingClientRect();
+      const canvasY = e.clientY - r.top;
+      const p      = y2p(canvasY);
+      if (p != null) {
+        drag.current.liveY    = canvasY;
+        drag.current.livePrice = p;
+        onDragMove(p);
+      }
+      document.body.style.cursor = 'ns-resize';
     };
 
     const onDown = (e: MouseEvent) => {
@@ -405,21 +411,23 @@ export function PositionCanvas({ series, containerRef, positions,
       const h  = find(mx, my);
       if (!h) return;
       if (h.role === 'sl_drag' || h.role === 'tp_drag') {
-        e.preventDefault(); e.stopPropagation();
+        e.preventDefault();
+        e.stopPropagation();
         const type  = h.role === 'sl_drag' ? 'sl' : 'tp';
         const price = y2p(my) ?? 0;
         drag.current = { pid: h.pid, type, startPrice: price, livePrice: price, liveY: my };
         onDragStart(h.pid, type, price, e);
-        el.style.cursor = 'ns-resize';
+        document.body.style.cursor = 'ns-resize';
         return;
       }
       e.stopPropagation();
     };
 
-    const finish = () => {
+    const onWindowUp = () => {
       if (!drag.current) return;
       const { pid, type, livePrice } = drag.current;
       drag.current = null;
+      document.body.style.cursor = '';
       el.style.cursor = '';
       onDragEnd(pid, type, livePrice);
     };
@@ -436,10 +444,12 @@ export function PositionCanvas({ series, containerRef, positions,
         if (!vis) return;
         const entry  = vis.position.avgPrice;
         const isLong = vis.position.side === 'LONG' || vis.position.buyQty > vis.position.sellQty;
-        if (h.role === 'add_sl')
-          onDragEnd(h.pid, 'sl', isLong ? entry * 0.98 : entry * 1.02);
-        else
-          onDragEnd(h.pid, 'tp', isLong ? entry * 1.04 : entry * 0.96);
+        onDragEnd(h.pid,
+          h.role === 'add_sl' ? 'sl' : 'tp',
+          h.role === 'add_sl'
+            ? (isLong ? entry * 0.98 : entry * 1.02)
+            : (isLong ? entry * 1.04 : entry * 0.96)
+        );
       }
     };
 
@@ -455,19 +465,20 @@ export function PositionCanvas({ series, containerRef, positions,
       }
     };
 
-    el.addEventListener('mousemove',    onMove);
-    el.addEventListener('mousedown',    onDown);
-    el.addEventListener('mouseup',      finish);
-    el.addEventListener('click',        onClick);
-    el.addEventListener('contextmenu',  onCtx);
-    window.addEventListener('mouseup',  finish);
+    el.addEventListener('mousemove',   onCanvasMove);
+    el.addEventListener('mousedown',   onDown);
+    el.addEventListener('click',       onClick);
+    el.addEventListener('contextmenu', onCtx);
+    window.addEventListener('mousemove', onWindowMove);
+    window.addEventListener('mouseup',   onWindowUp);
+
     return () => {
-      el.removeEventListener('mousemove',   onMove);
+      el.removeEventListener('mousemove',   onCanvasMove);
       el.removeEventListener('mousedown',   onDown);
-      el.removeEventListener('mouseup',     finish);
       el.removeEventListener('click',       onClick);
       el.removeEventListener('contextmenu', onCtx);
-      window.removeEventListener('mouseup', finish);
+      window.removeEventListener('mousemove', onWindowMove);
+      window.removeEventListener('mouseup',   onWindowUp);
     };
   }, [y2p, onDragStart, onDragMove, onDragEnd, onClose, onContextMenu]);
 
