@@ -136,7 +136,7 @@ export function PositionCanvas({
 
       posRef.current.forEach(({ position: pos, slPrice: slP, tpPrice: tpP, ltp }) => {
         const ey = p2y(pos.avgPrice);
-        if (ey == null) return;
+        if (ey == null || ey < -50 || ey > H + 50) return; // entry outside view
 
         const isLong = pos.side === 'LONG' || pos.buyQty > pos.sellQty;
         const entryCol = isLong ? LONG_COL : SHORT_COL;
@@ -151,24 +151,30 @@ export function PositionCanvas({
         if (hasSL) { const sy = p2y(sl); if (sy != null) { ctx.fillStyle = 'rgba(239,68,68,0.07)'; ctx.fillRect(0, Math.min(ey, sy), RE, Math.abs(ey - sy)); } }
         if (hasTP) { const ty = p2y(tp); if (ty != null) { ctx.fillStyle = 'rgba(34,197,94,0.07)'; ctx.fillRect(0, Math.min(ey, ty), RE, Math.abs(ey - ty)); } }
 
-        // SL line
+        // SL line — clamp to canvas bounds so it's always grabbable
         if (hasSL) {
-          const sy = p2y(sl)!;
-          const act = d?.pid === pos.id && d.type === 'sl';
-          const hov = hovRef.current?.pid === pos.id && hovRef.current.role === 'sl_drag';
-          drawHandle(ctx, sy, RE, SL_COL, act || hov);
-          drawTag(ctx, sy, RE, `SL  ${formatPrice(sl)}`, SL_COL, pos.id, 'sl_drag', newHits, act || hov);
-          newHits.push({ pid: pos.id, role: 'sl_drag', y: sy });
+          const syRaw = p2y(sl);
+          if (syRaw != null) {
+            const sy = Math.max(4, Math.min(H - 4, syRaw));
+            const act = d?.pid === pos.id && d.type === 'sl';
+            const hov = hovRef.current?.pid === pos.id && hovRef.current.role === 'sl_drag';
+            drawHandle(ctx, sy, RE, SL_COL, act || hov);
+            drawTag(ctx, sy, RE, `SL  ${formatPrice(sl)}`, SL_COL, pos.id, 'sl_drag', newHits, act || hov);
+            newHits.push({ pid: pos.id, role: 'sl_drag', y: sy });
+          }
         }
 
-        // TP line
+        // TP line — clamp to canvas bounds
         if (hasTP) {
-          const ty = p2y(tp)!;
-          const act = d?.pid === pos.id && d.type === 'tp';
-          const hov = hovRef.current?.pid === pos.id && hovRef.current.role === 'tp_drag';
-          drawHandle(ctx, ty, RE, TP_COL, act || hov);
-          drawTag(ctx, ty, RE, `TP  ${formatPrice(tp)}`, TP_COL, pos.id, 'tp_drag', newHits, act || hov);
-          newHits.push({ pid: pos.id, role: 'tp_drag', y: ty });
+          const tyRaw = p2y(tp);
+          if (tyRaw != null) {
+            const ty = Math.max(4, Math.min(H - 4, tyRaw));
+            const act = d?.pid === pos.id && d.type === 'tp';
+            const hov = hovRef.current?.pid === pos.id && hovRef.current.role === 'tp_drag';
+            drawHandle(ctx, ty, RE, TP_COL, act || hov);
+            drawTag(ctx, ty, RE, `TP  ${formatPrice(tp)}`, TP_COL, pos.id, 'tp_drag', newHits, act || hov);
+            newHits.push({ pid: pos.id, role: 'tp_drag', y: ty });
+          }
         }
 
         // Entry line
@@ -322,11 +328,30 @@ export function PositionCanvas({
         if (!vis) return;
         const entry = vis.position.avgPrice;
         const isLong = vis.position.side === 'LONG' || vis.position.buyQty > vis.position.sellQty;
-        cbDragEnd.current(h.pid,
-          h.role === 'add_sl' ? 'sl' : 'tp',
-          h.role === 'add_sl' ? (isLong ? entry * 0.98 : entry * 1.02)
-                              : (isLong ? entry * 1.04 : entry * 0.96)
-        );
+        // Place within visible chart area — 30% of visible range from entry
+        const s = seriesRef.current;
+        let defaultPrice: number;
+        if (s) {
+          // Use coordinateToPrice to find a price 60px below/above entry line
+          const entryY = s.priceToCoordinate(entry);
+          if (entryY != null) {
+            const offset = h.role === 'add_sl'
+              ? (isLong ? entryY + 60 : entryY - 60)   // SL: below for long, above for short
+              : (isLong ? entryY - 60 : entryY + 60);  // TP: above for long, below for short
+            defaultPrice = s.coordinateToPrice(offset) ?? (isLong
+              ? (h.role === 'add_sl' ? entry * 0.98 : entry * 1.02)
+              : (h.role === 'add_sl' ? entry * 1.02 : entry * 0.98));
+          } else {
+            defaultPrice = isLong
+              ? (h.role === 'add_sl' ? entry * 0.98 : entry * 1.02)
+              : (h.role === 'add_sl' ? entry * 1.02 : entry * 0.98);
+          }
+        } else {
+          defaultPrice = isLong
+            ? (h.role === 'add_sl' ? entry * 0.98 : entry * 1.02)
+            : (h.role === 'add_sl' ? entry * 1.02 : entry * 0.98);
+        }
+        cbDragEnd.current(h.pid, h.role === 'add_sl' ? 'sl' : 'tp', defaultPrice);
       }
     };
 
