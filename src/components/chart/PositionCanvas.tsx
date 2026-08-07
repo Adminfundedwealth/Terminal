@@ -1,18 +1,18 @@
 /**
- * POSITION CANVAS
- * 
- * High-performance canvas overlay for position visualization.
- * Renders at 60 FPS using requestAnimationFrame.
- * Handles all position-related drawing: lines, labels, zones, drag handles.
- * 
- * Architecture:
- * - Single canvas element overlaid on top of lightweight-charts
- * - Coordinate conversion via chart API
- * - Mouse events handled directly for drag/drop
- * - No React re-renders during mouse movement (pure canvas)
+ * POSITION CANVAS — TradeLocker-style interactive overlay
+ *
+ * Key behaviors:
+ *  - Entry line always visible with live P&L label
+ *  - SL line visible when set — red dashed, draggable handle on LEFT
+ *  - TP line visible when set — green dashed, draggable handle on LEFT
+ *  - Ghost SL/TP buttons on entry label when SL/TP not set (click to place)
+ *  - Hover over handle → ns-resize cursor
+ *  - Drag handle → live line moves with mouse → release → API update
+ *  - Close (✕) button on every label
+ *  - 60 FPS RAF loop — zero React state during drag
  */
 
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import type { IChartApi, ISeriesApi } from 'lightweight-charts';
 import type { Position } from '@/types';
 import { formatPrice } from '@/utils/helpers';
@@ -43,608 +43,507 @@ interface PositionCanvasProps {
 
 interface HitRegion {
   positionId: string;
-  type: 'entry' | 'sl' | 'tp' | 'close_entry' | 'close_sl' | 'close_tp';
+  type: 'entry' | 'sl' | 'tp' | 'close_entry' | 'close_sl' | 'close_tp' | 'add_sl' | 'add_tp';
   y: number;
+  /** x range for button hit testing */
+  x1?: number;
+  x2?: number;
   dragCursor?: boolean;
 }
 
-// Color palette
-const COLORS = {
-  entryBlue: '#2962ff',
-  entryBlueDim: 'rgba(41, 98, 255, 0.15)',
-  slRed: '#dc2626',
-  slRedDim: 'rgba(220, 38, 38, 0.15)',
-  tpGreen: '#16a34a',
-  tpGreenDim: 'rgba(22, 163, 74, 0.15)',
-  profitZone: 'rgba(22, 163, 74, 0.08)',
-  lossZone: 'rgba(220, 38, 38, 0.08)',
-  labelBg: 'rgba(10, 12, 20, 0.92)',
-  textWhite: '#e2e8f0',
+const C = {
+  entry: '#2962ff',
+  long: '#2962ff',
+  short: '#f7525f',
+  sl: '#ef4444',
+  slZone: 'rgba(239,68,68,0.07)',
+  tp: '#22c55e',
+  tpZone: 'rgba(34,197,94,0.07)',
+  labelBg: 'rgba(8,10,18,0.94)',
+  labelBgHover: 'rgba(14,17,28,0.98)',
+  textPrimary: '#e2e8f0',
   textMuted: '#6b7280',
-  longGreen: '#16a34a',
-  shortRed: '#dc2626',
-};
+  profit: '#22c55e',
+  loss: '#ef4444',
+  closeBtnIdle: '#6b7280',
+  closeBtnHover: '#e2e8f0',
+  addBtnBg: 'rgba(255,255,255,0.08)',
+  addBtnBgHover: 'rgba(255,255,255,0.16)',
+  dragTooltipSL: 'rgba(239,68,68,0.92)',
+  dragTooltipTP: 'rgba(34,197,94,0.92)',
+} as const;
 
-function roundRect(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  r: number
-) {
+const FONT_BOLD = 'bold 11px "Inter",ui-sans-serif,monospace';
+const FONT_REG  = '10px "Inter",ui-sans-serif,monospace';
+const HIT = 10;
+
+function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  const cr = Math.min(r, w / 2, h / 2);
   ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + w - r, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-  ctx.lineTo(x + w, y + h - r);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  ctx.lineTo(x + r, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.moveTo(x + cr, y);
+  ctx.lineTo(x + w - cr, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + cr);
+  ctx.lineTo(x + w, y + h - cr);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - cr, y + h);
+  ctx.lineTo(x + cr, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - cr);
+  ctx.lineTo(x, y + cr);
+  ctx.quadraticCurveTo(x, y, x + cr, y);
   ctx.closePath();
 }
 
+function fmtMoney(val: number): string {
+  const s = val >= 0 ? '+' : '-';
+  const a = Math.abs(val);
+  if (a >= 10000000) return `${s}₹${(a/10000000).toFixed(1)}Cr`;
+  if (a >= 100000)   return `${s}₹${(a/100000).toFixed(1)}L`;
+  if (a >= 1000)     return `${s}₹${(a/1000).toFixed(1)}K`;
+  return `${s}₹${Math.round(a)}`;
+}
+
+function fmtUSD(val: number): string {
+  const s = val >= 0 ? '+' : '-';
+  const a = Math.abs(val);
+  if (a >= 1000000) return `${s}$${(a/1000000).toFixed(2)}M`;
+  if (a >= 1000)    return `${s}$${(a/1000).toFixed(2)}K`;
+  return `${s}$${a.toFixed(2)}`;
+}
+
+function fmtPnl(val: number, symbol: string): string {
+  // Use USD formatting for crypto/forex symbols that contain USD
+  const useUSD = /USD|EUR|GBP|JPY|BTC|ETH/i.test(symbol);
+  return useUSD ? fmtUSD(val) : fmtMoney(val);
+}
+
+
 export function PositionCanvas({
-  chart,
-  series,
-  containerRef,
-  positions,
-  onDragStart,
-  onDragMove,
-  onDragEnd,
-  onClose,
-  onPartialClose,
-  onReversePosition,
-  onMoveBreakeven,
-  onContextMenu,
+  chart, series, containerRef, positions,
+  onDragStart, onDragMove, onDragEnd,
+  onClose, onPartialClose, onReversePosition, onMoveBreakeven, onContextMenu,
 }: PositionCanvasProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const rafRef = useRef<number>(0);
-  const hitRegionsRef = useRef<HitRegion[]>([]);
-  const hoveredRef = useRef<HitRegion | null>(null);
-  const draggingRef = useRef<{
+  const canvasRef   = useRef<HTMLCanvasElement>(null);
+  const rafRef      = useRef<number>(0);
+  const hitRef      = useRef<HitRegion[]>([]);
+  const hoveredRef  = useRef<HitRegion | null>(null);
+  const posRef      = useRef(positions);
+  posRef.current    = positions;
+
+  // Internal canvas-level drag (no React state)
+  const cdragRef = useRef<{
     positionId: string;
     type: 'sl' | 'tp';
     currentY: number;
     currentPrice: number;
   } | null>(null);
 
-  // Convert chart price to canvas Y coordinate
-  const priceToY = useCallback((price: number): number | null => {
+  const priceToY = useCallback((price: number) => {
     if (!series) return null;
-    const y = series.priceToCoordinate(price);
-    return y ?? null;
+    return series.priceToCoordinate(price) ?? null;
   }, [series]);
 
-  // Convert canvas Y coordinate to price
-  const yToPrice = useCallback((y: number): number | null => {
+  const yToPrice = useCallback((y: number) => {
     if (!series) return null;
-    const price = series.coordinateToPrice(y);
-    return price ?? null;
+    return series.coordinateToPrice(y) ?? null;
   }, [series]);
 
-  // Format currency
-  const formatRupee = (val: number) => {
-    const abs = Math.abs(val);
-    const sign = val >= 0 ? '+' : '-';
-    if (abs >= 100000) return `${sign}₹${(abs / 100000).toFixed(1)}L`;
-    if (abs >= 1000) return `${sign}₹${(abs / 1000).toFixed(1)}K`;
-    return `${sign}₹${Math.round(abs)}`;
-  };
 
-  // Main render function
+  // ─── Main render ────────────────────────────────────────────────────────────
   const render = useCallback(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
-    if (!canvas || !ctx || !chart || !series) return;
+    if (!canvas || !ctx || !series) return;
 
-    const W = canvas.width;
-    const H = canvas.height;
     const dpr = window.devicePixelRatio || 1;
-
+    const W = canvas.width / dpr;
+    const H = canvas.height / dpr;
     ctx.clearRect(0, 0, W, H);
 
-    const newHitRegions: HitRegion[] = [];
-    
-    // Right margin where labels/buttons are placed
-    const labelAreaWidth = 220;
-    const labelAreaX = W / dpr - labelAreaWidth - 70; // 70px for price scale
-    const rightEdge = W / dpr - 72;
+    const hits: HitRegion[] = [];
+    // Price scale is ~72px wide on right — chart line ends before it
+    const RE = W - 72;          // right edge of line
+    const LAX = RE - 240;       // label area start X
 
-    positions.forEach(({ position, slPrice, tpPrice, ltp, isDraggingSlThis, isDraggingTpThis }) => {
+    posRef.current.forEach(({ position, slPrice, tpPrice, ltp, isDraggingSlThis, isDraggingTpThis }) => {
       const entryY = priceToY(position.avgPrice);
       if (entryY == null) return;
 
       const isLong = position.side === 'LONG' || position.buyQty > position.sellQty;
+      const entryColor = isLong ? C.long : C.short;
 
-      // Calculate P/L
-      const pnlPerUnit = isLong ? ltp - position.avgPrice : position.avgPrice - ltp;
-      const pnl = pnlPerUnit * position.qty;
-      const pnlPercent = position.avgPrice > 0 ? (pnlPerUnit / position.avgPrice) * 100 : 0;
+      // Live drag override
+      const csl = (isDraggingSlThis && cdragRef.current) ? cdragRef.current.currentPrice : slPrice;
+      const ctp = (isDraggingTpThis && cdragRef.current) ? cdragRef.current.currentPrice : tpPrice;
 
-      // ═══════════════════════════════════════════════
-      // RISK/REWARD ZONES (fill between lines)
-      // ═══════════════════════════════════════════════
-      
-      if (slPrice && slPrice > 0) {
-        const slY = priceToY(slPrice);
-        if (slY != null) {
-          const minY = Math.min(entryY, slY);
-          const maxY = Math.max(entryY, slY);
-          ctx.fillStyle = COLORS.lossZone;
-          ctx.fillRect(0, minY, rightEdge, maxY - minY);
+      // ── Zone fills ──────────────────────────────────────────────────────────
+      if (csl && csl > 0) {
+        const sy = priceToY(csl);
+        if (sy != null) {
+          ctx.fillStyle = C.slZone;
+          ctx.fillRect(0, Math.min(entryY, sy), RE, Math.abs(entryY - sy));
+        }
+      }
+      if (ctp && ctp > 0) {
+        const ty = priceToY(ctp);
+        if (ty != null) {
+          ctx.fillStyle = C.tpZone;
+          ctx.fillRect(0, Math.min(entryY, ty), RE, Math.abs(entryY - ty));
         }
       }
 
-      if (tpPrice && tpPrice > 0) {
-        const tpY = priceToY(tpPrice);
-        if (tpY != null) {
-          const minY = Math.min(entryY, tpY);
-          const maxY = Math.max(entryY, tpY);
-          ctx.fillStyle = COLORS.profitZone;
-          ctx.fillRect(0, minY, rightEdge, maxY - minY);
+      // ── SL line + handle ────────────────────────────────────────────────────
+      if (csl && csl > 0) {
+        const sy = priceToY(csl);
+        if (sy != null) {
+          const hov = hoveredRef.current?.positionId === position.id &&
+                      (hoveredRef.current?.type === 'sl' || hoveredRef.current?.type === 'close_sl');
+          const active = isDraggingSlThis || hov;
+          // Dashed line
+          ctx.save();
+          ctx.strokeStyle = C.sl;
+          ctx.lineWidth = active ? 2 : 1.5;
+          ctx.setLineDash([7, 4]);
+          ctx.beginPath(); ctx.moveTo(0, sy); ctx.lineTo(RE, sy); ctx.stroke();
+          // Handle circle on left
+          ctx.setLineDash([]);
+          ctx.fillStyle = C.sl;
+          ctx.beginPath(); ctx.arc(22, sy, active ? 8 : 6, 0, Math.PI * 2); ctx.fill();
+          // Grip lines
+          ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 1;
+          [-2.5, 0, 2.5].forEach(o => {
+            ctx.beginPath(); ctx.moveTo(16, sy + o); ctx.lineTo(28, sy + o); ctx.stroke();
+          });
+          ctx.restore();
+          // Label
+          drawLabel(ctx, LAX, RE, sy, `SL  ${formatPrice(csl)}`,
+            (() => { const r = Math.abs(position.avgPrice - csl) * position.qty; const p = Math.abs(position.avgPrice - csl); return `${fmtPnl(-r, position.symbol)}  ${p.toFixed(2)} pts`; })(),
+            C.sl, C.textMuted, position.id, 'sl', 'close_sl', hits, active);
+          hits.push({ positionId: position.id, type: 'sl', y: sy, dragCursor: true });
         }
       }
 
-      // ═══════════════════════════════════════════════
-      // ENTRY LINE
-      // ═══════════════════════════════════════════════
-      const isHoveredEntry = hoveredRef.current?.positionId === position.id && 
-                              hoveredRef.current?.type === 'entry';
-      
+      // ── TP line + handle ────────────────────────────────────────────────────
+      if (ctp && ctp > 0) {
+        const ty = priceToY(ctp);
+        if (ty != null) {
+          const hov = hoveredRef.current?.positionId === position.id &&
+                      (hoveredRef.current?.type === 'tp' || hoveredRef.current?.type === 'close_tp');
+          const active = isDraggingTpThis || hov;
+          ctx.save();
+          ctx.strokeStyle = C.tp;
+          ctx.lineWidth = active ? 2 : 1.5;
+          ctx.setLineDash([7, 4]);
+          ctx.beginPath(); ctx.moveTo(0, ty); ctx.lineTo(RE, ty); ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.fillStyle = C.tp;
+          ctx.beginPath(); ctx.arc(22, ty, active ? 8 : 6, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 1;
+          [-2.5, 0, 2.5].forEach(o => {
+            ctx.beginPath(); ctx.moveTo(16, ty + o); ctx.lineTo(28, ty + o); ctx.stroke();
+          });
+          ctx.restore();
+          const riskPts = csl ? Math.abs(position.avgPrice - csl) : 0;
+          const rewPts  = Math.abs(ctp - position.avgPrice);
+          const rrStr   = riskPts > 0 ? `  RR 1:${(rewPts/riskPts).toFixed(1)}` : '';
+          const rew = rewPts * position.qty;
+          drawLabel(ctx, LAX, RE, ty, `TP  ${formatPrice(ctp)}`,
+            `${fmtPnl(rew, position.symbol)}  ${rewPts.toFixed(2)} pts${rrStr}`,
+            C.tp, C.textMuted, position.id, 'tp', 'close_tp', hits, active);
+          hits.push({ positionId: position.id, type: 'tp', y: ty, dragCursor: true });
+        }
+      }
+
+
+      // ── Entry line ──────────────────────────────────────────────────────────
+      const hovEntry = hoveredRef.current?.positionId === position.id &&
+                       hoveredRef.current?.type === 'entry';
       ctx.save();
-      ctx.strokeStyle = COLORS.entryBlue;
-      ctx.lineWidth = isHoveredEntry ? 2.5 : 1.5;
+      ctx.strokeStyle = entryColor;
+      ctx.lineWidth = hovEntry ? 2 : 1.5;
       ctx.setLineDash([]);
-      ctx.globalAlpha = 1;
-      ctx.beginPath();
-      ctx.moveTo(0, entryY);
-      ctx.lineTo(rightEdge, entryY);
-      ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, entryY); ctx.lineTo(RE, entryY); ctx.stroke();
       ctx.restore();
 
-      // Entry label (right side)
-      const sideLabel = isLong ? 'BUY' : 'SELL';
-      const sideColor = isLong ? COLORS.longGreen : COLORS.shortRed;
-      const pnlColor = pnl >= 0 ? COLORS.longGreen : COLORS.shortRed;
-      const pnlArrow = pnl >= 0 ? '▲' : '▼';
-      const entryText = `${sideLabel}  ${position.qty} Qty  ${formatPrice(position.avgPrice)}`;
-      const pnlText = `${formatRupee(pnl)} ${pnlArrow}`;
+      // ── Entry label with P&L + +SL / +TP buttons ───────────────────────────
+      const pnlPer  = isLong ? ltp - position.avgPrice : position.avgPrice - ltp;
+      const pnl     = pnlPer * position.qty;
+      const pnlColor = pnl >= 0 ? C.profit : C.loss;
+      const arrow    = pnl >= 0 ? '▲' : '▼';
+      const sideStr  = isLong ? 'BUY' : 'SELL';
+      const mainTxt  = `${sideStr}  ${position.qty}  @${formatPrice(position.avgPrice)}`;
+      const pnlTxt   = `${fmtPnl(pnl, position.symbol)} ${arrow}`;
+      const hasSL = !!(csl && csl > 0);
+      const hasTP = !!(ctp && ctp > 0);
+      drawEntryLabel(ctx, LAX, RE, entryY, mainTxt, pnlTxt,
+        entryColor, pnlColor, position.id, hits, hovEntry, hasSL, hasTP);
+      hits.push({ positionId: position.id, type: 'entry', y: entryY });
 
-      drawLineLabel(ctx, labelAreaX, entryY, entryText, pnlText, sideColor, pnlColor, 'entry', position.id, newHitRegions, rightEdge, isHoveredEntry);
-
-      // ═══════════════════════════════════════════════
-      // STOP LOSS LINE
-      // ═══════════════════════════════════════════════
-      const currentSlPrice = isDraggingSlThis && draggingRef.current
-        ? draggingRef.current.currentPrice
-        : slPrice;
-
-      if (currentSlPrice && currentSlPrice > 0) {
-        const slY = priceToY(currentSlPrice);
-        if (slY != null) {
-          const isHoveredSL = hoveredRef.current?.positionId === position.id && 
-                               hoveredRef.current?.type === 'sl';
-
+      // ── Live drag tooltip ───────────────────────────────────────────────────
+      if (cdragRef.current && cdragRef.current.positionId === position.id) {
+        const { type: dt, currentPrice: dp } = cdragRef.current;
+        const dy = priceToY(dp);
+        if (dy != null) {
+          const dist = Math.abs(position.avgPrice - dp);
+          const val  = dist * position.qty;
+          const pct  = position.avgPrice > 0 ? (dist / position.avgPrice) * 100 : 0;
+          const txt  = dt === 'sl'
+            ? `SL  ${formatPrice(dp)}   Risk ${fmtPnl(-val, position.symbol)}   ${pct.toFixed(2)}%   ${dist.toFixed(2)} pts`
+            : `TP  ${formatPrice(dp)}   Reward ${fmtPnl(val, position.symbol)}   ${pct.toFixed(2)}%   ${dist.toFixed(2)} pts`;
+          const bw = 440, bh = 26, bx = 50, by = dy - bh - 8;
           ctx.save();
-          ctx.strokeStyle = COLORS.slRed;
-          ctx.lineWidth = (isHoveredSL || isDraggingSlThis) ? 2.5 : 1.5;
-          ctx.setLineDash([8, 4]);
-          ctx.globalAlpha = 1;
-          ctx.beginPath();
-          ctx.moveTo(0, slY);
-          ctx.lineTo(rightEdge, slY);
-          ctx.stroke();
-
-          // Drag handle (circle on left side)
-          ctx.setLineDash([]);
-          ctx.fillStyle = COLORS.slRed;
-          ctx.beginPath();
-          ctx.arc(30, slY, isHoveredSL || isDraggingSlThis ? 7 : 5, 0, Math.PI * 2);
+          rr(ctx, bx, by, bw, bh, 4);
+          ctx.fillStyle = dt === 'sl' ? C.dragTooltipSL : C.dragTooltipTP;
           ctx.fill();
-
-          // Drag grip lines
-          ctx.strokeStyle = '#fff';
-          ctx.lineWidth = 1;
-          for (let i = -2; i <= 2; i += 2) {
-            ctx.beginPath();
-            ctx.moveTo(26, slY + i);
-            ctx.lineTo(34, slY + i);
-            ctx.stroke();
-          }
-          ctx.restore();
-
-          // SL label
-          const slRisk = Math.abs(position.avgPrice - currentSlPrice) * position.qty;
-          const slPoints = Math.abs(position.avgPrice - currentSlPrice);
-          const slRiskPct = position.avgPrice > 0 ? (slPoints / position.avgPrice) * 100 : 0;
-          const slText = `SL  ${formatPrice(currentSlPrice)}`;
-          const slSubText = `-₹${Math.round(slRisk)}  ${slPoints.toFixed(2)}pts  ${slRiskPct.toFixed(2)}%`;
-          
-          drawLineLabel(ctx, labelAreaX, slY, slText, slSubText, COLORS.slRed, '#9ca3af', 'sl', position.id, newHitRegions, rightEdge, isHoveredSL || !!isDraggingSlThis);
-          
-          // Add drag hit region
-          newHitRegions.push({ positionId: position.id, type: 'sl', y: slY, dragCursor: true });
-        }
-      }
-
-      // ═══════════════════════════════════════════════
-      // TAKE PROFIT LINE
-      // ═══════════════════════════════════════════════
-      const currentTpPrice = isDraggingTpThis && draggingRef.current
-        ? draggingRef.current.currentPrice
-        : tpPrice;
-
-      if (currentTpPrice && currentTpPrice > 0) {
-        const tpY = priceToY(currentTpPrice);
-        if (tpY != null) {
-          const isHoveredTP = hoveredRef.current?.positionId === position.id && 
-                               hoveredRef.current?.type === 'tp';
-
-          ctx.save();
-          ctx.strokeStyle = COLORS.tpGreen;
-          ctx.lineWidth = (isHoveredTP || isDraggingTpThis) ? 2.5 : 1.5;
-          ctx.setLineDash([8, 4]);
-          ctx.globalAlpha = 1;
-          ctx.beginPath();
-          ctx.moveTo(0, tpY);
-          ctx.lineTo(rightEdge, tpY);
-          ctx.stroke();
-
-          // Drag handle
-          ctx.setLineDash([]);
-          ctx.fillStyle = COLORS.tpGreen;
-          ctx.beginPath();
-          ctx.arc(30, tpY, isHoveredTP || isDraggingTpThis ? 7 : 5, 0, Math.PI * 2);
-          ctx.fill();
-
-          // Drag grip
-          ctx.strokeStyle = '#fff';
-          ctx.lineWidth = 1;
-          for (let i = -2; i <= 2; i += 2) {
-            ctx.beginPath();
-            ctx.moveTo(26, tpY + i);
-            ctx.lineTo(34, tpY + i);
-            ctx.stroke();
-          }
-          ctx.restore();
-
-          // TP label
-          const tpReward = Math.abs(currentTpPrice - position.avgPrice) * position.qty;
-          const tpPoints = Math.abs(currentTpPrice - position.avgPrice);
-          const tpRewardPct = position.avgPrice > 0 ? (tpPoints / position.avgPrice) * 100 : 0;
-          
-          // RR ratio
-          const riskPerUnit = slPrice ? Math.abs(position.avgPrice - slPrice) : 0;
-          const rewardPerUnit = Math.abs(currentTpPrice - position.avgPrice);
-          const rrText = riskPerUnit > 0 ? `  RR 1:${(rewardPerUnit / riskPerUnit).toFixed(2)}` : '';
-          
-          const tpText = `TP  ${formatPrice(currentTpPrice)}`;
-          const tpSubText = `+₹${Math.round(tpReward)}  ${tpPoints.toFixed(2)}pts  ${tpRewardPct.toFixed(2)}%${rrText}`;
-          
-          drawLineLabel(ctx, labelAreaX, tpY, tpText, tpSubText, COLORS.tpGreen, '#9ca3af', 'tp', position.id, newHitRegions, rightEdge, isHoveredTP || !!isDraggingTpThis);
-          
-          // Add drag hit region
-          newHitRegions.push({ positionId: position.id, type: 'tp', y: tpY, dragCursor: true });
-        }
-      }
-
-      // ═══════════════════════════════════════════════
-      // LIVE DRAGGING TOOLTIP
-      // ═══════════════════════════════════════════════
-      if (draggingRef.current && draggingRef.current.positionId === position.id) {
-        const { type, currentPrice } = draggingRef.current;
-        const dragY = priceToY(currentPrice);
-        
-        if (dragY != null) {
-          const isSL = type === 'sl';
-          const refPrice = position.avgPrice;
-          const risk = Math.abs(refPrice - currentPrice) * position.qty;
-          const points = Math.abs(refPrice - currentPrice);
-          const riskPct = refPrice > 0 ? (points / refPrice) * 100 : 0;
-          
-          // Live metrics box
-          const tooltipText = isSL
-            ? `SL  ${formatPrice(currentPrice)}   Risk ₹${Math.round(risk)}   ${riskPct.toFixed(2)}%   ${points.toFixed(2)} pts`
-            : `TP  ${formatPrice(currentPrice)}   Reward ₹${Math.round(risk)}   ${riskPct.toFixed(2)}%   ${points.toFixed(2)} pts`;
-
-          const boxW = 380;
-          const boxH = 28;
-          const boxX = 50;
-          const boxY = dragY - boxH - 6;
-
-          ctx.save();
-          ctx.fillStyle = isSL ? 'rgba(220, 38, 38, 0.95)' : 'rgba(22, 163, 74, 0.95)';
-          roundRect(ctx, boxX, boxY, boxW, boxH, 4);
-          ctx.fill();
-
           ctx.fillStyle = '#fff';
-          ctx.font = 'bold 12px "Inter", "SF Pro", monospace';
+          ctx.font = 'bold 11px "Inter",monospace';
           ctx.textBaseline = 'middle';
-          ctx.fillText(tooltipText, boxX + 10, boxY + boxH / 2);
+          ctx.textAlign = 'left';
+          ctx.fillText(txt, bx + 10, by + bh / 2);
           ctx.restore();
         }
       }
     });
 
-    hitRegionsRef.current = newHitRegions;
-  }, [positions, priceToY, series, chart]);
+    hitRef.current = hits;
+  }, [series, priceToY]);
 
-  // Draw a right-side label for a price line
-  function drawLineLabel(
+
+  // ─── Label drawing helpers ──────────────────────────────────────────────────
+  function drawLabel(
     ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    mainText: string,
-    subText: string,
-    mainColor: string,
-    subColor: string,
-    type: 'entry' | 'sl' | 'tp',
-    positionId: string,
-    hitRegions: HitRegion[],
-    rightEdge: number,
-    hovered: boolean
+    lax: number, RE: number, y: number,
+    main: string, sub: string,
+    mainCol: string, subCol: string,
+    pid: string,
+    type: 'sl' | 'tp', closeType: 'close_sl' | 'close_tp',
+    hits: HitRegion[], active: boolean
   ) {
-    const padding = 8;
-    const lineH = 17;
-    const totalH = lineH * 2 + padding * 2;
-    const mainFontSize = 11;
-    const subFontSize = 10;
-
-    // Measure widths
+    const PAD = 7, LH = 16, BH = LH * 2 + PAD * 2, CW = 20;
     ctx.save();
-    ctx.font = `bold ${mainFontSize}px "Inter", monospace`;
-    const mainW = ctx.measureText(mainText).width;
-    ctx.font = `${subFontSize}px "Inter", monospace`;
-    const subW = ctx.measureText(subText).width;
+    ctx.font = FONT_BOLD; const mw = ctx.measureText(main).width;
+    ctx.font = FONT_REG;  const sw = ctx.measureText(sub).width;
+    const BW = Math.max(mw, sw) + PAD * 2 + CW + 4;
+    const BX = RE - BW - 4, BY = y - BH / 2;
+    rr(ctx, BX, BY, BW, BH, 4);
+    ctx.fillStyle = active ? C.labelBgHover : C.labelBg; ctx.fill();
+    rr(ctx, BX, BY, BW, BH, 4);
+    ctx.strokeStyle = mainCol; ctx.lineWidth = active ? 1.5 : 1; ctx.setLineDash([]); ctx.stroke();
+    ctx.fillStyle = mainCol; ctx.font = FONT_BOLD; ctx.textBaseline = 'top'; ctx.textAlign = 'left';
+    ctx.fillText(main, BX + PAD, BY + PAD);
+    ctx.fillStyle = subCol; ctx.font = FONT_REG;
+    ctx.fillText(sub, BX + PAD, BY + PAD + LH);
+    // Close button
+    const cx = BX + BW - CW, cy = BY + BH / 2 - 8;
+    if (active) { rr(ctx, cx, cy, 16, 16, 3); ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fill(); }
+    ctx.fillStyle = active ? C.closeBtnHover : C.closeBtnIdle;
+    ctx.font = 'bold 10px monospace'; ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
+    ctx.fillText('✕', cx + 8, cy + 8);
     ctx.restore();
+    hits.push({ positionId: pid, type, y });
+    hits.push({ positionId: pid, type: closeType, y, x1: cx, x2: cx + 16 });
+  }
 
-    const boxW = Math.max(mainW, subW) + padding * 2 + 28; // +28 for X button
-    const boxX = rightEdge - boxW - 4;
-    const boxY = y - totalH / 2;
-
-    // Background
+  function drawEntryLabel(
+    ctx: CanvasRenderingContext2D,
+    lax: number, RE: number, y: number,
+    main: string, pnl: string,
+    mainCol: string, pnlCol: string,
+    pid: string, hits: HitRegion[], active: boolean,
+    hasSL: boolean, hasTP: boolean
+  ) {
+    const PAD = 7, LH = 16, BH = LH * 2 + PAD * 2, CW = 20;
+    // Extra width for +SL / +TP buttons when not set
+    const btnW = (!hasSL || !hasTP) ? 36 : 0;
     ctx.save();
-    ctx.fillStyle = hovered ? 'rgba(15, 18, 30, 0.98)' : COLORS.labelBg;
-    roundRect(ctx, boxX, boxY, boxW, totalH, 4);
-    ctx.fill();
-
-    // Border
-    ctx.strokeStyle = mainColor;
-    ctx.lineWidth = hovered ? 1.5 : 1;
-    ctx.setLineDash([]);
-    roundRect(ctx, boxX, boxY, boxW, totalH, 4);
-    ctx.stroke();
-
-    // Main text
-    ctx.fillStyle = mainColor;
-    ctx.font = `bold ${mainFontSize}px "Inter", monospace`;
-    ctx.textBaseline = 'top';
-    ctx.fillText(mainText, boxX + padding, boxY + padding);
-
-    // Sub text
-    ctx.fillStyle = subColor;
-    ctx.font = `${subFontSize}px "Inter", monospace`;
-    ctx.fillText(subText, boxX + padding, boxY + padding + lineH);
-
-    // X button
-    const xBtnX = boxX + boxW - 22;
-    const xBtnY = boxY + totalH / 2 - 8;
-    const xBtnSize = 16;
-
-    if (hovered) {
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-      roundRect(ctx, xBtnX, xBtnY, xBtnSize, xBtnSize, 3);
-      ctx.fill();
+    ctx.font = FONT_BOLD; const mw = ctx.measureText(main).width;
+    ctx.font = FONT_BOLD; const pw = ctx.measureText(pnl).width;
+    const BW = Math.max(mw, pw) + PAD * 2 + CW + 4 + btnW;
+    const BX = RE - BW - 4, BY = y - BH / 2;
+    rr(ctx, BX, BY, BW, BH, 4);
+    ctx.fillStyle = active ? C.labelBgHover : C.labelBg; ctx.fill();
+    rr(ctx, BX, BY, BW, BH, 4);
+    ctx.strokeStyle = mainCol; ctx.lineWidth = active ? 1.5 : 1; ctx.setLineDash([]); ctx.stroke();
+    ctx.fillStyle = mainCol; ctx.font = FONT_BOLD; ctx.textBaseline = 'top'; ctx.textAlign = 'left';
+    ctx.fillText(main, BX + PAD, BY + PAD);
+    ctx.fillStyle = pnlCol; ctx.font = FONT_BOLD;
+    ctx.fillText(pnl, BX + PAD, BY + PAD + LH);
+    // +SL button
+    let btnX = BX + Math.max(mw, pw) + PAD * 2;
+    if (!hasSL) {
+      rr(ctx, btnX, BY + PAD, 28, BH - PAD * 2, 3);
+      ctx.fillStyle = C.addBtnBg; ctx.fill();
+      ctx.fillStyle = C.sl; ctx.font = 'bold 9px monospace'; ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
+      ctx.fillText('+SL', btnX + 14, BY + BH / 2);
+      hits.push({ positionId: pid, type: 'add_sl', y, x1: btnX, x2: btnX + 28 });
+      btnX += 32;
     }
-
-    ctx.fillStyle = hovered ? '#fff' : '#6b7280';
-    ctx.font = 'bold 11px monospace';
-    ctx.textBaseline = 'middle';
-    ctx.textAlign = 'center';
-    ctx.fillText('✕', xBtnX + xBtnSize / 2, xBtnY + xBtnSize / 2);
-    ctx.textAlign = 'left';
-
-    // Hit region for the label
-    hitRegions.push({ positionId, type, y });
-
-    // Hit region for X button
-    const closeBtnType = `close_${type}` as 'close_entry' | 'close_sl' | 'close_tp';
-    hitRegions.push({ positionId, type: closeBtnType, y });
-
+    if (!hasTP) {
+      rr(ctx, btnX, BY + PAD, 28, BH - PAD * 2, 3);
+      ctx.fillStyle = C.addBtnBg; ctx.fill();
+      ctx.fillStyle = C.tp; ctx.font = 'bold 9px monospace'; ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
+      ctx.fillText('+TP', btnX + 14, BY + BH / 2);
+      hits.push({ positionId: pid, type: 'add_tp', y, x1: btnX, x2: btnX + 28 });
+      btnX += 32;
+    }
+    // Close button
+    const cx = BX + BW - CW, cy = BY + BH / 2 - 8;
+    if (active) { rr(ctx, cx, cy, 16, 16, 3); ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fill(); }
+    ctx.fillStyle = active ? C.closeBtnHover : C.closeBtnIdle;
+    ctx.font = 'bold 10px monospace'; ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
+    ctx.fillText('✕', cx + 8, cy + 8);
+    hits.push({ positionId: pid, type: 'close_entry', y, x1: cx, x2: cx + 16 });
     ctx.restore();
   }
 
-  // RAF render loop
+
+  // ─── RAF loop ───────────────────────────────────────────────────────────────
   useEffect(() => {
     let running = true;
-
-    const loop = () => {
-      if (!running) return;
-      render();
-      rafRef.current = requestAnimationFrame(loop);
-    };
-
+    const loop = () => { if (!running) return; render(); rafRef.current = requestAnimationFrame(loop); };
     rafRef.current = requestAnimationFrame(loop);
-
-    return () => {
-      running = false;
-      cancelAnimationFrame(rafRef.current);
-    };
+    return () => { running = false; cancelAnimationFrame(rafRef.current); };
   }, [render]);
 
-  // Resize canvas to match container
+  // ─── Resize ─────────────────────────────────────────────────────────────────
   useEffect(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
     if (!canvas || !container) return;
-
     const resize = () => {
       const dpr = window.devicePixelRatio || 1;
-      const rect = container.getBoundingClientRect();
-      // Reset transform BEFORE resizing to avoid compounding scale on repeated calls
+      const r = container.getBoundingClientRect();
       const ctx = canvas.getContext('2d');
       if (ctx) ctx.setTransform(1, 0, 0, 1, 0, 0);
-      canvas.width = Math.round(rect.width * dpr);
-      canvas.height = Math.round(rect.height * dpr);
-      canvas.style.width = `${rect.width}px`;
-      canvas.style.height = `${rect.height}px`;
+      canvas.width  = Math.round(r.width  * dpr);
+      canvas.height = Math.round(r.height * dpr);
+      canvas.style.width  = `${r.width}px`;
+      canvas.style.height = `${r.height}px`;
       if (ctx) ctx.scale(dpr, dpr);
     };
-
     resize();
     const ro = new ResizeObserver(resize);
     ro.observe(container);
     return () => ro.disconnect();
   }, [containerRef]);
 
-  // Mouse event handlers
+
+  // ─── Mouse events ────────────────────────────────────────────────────────────
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const HIT_TOLERANCE = 8; // px
-
-    const handleMouseMove = (e: MouseEvent) => {
-      const rect = canvas.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
-
-      if (draggingRef.current) {
-        // Active drag — consume event and update price
-        const price = yToPrice(my);
-        if (price != null) {
-          draggingRef.current.currentY = my;
-          draggingRef.current.currentPrice = price;
-          onDragMove(price);
+    const findHit = (mx: number, my: number): HitRegion | null => {
+      for (const h of hitRef.current) {
+        const yOk = Math.abs(my - h.y) < HIT;
+        if (!yOk) continue;
+        if (h.x1 != null && h.x2 != null) {
+          if (mx >= h.x1 && mx <= h.x2) return h;
+        } else {
+          return h;
         }
+      }
+      return null;
+    };
+
+    const onMove = (e: MouseEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+      if (cdragRef.current) {
+        const p = yToPrice(my);
+        if (p != null) { cdragRef.current.currentY = my; cdragRef.current.currentPrice = p; onDragMove(p); }
         canvas.style.cursor = 'ns-resize';
         return;
       }
-
-      // Check hit regions
-      let found: HitRegion | null = null;
-      for (const region of hitRegionsRef.current) {
-        if (Math.abs(my - region.y) < HIT_TOLERANCE) {
-          found = region;
-          break;
-        }
-      }
-
-      hoveredRef.current = found;
-
-      if (found?.dragCursor) {
-        canvas.style.cursor = 'ns-resize';
-      } else if (found) {
-        canvas.style.cursor = 'pointer';
-      } else {
-        // Not near any line — clear cursor and let chart handle pan
-        canvas.style.cursor = '';
-      }
+      const h = findHit(mx, my);
+      hoveredRef.current = h;
+      canvas.style.cursor = h?.dragCursor ? 'ns-resize' : h ? 'pointer' : '';
     };
 
-    const handleMouseDown = (e: MouseEvent) => {
+    const onDown = (e: MouseEvent) => {
       if (e.button !== 0) return;
       const rect = canvas.getBoundingClientRect();
-      const my = e.clientY - rect.top;
-
-      for (const region of hitRegionsRef.current) {
-        if (Math.abs(my - region.y) < HIT_TOLERANCE) {
-          if (region.type === 'sl' || region.type === 'tp') {
-            // This IS a drag target — consume the event
-            e.preventDefault();
-            e.stopPropagation();
-            const price = yToPrice(my) ?? 0;
-            draggingRef.current = {
-              positionId: region.positionId,
-              type: region.type,
-              currentY: my,
-              currentPrice: price,
-            };
-            onDragStart(region.positionId, region.type, price, e);
-            canvas.style.cursor = 'ns-resize';
-            return;
-          }
-          // Near a label/close button — consume
-          if (region.type === 'close_entry' || region.type === 'close_sl' || region.type === 'close_tp') {
-            e.stopPropagation();
-            return;
-          }
-        }
+      const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+      const h = findHit(mx, my);
+      if (!h) return;
+      if (h.type === 'sl' || h.type === 'tp') {
+        e.preventDefault(); e.stopPropagation();
+        const p = yToPrice(my) ?? 0;
+        cdragRef.current = { positionId: h.positionId, type: h.type, currentY: my, currentPrice: p };
+        onDragStart(h.positionId, h.type, p, e);
+        canvas.style.cursor = 'ns-resize';
+        return;
       }
-      // Not near any line — DO NOT stopPropagation so chart panning works
+      if (h.type === 'close_entry' || h.type === 'close_sl' || h.type === 'close_tp' ||
+          h.type === 'add_sl' || h.type === 'add_tp' || h.type === 'entry') {
+        e.stopPropagation();
+      }
     };
 
-    const handleMouseUp = (e: MouseEvent) => {
-      if (draggingRef.current) {
-        const { positionId, type, currentPrice } = draggingRef.current;
+    const onUp = () => {
+      if (cdragRef.current) {
+        const { positionId, type, currentPrice } = cdragRef.current;
         onDragEnd(positionId, type, currentPrice);
-        draggingRef.current = null;
+        cdragRef.current = null;
         canvas.style.cursor = '';
       }
     };
 
-    const handleClick = (e: MouseEvent) => {
+    const onClick = (e: MouseEvent) => {
+      if (cdragRef.current) return;
       const rect = canvas.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
-
-      for (const region of hitRegionsRef.current) {
-        if (Math.abs(my - region.y) < 8) {
-          if (region.type === 'close_entry') {
-            onClose(region.positionId);
-            return;
-          }
-          if (region.type === 'close_sl' || region.type === 'close_tp') {
-            // Clear SL or TP
-            onClose(region.positionId);
-            return;
-          }
+      const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+      const h = findHit(mx, my);
+      if (!h) return;
+      if (h.type === 'close_entry') { onClose(h.positionId); return; }
+      if (h.type === 'close_sl' || h.type === 'close_tp') { onClose(h.positionId); return; }
+      if (h.type === 'add_sl' || h.type === 'add_tp') {
+        // Place SL/TP 2% away from entry as default starting point
+        const vis = posRef.current.find(p => p.position.id === h.positionId);
+        if (!vis) return;
+        const entry = vis.position.avgPrice;
+        const isLong = vis.position.side === 'LONG' || vis.position.buyQty > vis.position.sellQty;
+        if (h.type === 'add_sl') {
+          const defaultSL = isLong ? entry * 0.98 : entry * 1.02;
+          onDragEnd(h.positionId, 'sl', defaultSL);
+        } else {
+          const defaultTP = isLong ? entry * 1.02 : entry * 0.98;
+          onDragEnd(h.positionId, 'tp', defaultTP);
         }
       }
     };
 
-    const handleContextMenu = (e: MouseEvent) => {
+    const onCtx = (e: MouseEvent) => {
       const rect = canvas.getBoundingClientRect();
-      const my = e.clientY - rect.top;
-
-      for (const region of hitRegionsRef.current) {
-        if (Math.abs(my - region.y) < 8) {
-          if (region.type === 'entry' || region.type === 'sl' || region.type === 'tp') {
-            e.preventDefault();
-            onContextMenu(region.positionId, region.type, e.clientX, e.clientY);
-            return;
-          }
-        }
+      const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+      const h = findHit(mx, my);
+      if (!h) return;
+      if (h.type === 'entry' || h.type === 'sl' || h.type === 'tp') {
+        e.preventDefault();
+        onContextMenu(h.positionId, h.type as 'entry' | 'sl' | 'tp', e.clientX, e.clientY);
       }
     };
 
-    canvas.addEventListener('mousemove', handleMouseMove);
-    canvas.addEventListener('mousedown', handleMouseDown);
-    canvas.addEventListener('mouseup', handleMouseUp);
-    canvas.addEventListener('click', handleClick);
-    canvas.addEventListener('contextmenu', handleContextMenu);
-
-    // Global mouse up (in case mouse released outside canvas)
-    const globalMouseUp = () => {
-      if (draggingRef.current) {
-        const { positionId, type, currentPrice } = draggingRef.current;
+    const globalUp = () => {
+      if (cdragRef.current) {
+        const { positionId, type, currentPrice } = cdragRef.current;
         onDragEnd(positionId, type, currentPrice);
-        draggingRef.current = null;
+        cdragRef.current = null;
         canvas.style.cursor = '';
       }
     };
-    window.addEventListener('mouseup', globalMouseUp);
 
+    canvas.addEventListener('mousemove', onMove);
+    canvas.addEventListener('mousedown', onDown);
+    canvas.addEventListener('mouseup', onUp);
+    canvas.addEventListener('click', onClick);
+    canvas.addEventListener('contextmenu', onCtx);
+    window.addEventListener('mouseup', globalUp);
     return () => {
-      canvas.removeEventListener('mousemove', handleMouseMove);
-      canvas.removeEventListener('mousedown', handleMouseDown);
-      canvas.removeEventListener('mouseup', handleMouseUp);
-      canvas.removeEventListener('click', handleClick);
-      canvas.removeEventListener('contextmenu', handleContextMenu);
-      window.removeEventListener('mouseup', globalMouseUp);
+      canvas.removeEventListener('mousemove', onMove);
+      canvas.removeEventListener('mousedown', onDown);
+      canvas.removeEventListener('mouseup', onUp);
+      canvas.removeEventListener('click', onClick);
+      canvas.removeEventListener('contextmenu', onCtx);
+      window.removeEventListener('mouseup', globalUp);
     };
   }, [yToPrice, onDragStart, onDragMove, onDragEnd, onClose, onContextMenu]);
 
@@ -652,13 +551,8 @@ export function PositionCanvas({
     <canvas
       ref={canvasRef}
       style={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        // z-index 20 — must be above the SVG drawing overlay (z-[15])
-        // so drag events reach the canvas even when drawings exist
-        zIndex: 20,
-        // Always capture pointer events when positions are visible
+        position: 'absolute', top: 0, left: 0,
+        zIndex: 20,   // above SVG drawing overlay (z-15)
         pointerEvents: positions.length > 0 ? 'auto' : 'none',
       }}
     />
