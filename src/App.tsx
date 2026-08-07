@@ -25,6 +25,7 @@ import { useAppStore } from '@/store/appStore';
 import { useThemeStore } from '@/store/themeStore';
 import { initLayoutObserver } from '@/store/layoutStore';
 import { wsService } from '@/services/websocket';
+import { startSync, stopSync, startPersistence, stopPersistence } from '@/features/chart-trading';
 
 // Vertical drag divider for resizing panels horizontally
 function VDivider({ onDrag }: { onDrag: (dx: number) => void }) {
@@ -133,6 +134,16 @@ export default function App() {
 
   // Initialize layout observer (auto-collapse docks on small viewport)
   useEffect(() => { initLayoutObserver(); }, []);
+
+  // Bootstrap Overlay Engine synchronization — starts watching Zustand store for position changes
+  useEffect(() => {
+    startSync();
+    startPersistence();
+    return () => {
+      stopSync();
+      stopPersistence();
+    };
+  }, []);
 
   // Initialize theme engine on mount
   useEffect(() => {
