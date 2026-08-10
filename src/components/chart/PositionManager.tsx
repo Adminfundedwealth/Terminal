@@ -39,18 +39,22 @@ export function PositionManager({ chart, series, containerRef }: Props) {
     ltp: quotes[p.token]?.ltp ?? p.ltp ?? p.avgPrice,
   }));
 
+  // tickSize for the active instrument — used by canvas for price snapping & validation
+  const tickSize = activeSymbol?.tickSize ?? 0.05;
+
   // Canvas owns drag internally — onDragStart/Move are no-ops here
   const noop = useCallback(() => {}, []);
 
   const onDragEnd = useCallback(async (pid: string, type: 'sl'|'tp', price: number) => {
-    // Optimistic update
+    // Optimistic update — immediately draws the line before server confirms
     updatePos(pid, type === 'sl' ? { stopLoss: price } : { takeProfit: price });
     try {
       if (type === 'sl') await attachStopLoss(pid, price);
       else               await attachTakeProfit(pid, price);
+      // Server broadcast via position.updated event will re-confirm; no extra action needed.
     } catch (err) {
       console.error('[PositionManager] SL/TP update failed:', err);
-      // Revert
+      // Revert optimistic update on failure
       const orig = useTradingStore.getState().positions.find(p => p.id === pid);
       if (orig) updatePos(pid, type === 'sl' ? { stopLoss: orig.stopLoss } : { takeProfit: orig.takeProfit });
     }
@@ -69,6 +73,7 @@ export function PositionManager({ chart, series, containerRef }: Props) {
         series={series}
         containerRef={containerRef}
         positions={visuals}
+        tickSize={tickSize}
         onDragStart={noop as any}
         onDragMove={noop as any}
         onDragEnd={onDragEnd}

@@ -1,17 +1,17 @@
 /**
- * POSITION CANVAS — SL/TP drag that actually works
+ * POSITION CANVAS — SL/TP drag + direct placement mode
  *
- * Root cause of all previous failures:
- *   useCallback(y2p, [series]) + useEffect([..., y2p]) = stale closure
- *   When series changes, y2p gets a new reference, effect re-runs,
- *   re-registers handlers — but during a fast drag the closure still
- *   holds the OLD y2p. Fix: store series in a ref, read it directly.
- *
- * Design:
- *  - seriesRef always points to the live series
- *  - All coordinate math reads seriesRef.current directly — never stale
- *  - Drag state in dragRef — zero React state during drag
- *  - window mousemove/mouseup so drag works outside the canvas bounds
+ * Key behaviors:
+ *  1. Entry line always drawn for open positions.
+ *  2. SL line drawn when p.stopLoss > 0 — red dashed, draggable.
+ *  3. TP line drawn when p.takeProfit > 0 — green dashed, draggable.
+ *  4. When no SL exists: +SL button on entry badge enters placement mode.
+ *     Mouse follows chart; a guide line tracks the cursor price.
+ *     Release → snapToTick → validate direction → attachStopLoss().
+ *  5. When no TP exists: same for +TP.
+ *  6. ESC cancels placement mode.
+ *  7. tickSize prop used to snap all prices.
+ *  8. No React state mutations during RAF — all mutable state in refs.
  */
 
 import { useEffect, useRef } from 'react';
@@ -19,13 +19,13 @@ import type { ISeriesApi } from 'lightweight-charts';
 import type { Position } from '@/types';
 import { formatPrice } from '@/utils/helpers';
 
+// ── Types ─────────────────────────────────────────────────────────────────────
+
 export interface PositionVisual {
   position: Position;
   slPrice?: number;
   tpPrice?: number;
   ltp: number;
-  isDraggingSlThis?: boolean;
-  isDraggingTpThis?: boolean;
 }
 
 interface Props {
@@ -33,6 +33,7 @@ interface Props {
   series: ISeriesApi<any> | null;
   containerRef: React.RefObject<HTMLDivElement>;
   positions: PositionVisual[];
+  tickSize: number;
   onDragStart: (pid: string, type: 'sl' | 'tp', price: number, e: MouseEvent) => void;
   onDragMove:  (price: number) => void;
   onDragEnd:   (pid: string, type: 'sl' | 'tp', price: number) => void;
@@ -50,15 +51,23 @@ interface HR {
   x1?: number; x2?: number;
 }
 
-// Colors
-const LONG_COL = '#2962ff';
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+const LONG_COL  = '#2962ff';
 const SHORT_COL = '#f7525f';
-const SL_COL = '#ef4444';
-const TP_COL = '#22c55e';
-const LABEL_BG = 'rgba(13,15,24,0.95)';
-const TEXT_DIM = '#6b7280';
-const FONT_B = 'bold 11px "Inter",ui-sans-serif,sans-serif';
-const HIT = 10;   // hit tolerance in CSS pixels
+const SL_COL    = '#ef4444';
+const TP_COL    = '#22c55e';
+const LABEL_BG  = 'rgba(13,15,24,0.95)';
+const TEXT_DIM  = '#6b7280';
+const FONT_B    = 'bold 11px "Inter",ui-sans-serif,sans-serif';
+const HIT       = 14;   // hit tolerance px — intentionally generous for drag UX
+
+// Placement-mode guide colors
+const SL_GUIDE  = 'rgba(239,68,68,0.85)';
+const TP_GUIDE  = 'rgba(34,197,94,0.85)';
+const INVALID_COL = 'rgba(251,191,36,0.9)';   // amber = invalid placement
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function rrect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   ctx.beginPath();
@@ -66,29 +75,56 @@ function rrect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h
 }
 
 function pnlStr(val: number, sym: string): string {
-  const isUSD = /USD|EUR|GBP|BTC|ETH|USDT|CRYPTO/i.test(sym);
-  const sign = val >= 0 ? '+' : '';
-  if (isUSD) return `${sign}$${val.toFixed(2)}`;
-  const abs = Math.abs(val), s = val >= 0 ? '+' : '-';
-  if (abs >= 100000) return `${s}₹${(abs / 100000).toFixed(1)}L`;
-  if (abs >= 1000) return `${s}₹${(abs / 1000).toFixed(1)}K`;
-  return `${s}₹${Math.round(abs)}`;
+  const abs = Math.abs(val);
+  const sign = val >= 0 ? '+' : '-';
+  if (abs >= 1_00_00_000) return `${sign}₹${(abs / 1_00_00_000).toFixed(1)}Cr`;
+  if (abs >= 1_00_000)    return `${sign}₹${(abs / 1_00_000).toFixed(1)}L`;
+  if (abs >= 1_000)       return `${sign}₹${(abs / 1_000).toFixed(1)}K`;
+  return `${sign}₹${Math.round(abs)}`;
 }
 
+/** Snap price to nearest valid tick */
+function snapTick(price: number, tick: number): number {
+  if (!tick || tick <= 0) return price;
+  return Math.round(price / tick) * tick;
+}
+
+/** Return true if SL placement is valid for the given side */
+function isValidSL(slPrice: number, entryPrice: number, isLong: boolean): boolean {
+  return isLong ? slPrice < entryPrice : slPrice > entryPrice;
+}
+
+/** Return true if TP placement is valid for the given side */
+function isValidTP(tpPrice: number, entryPrice: number, isLong: boolean): boolean {
+  return isLong ? tpPrice > entryPrice : tpPrice < entryPrice;
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
+
 export function PositionCanvas({
-  series, containerRef, positions,
+  series, containerRef, positions, tickSize,
   onDragStart, onDragMove, onDragEnd,
   onClose, onPartialClose, onReversePosition, onMoveBreakeven, onContextMenu,
 }: Props) {
   const cvs = useRef<HTMLCanvasElement>(null);
   const raf = useRef(0);
 
-  // ── All mutable state in refs — never stale ──────────────────────────────
-  const seriesRef   = useRef<ISeriesApi<any> | null>(null);
-  const posRef      = useRef<PositionVisual[]>([]);
-  const hitsRef     = useRef<HR[]>([]);
-  const hovRef      = useRef<HR | null>(null);
-  const dragRef     = useRef<{ pid: string; type: 'sl'|'tp'; livePrice: number } | null>(null);
+  // ── All mutable state in refs — never stale ─────────────────────────────
+  const seriesRef = useRef<ISeriesApi<any> | null>(null);
+  const posRef    = useRef<PositionVisual[]>([]);
+  const tickRef   = useRef<number>(0.05);
+  const hitsRef   = useRef<HR[]>([]);
+  const hovRef    = useRef<HR | null>(null);
+  const dragRef   = useRef<{ pid: string; type: 'sl'|'tp'; livePrice: number } | null>(null);
+
+  // Placement mode: user clicked +SL or +TP, mouse now controls the guide line
+  // before they release to commit
+  const placeRef  = useRef<{
+    pid: string;
+    type: 'sl' | 'tp';
+    livePrice: number;
+    valid: boolean;
+  } | null>(null);
 
   // Callback refs — always current, never cause effect re-runs
   const cbDragEnd   = useRef(onDragEnd);
@@ -97,16 +133,16 @@ export function PositionCanvas({
   const cbClose     = useRef(onClose);
   const cbCtx       = useRef(onContextMenu);
 
-  // Keep all refs current every render
   seriesRef.current = series;
   posRef.current    = positions;
+  tickRef.current   = tickSize;
   cbDragEnd.current   = onDragEnd;
   cbDragMove.current  = onDragMove;
   cbDragStart.current = onDragStart;
   cbClose.current     = onClose;
   cbCtx.current       = onContextMenu;
 
-  // ── Coordinate helpers — always read from ref ────────────────────────────
+  // ── Coordinate helpers ──────────────────────────────────────────────────
   const p2y = (price: number): number | null => {
     const s = seriesRef.current;
     if (!s) return null;
@@ -118,7 +154,7 @@ export function PositionCanvas({
     return s.coordinateToPrice(y) ?? null;
   };
 
-  // ── RENDER LOOP ──────────────────────────────────────────────────────────
+  // ── RENDER LOOP ────────────────────────────────────────────────────────
   useEffect(() => {
     const el = cvs.current;
     if (!el) return;
@@ -127,7 +163,6 @@ export function PositionCanvas({
       const ctx = el.getContext('2d');
       if (!ctx || !seriesRef.current) return;
 
-      // Canvas is sized in CSS pixels (no DPR scaling) so width/height = CSS pixels directly
       const W = el.width, H = el.height;
       ctx.clearRect(0, 0, W, H);
 
@@ -136,7 +171,7 @@ export function PositionCanvas({
 
       posRef.current.forEach(({ position: pos, slPrice: slP, tpPrice: tpP, ltp }) => {
         const ey = p2y(pos.avgPrice);
-        if (ey == null || ey < -50 || ey > H + 50) return; // entry outside view
+        if (ey == null || ey < -50 || ey > H + 50) return;
 
         const isLong = pos.side === 'LONG' || pos.buyQty > pos.sellQty;
         const entryCol = isLong ? LONG_COL : SHORT_COL;
@@ -147,11 +182,28 @@ export function PositionCanvas({
         const tp = (d?.pid === pos.id && d.type === 'tp') ? d.livePrice : (tpP ?? 0);
         const hasSL = sl > 0, hasTP = tp > 0;
 
-        // Zone fills
-        if (hasSL) { const sy = p2y(sl); if (sy != null) { ctx.fillStyle = 'rgba(239,68,68,0.07)'; ctx.fillRect(0, Math.min(ey, sy), RE, Math.abs(ey - sy)); } }
-        if (hasTP) { const ty = p2y(tp); if (ty != null) { ctx.fillStyle = 'rgba(34,197,94,0.07)'; ctx.fillRect(0, Math.min(ey, ty), RE, Math.abs(ey - ty)); } }
+        // Live placement overrides (placement mode active for this position)
+        const pl = placeRef.current;
+        const placeSL = pl?.pid === pos.id && pl.type === 'sl' ? pl.livePrice : null;
+        const placeTP = pl?.pid === pos.id && pl.type === 'tp' ? pl.livePrice : null;
 
-        // SL line — clamp to canvas bounds so it's always grabbable
+        // Zone fills — only for committed (real) SL/TP
+        if (hasSL) {
+          const sy = p2y(sl);
+          if (sy != null) {
+            ctx.fillStyle = 'rgba(239,68,68,0.07)';
+            ctx.fillRect(0, Math.min(ey, sy), RE, Math.abs(ey - sy));
+          }
+        }
+        if (hasTP) {
+          const ty = p2y(tp);
+          if (ty != null) {
+            ctx.fillStyle = 'rgba(34,197,94,0.07)';
+            ctx.fillRect(0, Math.min(ey, ty), RE, Math.abs(ey - ty));
+          }
+        }
+
+        // ── SL line (committed) ──────────────────────────────────────────
         if (hasSL) {
           const syRaw = p2y(sl);
           if (syRaw != null) {
@@ -164,7 +216,7 @@ export function PositionCanvas({
           }
         }
 
-        // TP line — clamp to canvas bounds
+        // ── TP line (committed) ──────────────────────────────────────────
         if (hasTP) {
           const tyRaw = p2y(tp);
           if (tyRaw != null) {
@@ -177,19 +229,95 @@ export function PositionCanvas({
           }
         }
 
-        // Entry line
+        // ── Placement-mode guide line (SL) ──────────────────────────────
+        if (placeSL != null) {
+          const valid = isValidSL(placeSL, pos.avgPrice, isLong);
+          const guideY = p2y(placeSL);
+          if (guideY != null) {
+            const col = valid ? SL_GUIDE : INVALID_COL;
+            const clamped = Math.max(4, Math.min(H - 4, guideY));
+            // Full-width dashed guide
+            ctx.save();
+            ctx.strokeStyle = col;
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([6, 4]);
+            ctx.beginPath(); ctx.moveTo(0, clamped); ctx.lineTo(RE, clamped); ctx.stroke();
+            ctx.setLineDash([]);
+            // Circle handle
+            ctx.fillStyle = col;
+            ctx.beginPath(); ctx.arc(18, clamped, 7, 0, Math.PI * 2); ctx.fill();
+            // Grip lines
+            ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 1;
+            [-2.5, 0, 2.5].forEach(o => {
+              ctx.beginPath(); ctx.moveTo(12, clamped + o); ctx.lineTo(24, clamped + o); ctx.stroke();
+            });
+            // Floating tooltip
+            const risk = Math.abs(pos.avgPrice - placeSL) * pos.qty;
+            const pts  = Math.abs(pos.avgPrice - placeSL);
+            const label = valid
+              ? `SET SL  ${formatPrice(placeSL)}  |  Risk ${pnlStr(-risk, pos.symbol)}  |  ${pts.toFixed(2)} pts`
+              : `INVALID  ${formatPrice(placeSL)}  —  SL must be ${isLong ? 'BELOW' : 'ABOVE'} entry`;
+            ctx.save();
+            rrect(ctx, 36, clamped - 24, 460, 20, 3);
+            ctx.fillStyle = valid ? 'rgba(239,68,68,0.93)' : 'rgba(251,191,36,0.93)';
+            ctx.fill();
+            ctx.fillStyle = '#fff'; ctx.font = 'bold 10px monospace';
+            ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+            ctx.fillText(label, 46, clamped - 14);
+            ctx.restore();
+            ctx.restore();
+          }
+        }
+
+        // ── Placement-mode guide line (TP) ──────────────────────────────
+        if (placeTP != null) {
+          const valid = isValidTP(placeTP, pos.avgPrice, isLong);
+          const guideY = p2y(placeTP);
+          if (guideY != null) {
+            const col = valid ? TP_GUIDE : INVALID_COL;
+            const clamped = Math.max(4, Math.min(H - 4, guideY));
+            ctx.save();
+            ctx.strokeStyle = col;
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([6, 4]);
+            ctx.beginPath(); ctx.moveTo(0, clamped); ctx.lineTo(RE, clamped); ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.fillStyle = col;
+            ctx.beginPath(); ctx.arc(18, clamped, 7, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 1;
+            [-2.5, 0, 2.5].forEach(o => {
+              ctx.beginPath(); ctx.moveTo(12, clamped + o); ctx.lineTo(24, clamped + o); ctx.stroke();
+            });
+            const reward = Math.abs(placeTP - pos.avgPrice) * pos.qty;
+            const pts    = Math.abs(placeTP - pos.avgPrice);
+            const label  = valid
+              ? `SET TP  ${formatPrice(placeTP)}  |  Reward ${pnlStr(reward, pos.symbol)}  |  ${pts.toFixed(2)} pts`
+              : `INVALID  ${formatPrice(placeTP)}  —  TP must be ${isLong ? 'ABOVE' : 'BELOW'} entry`;
+            ctx.save();
+            rrect(ctx, 36, clamped - 24, 460, 20, 3);
+            ctx.fillStyle = valid ? 'rgba(34,197,94,0.93)' : 'rgba(251,191,36,0.93)';
+            ctx.fill();
+            ctx.fillStyle = '#fff'; ctx.font = 'bold 10px monospace';
+            ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+            ctx.fillText(label, 46, clamped - 14);
+            ctx.restore();
+            ctx.restore();
+          }
+        }
+
+        // ── Entry line ───────────────────────────────────────────────────
         ctx.save();
         ctx.strokeStyle = entryCol; ctx.lineWidth = 1.5; ctx.setLineDash([]);
         ctx.beginPath(); ctx.moveTo(0, ey); ctx.lineTo(RE, ey); ctx.stroke();
         ctx.restore();
 
-        // Entry badge
+        // ── Entry badge ──────────────────────────────────────────────────
         const pnl = (isLong ? ltp - pos.avgPrice : pos.avgPrice - ltp) * pos.qty;
         drawBadge(ctx, ey, RE, `${isLong ? 'LONG' : 'SHORT'} ${pos.qty}`,
           pnlStr(pnl, pos.symbol), entryCol, pnl >= 0 ? TP_COL : SL_COL,
           pos.id, newHits, !hasSL, !hasTP);
 
-        // Drag tooltip
+        // ── Drag tooltip (existing SL/TP drag) ───────────────────────────
         if (d?.pid === pos.id) {
           const dy = p2y(d.livePrice);
           if (dy != null) {
@@ -210,28 +338,27 @@ export function PositionCanvas({
       });
 
       hitsRef.current = newHits;
-      el.style.pointerEvents = posRef.current.length > 0 ? 'auto' : 'none';
+      // Enable pointer events when positions present OR in placement mode
+      el.style.pointerEvents = (posRef.current.length > 0 || placeRef.current != null) ? 'auto' : 'none';
     };
 
     let on = true;
     const loop = () => { if (!on) return; render(); raf.current = requestAnimationFrame(loop); };
     raf.current = requestAnimationFrame(loop);
     return () => { on = false; cancelAnimationFrame(raf.current); };
-  }, []); // ← empty deps — render reads everything from refs, never stale
+  }, []);
 
-  // ── RESIZE ───────────────────────────────────────────────────────────────
+  // ── RESIZE ────────────────────────────────────────────────────────────
   useEffect(() => {
     const el = cvs.current, ct = containerRef.current;
     if (!el || !ct) return;
     const resize = () => {
       const r = ct.getBoundingClientRect();
-      // NO DPR scaling — priceToCoordinate returns CSS pixels,
-      // mouse events return CSS pixels, canvas must match CSS pixels exactly.
+      // NO DPR scaling — priceToCoordinate returns CSS pixels
       el.width  = Math.round(r.width);
       el.height = Math.round(r.height);
       el.style.width  = `${r.width}px`;
       el.style.height = `${r.height}px`;
-      // Reset any transform that may have accumulated
       const ctx = el.getContext('2d');
       if (ctx) ctx.setTransform(1, 0, 0, 1, 0, 0);
     };
@@ -239,9 +366,9 @@ export function PositionCanvas({
     const ro = new ResizeObserver(resize);
     ro.observe(ct);
     return () => ro.disconnect();
-  }, []); // ← empty deps
+  }, []);
 
-  // ── MOUSE EVENTS ─────────────────────────────────────────────────────────
+  // ── MOUSE EVENTS ──────────────────────────────────────────────────────
   useEffect(() => {
     const el = cvs.current;
     if (!el) return;
@@ -263,8 +390,45 @@ export function PositionCanvas({
       return null;
     };
 
+    // ── Placement-mode mouse tracking ────────────────────────────────────
+    const onWindowMovePlacement = (e: MouseEvent) => {
+      if (!placeRef.current) return;
+      const r = el.getBoundingClientRect();
+      const rawPrice = y2p(e.clientY - r.top);
+      if (rawPrice == null) return;
+      const snapped = snapTick(rawPrice, tickRef.current);
+      const pl = placeRef.current;
+      const vis = posRef.current.find(p => p.position.id === pl.pid);
+      if (!vis) return;
+      const isLong = vis.position.side === 'LONG' || vis.position.buyQty > vis.position.sellQty;
+      const valid = pl.type === 'sl'
+        ? isValidSL(snapped, vis.position.avgPrice, isLong)
+        : isValidTP(snapped, vis.position.avgPrice, isLong);
+      pl.livePrice = snapped;
+      pl.valid = valid;
+      document.body.style.cursor = 'crosshair';
+    };
+
+    const onWindowUpPlacement = (e: MouseEvent) => {
+      if (!placeRef.current) return;
+      const pl = placeRef.current;
+      if (!pl.valid) {
+        // Invalid placement — cancel silently
+        placeRef.current = null;
+        document.body.style.cursor = '';
+        return;
+      }
+      const { pid, type, livePrice } = pl;
+      placeRef.current = null;
+      document.body.style.cursor = '';
+      // Commit via same onDragEnd path — PositionManager handles API call
+      cbDragEnd.current(pid, type, livePrice);
+    };
+
+    // ── Regular hover ────────────────────────────────────────────────────
     const onCanvasMove = (e: MouseEvent) => {
-      if (dragRef.current) return;
+      // If in placement mode, cursor is handled by onWindowMovePlacement
+      if (placeRef.current || dragRef.current) return;
       const r = el.getBoundingClientRect();
       const h = find(e.clientX - r.left, e.clientY - r.top);
       hovRef.current = h;
@@ -272,34 +436,32 @@ export function PositionCanvas({
         : h ? 'pointer' : '';
     };
 
+    // ── Existing drag tracking ────────────────────────────────────────────
     const onWindowMove = (e: MouseEvent) => {
       if (!dragRef.current) return;
       const r = el.getBoundingClientRect();
-      const p = y2p(e.clientY - r.top);
-      console.log('[POS] drag move clientY=', e.clientY, 'canvasY=', (e.clientY - r.top).toFixed(0), 'price=', p?.toFixed(2) ?? 'null');
-      if (p != null) {
-        dragRef.current.livePrice = p;
-        cbDragMove.current(p);
+      const raw = y2p(e.clientY - r.top);
+      if (raw != null) {
+        // Snap to tick so tooltip always shows the exact price that will be committed
+        const snapped = snapTick(raw, tickRef.current);
+        dragRef.current.livePrice = snapped;
+        cbDragMove.current(snapped);
       }
       document.body.style.cursor = 'ns-resize';
     };
 
     const onDown = (e: MouseEvent) => {
       if (e.button !== 0) return;
+      // If in placement mode, mousedown is not needed — we commit on mouseup
+      if (placeRef.current) return;
       const r = el.getBoundingClientRect();
       const mx = e.clientX - r.left, my = e.clientY - r.top;
-      console.log('[POS] mousedown canvas mx=', mx.toFixed(0), 'my=', my.toFixed(0),
-        'hits=', hitsRef.current.map(h => `${h.role}@y${h.y.toFixed(0)}`).join(','),
-        'pointerEvents=', el.style.pointerEvents,
-        'canvasRect top=', r.top.toFixed(0), 'containerRect top=', (containerRef.current?.getBoundingClientRect().top ?? 0).toFixed(0));
       const h = find(mx, my);
-      console.log('[POS] hit=', h?.role ?? 'none');
       if (!h) return;
       if (h.role === 'sl_drag' || h.role === 'tp_drag') {
         e.preventDefault(); e.stopPropagation();
         const type = h.role === 'sl_drag' ? 'sl' : 'tp';
         const price = y2p(my) ?? 0;
-        console.log('[POS] DRAG START', type, 'price=', price);
         dragRef.current = { pid: h.pid, type, livePrice: price };
         cbDragStart.current(h.pid, type, price, e);
         document.body.style.cursor = 'ns-resize';
@@ -318,40 +480,54 @@ export function PositionCanvas({
     };
 
     const onClick = (e: MouseEvent) => {
+      // Placement mode: a click anywhere outside the canvas can cancel — handled via ESC
       if (dragRef.current) return;
       const r = el.getBoundingClientRect();
       const h = find(e.clientX - r.left, e.clientY - r.top);
       if (!h) return;
+
       if (h.role === 'close_pos') { cbClose.current(h.pid); return; }
+
+      // +SL / +TP: enter placement mode
       if (h.role === 'add_sl' || h.role === 'add_tp') {
         const vis = posRef.current.find(p => p.position.id === h.pid);
         if (!vis) return;
-        const entry = vis.position.avgPrice;
+        const type = h.role === 'add_sl' ? 'sl' : 'tp';
         const isLong = vis.position.side === 'LONG' || vis.position.buyQty > vis.position.sellQty;
-        // Place within visible chart area — 30% of visible range from entry
+        // Start at a reasonable price offset from entry
         const s = seriesRef.current;
-        let defaultPrice: number;
+        let startPrice: number;
         if (s) {
-          // Use coordinateToPrice to find a price 60px below/above entry line
-          const entryY = s.priceToCoordinate(entry);
+          const entryY = s.priceToCoordinate(vis.position.avgPrice);
           if (entryY != null) {
-            const offset = h.role === 'add_sl'
-              ? (isLong ? entryY + 60 : entryY - 60)   // SL: below for long, above for short
-              : (isLong ? entryY - 60 : entryY + 60);  // TP: above for long, below for short
-            defaultPrice = s.coordinateToPrice(offset) ?? (isLong
-              ? (h.role === 'add_sl' ? entry * 0.98 : entry * 1.02)
-              : (h.role === 'add_sl' ? entry * 1.02 : entry * 0.98));
+            // 60px below entry for SL-long / above for SL-short, opposite for TP
+            const offset = type === 'sl'
+              ? (isLong ? entryY + 60 : entryY - 60)
+              : (isLong ? entryY - 60 : entryY + 60);
+            startPrice = snapTick(
+              s.coordinateToPrice(offset) ?? (isLong
+                ? (type === 'sl' ? vis.position.avgPrice * 0.98 : vis.position.avgPrice * 1.02)
+                : (type === 'sl' ? vis.position.avgPrice * 1.02 : vis.position.avgPrice * 0.98)),
+              tickRef.current
+            );
           } else {
-            defaultPrice = isLong
-              ? (h.role === 'add_sl' ? entry * 0.98 : entry * 1.02)
-              : (h.role === 'add_sl' ? entry * 1.02 : entry * 0.98);
+            startPrice = isLong
+              ? (type === 'sl' ? vis.position.avgPrice * 0.98 : vis.position.avgPrice * 1.02)
+              : (type === 'sl' ? vis.position.avgPrice * 1.02 : vis.position.avgPrice * 0.98);
           }
         } else {
-          defaultPrice = isLong
-            ? (h.role === 'add_sl' ? entry * 0.98 : entry * 1.02)
-            : (h.role === 'add_sl' ? entry * 1.02 : entry * 0.98);
+          startPrice = isLong
+            ? (type === 'sl' ? vis.position.avgPrice * 0.98 : vis.position.avgPrice * 1.02)
+            : (type === 'sl' ? vis.position.avgPrice * 1.02 : vis.position.avgPrice * 0.98);
         }
-        cbDragEnd.current(h.pid, h.role === 'add_sl' ? 'sl' : 'tp', defaultPrice);
+        placeRef.current = {
+          pid: h.pid,
+          type,
+          livePrice: snapTick(startPrice, tickRef.current),
+          valid: true,
+        };
+        el.style.pointerEvents = 'auto';
+        document.body.style.cursor = 'crosshair';
       }
     };
 
@@ -367,24 +543,48 @@ export function PositionCanvas({
       }
     };
 
-    el.addEventListener('mousemove',    onCanvasMove);
-    el.addEventListener('mousedown',    onDown);
-    el.addEventListener('click',        onClick);
-    el.addEventListener('contextmenu',  onCtx);
+    // ESC cancels both drag and placement mode
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (placeRef.current) {
+          placeRef.current = null;
+          document.body.style.cursor = '';
+          el.style.cursor = '';
+        }
+        if (dragRef.current) {
+          // Revert drag
+          dragRef.current = null;
+          document.body.style.cursor = '';
+          el.style.cursor = '';
+        }
+      }
+    };
+
+    el.addEventListener('mousemove',   onCanvasMove);
+    el.addEventListener('mousedown',   onDown);
+    el.addEventListener('click',       onClick);
+    el.addEventListener('contextmenu', onCtx);
     window.addEventListener('mousemove', onWindowMove);
+    window.addEventListener('mousemove', onWindowMovePlacement);
     window.addEventListener('mouseup',   onWindowUp);
+    window.addEventListener('mouseup',   onWindowUpPlacement);
+    window.addEventListener('keydown',   onKeyDown);
 
     return () => {
-      el.removeEventListener('mousemove',    onCanvasMove);
-      el.removeEventListener('mousedown',    onDown);
-      el.removeEventListener('click',        onClick);
-      el.removeEventListener('contextmenu',  onCtx);
+      el.removeEventListener('mousemove',   onCanvasMove);
+      el.removeEventListener('mousedown',   onDown);
+      el.removeEventListener('click',       onClick);
+      el.removeEventListener('contextmenu', onCtx);
       window.removeEventListener('mousemove', onWindowMove);
+      window.removeEventListener('mousemove', onWindowMovePlacement);
       window.removeEventListener('mouseup',   onWindowUp);
+      window.removeEventListener('mouseup',   onWindowUpPlacement);
+      window.removeEventListener('keydown',   onKeyDown);
     };
-  }, []); // ← empty deps — all callbacks read from refs, never stale
+  }, []);
 
-  // ── DRAWING HELPERS ──────────────────────────────────────────────────────
+  // ── DRAWING HELPERS ───────────────────────────────────────────────────
+
   function drawHandle(ctx: CanvasRenderingContext2D, y: number, RE: number, col: string, active: boolean) {
     ctx.save();
     ctx.strokeStyle = col; ctx.lineWidth = active ? 2 : 1.5; ctx.setLineDash([6, 4]);
@@ -397,8 +597,10 @@ export function PositionCanvas({
     ctx.restore();
   }
 
-  function drawTag(ctx: CanvasRenderingContext2D, y: number, RE: number,
-    txt: string, col: string, pid: string, role: HR['role'], newHits: HR[], active: boolean) {
+  function drawTag(
+    ctx: CanvasRenderingContext2D, y: number, RE: number,
+    txt: string, col: string, pid: string, role: HR['role'], newHits: HR[], active: boolean
+  ) {
     const H = 22, PAD = 8, CW = 18;
     ctx.save();
     ctx.font = FONT_B;
@@ -414,9 +616,11 @@ export function PositionCanvas({
     newHits.push({ pid, role, y, x1: cx, x2: cx + 14 });
   }
 
-  function drawBadge(ctx: CanvasRenderingContext2D, y: number, RE: number,
+  function drawBadge(
+    ctx: CanvasRenderingContext2D, y: number, RE: number,
     side: string, pnl: string, sCol: string, pCol: string,
-    pid: string, newHits: HR[], needSL: boolean, needTP: boolean) {
+    pid: string, newHits: HR[], needSL: boolean, needTP: boolean
+  ) {
     const H = 22, PAD = 8, CW = 20;
     ctx.save(); ctx.font = FONT_B;
     const sw = ctx.measureText(side).width, pw = ctx.measureText(pnl).width;
@@ -430,21 +634,27 @@ export function PositionCanvas({
     ctx.fillText(side, BX + PAD, y);
     // P&L
     ctx.fillStyle = pCol; ctx.fillText(pnl, BX + sw + PAD * 2 + PAD, y);
-    // +SL / +TP
+    // +SL / +TP buttons — prominent when missing
     let bx = BX + sw + PAD * 2 + pw + PAD * 2;
     if (needSL) {
-      rrect(ctx, bx, BY + 3, 26, H - 6, 2); ctx.fillStyle = 'rgba(239,68,68,0.18)'; ctx.fill();
+      rrect(ctx, bx, BY + 2, 26, H - 4, 2);
+      ctx.fillStyle = 'rgba(239,68,68,0.25)'; ctx.fill();
+      rrect(ctx, bx, BY + 2, 26, H - 4, 2);
+      ctx.strokeStyle = SL_COL; ctx.lineWidth = 1; ctx.stroke();
       ctx.fillStyle = SL_COL; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
       ctx.fillText('+SL', bx + 13, y);
       newHits.push({ pid, role: 'add_sl', y, x1: bx, x2: bx + 26 }); bx += 30;
     }
     if (needTP) {
-      rrect(ctx, bx, BY + 3, 26, H - 6, 2); ctx.fillStyle = 'rgba(34,197,94,0.18)'; ctx.fill();
+      rrect(ctx, bx, BY + 2, 26, H - 4, 2);
+      ctx.fillStyle = 'rgba(34,197,94,0.25)'; ctx.fill();
+      rrect(ctx, bx, BY + 2, 26, H - 4, 2);
+      ctx.strokeStyle = TP_COL; ctx.lineWidth = 1; ctx.stroke();
       ctx.fillStyle = TP_COL; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
       ctx.fillText('+TP', bx + 13, y);
       newHits.push({ pid, role: 'add_tp', y, x1: bx, x2: bx + 26 }); bx += 30;
     }
-    // ✕
+    // Close ✕
     const cx = BX + BW - CW + 2;
     ctx.fillStyle = TEXT_DIM; ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
     ctx.fillText('✕', cx + 7, y);

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { requireAuth, requirePermission } from '../middleware/auth.js';
 import { validateBody, schemas } from '../middleware/validate.js';
 import { supabase } from '../db/client.js';
+import { eventBus } from '../events/eventBus.js';
 
 import { TradingViewDatafeed } from '../realtime/tradingview.datafeed.js';
 
@@ -414,16 +415,47 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
   router.post('/positions/:id/stoploss', requireAuth, requirePermission('trade'), async (req, res) => {
     try {
       const realId = await accountService.resolveAccountId(req.user.accountId);
-      const result = await accountService.executionService.attachStopLoss(realId, req.params.id, parseFloat(req.body.triggerPrice));
-      res.json(result);
+      const triggerPrice = parseFloat(req.body.triggerPrice);
+      const result = await accountService.executionService.attachStopLoss(realId, req.params.id, triggerPrice);
+
+      // Immediately broadcast position_update so the chart SL line appears
+      // without waiting for the next MTM tick or page refresh.
+      try {
+        const positions = await accountService.getPositions(realId);
+        const pos = positions.find(p => p.id === req.params.id);
+        if (pos) {
+          eventBus.publish('position.updated', {
+            ...pos,
+            stopLoss: triggerPrice,
+            pnl: pos.pnl ?? 0,
+          }, { accountId: realId });
+        }
+      } catch (_e) { /* non-critical — order already placed */ }
+
+      res.json({ ...result, stopLoss: triggerPrice });
     } catch (err) { res.status(500).json({ message: err.message }); }
   });
 
   router.post('/positions/:id/takeprofit', requireAuth, requirePermission('trade'), async (req, res) => {
     try {
       const realId = await accountService.resolveAccountId(req.user.accountId);
-      const result = await accountService.executionService.attachTakeProfit(realId, req.params.id, parseFloat(req.body.targetPrice));
-      res.json(result);
+      const targetPrice = parseFloat(req.body.targetPrice);
+      const result = await accountService.executionService.attachTakeProfit(realId, req.params.id, targetPrice);
+
+      // Immediately broadcast position_update so the chart TP line appears.
+      try {
+        const positions = await accountService.getPositions(realId);
+        const pos = positions.find(p => p.id === req.params.id);
+        if (pos) {
+          eventBus.publish('position.updated', {
+            ...pos,
+            takeProfit: targetPrice,
+            pnl: pos.pnl ?? 0,
+          }, { accountId: realId });
+        }
+      } catch (_e) { /* non-critical — order already placed */ }
+
+      res.json({ ...result, takeProfit: targetPrice });
     } catch (err) { res.status(500).json({ message: err.message }); }
   });
 
@@ -476,6 +508,20 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
           results.takeProfit = { status: 'stored', price: tpPrice };
         }
       }
+
+      // Broadcast position_update so chart lines appear immediately
+      try {
+        const positions = await accountService.getPositions(realId);
+        const pos = positions.find(p => p.id === req.params.id);
+        if (pos) {
+          eventBus.publish('position.updated', {
+            ...pos,
+            ...(stopLoss  != null ? { stopLoss:  parseFloat(stopLoss)  } : {}),
+            ...(takeProfit != null ? { takeProfit: parseFloat(takeProfit) } : {}),
+            pnl: pos.pnl ?? 0,
+          }, { accountId: realId });
+        }
+      } catch (_e) { /* non-critical */ }
 
       res.json({ status: 'updated', ...results });
     } catch (err) { res.status(500).json({ message: err.message }); }
@@ -601,10 +647,18 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
     // Use CandleService for historical data from Angel One API
     if (candleService) {
       try {
+        // Always register the exchange passed by the frontend so candle lookups use the correct exchange.
+        // This is critical for NFO futures, MCX commodities, and CDS currency pairs — without this
+        // registration the service falls back to 'NSE' which returns empty or wrong data.
+        const resolvedExchange = exchange ? String(exchange) : undefined;
+        if (resolvedExchange && token) {
+          candleService.registerTokenExchange(String(token), resolvedExchange);
+        }
+
         const candles = await candleService.getHistoricalCandles(
           token,
           tf,
-          exchange ? String(exchange) : undefined,
+          resolvedExchange,
           from ? parseInt(String(from), 10) : undefined,
           to ? parseInt(String(to), 10) : undefined
         );
