@@ -429,29 +429,26 @@ export class OptionChainService {
   // ── Auth helpers ──────────────────────────────────────────────────────────
 
   /**
-   * Ensure JWT token is available — waits up to 15 seconds if refresh is in progress.
+   * Ensure JWT token is available.
+   * Attempts one refresh via callback if token is missing — does NOT block.
+   * Returns immediately so the HTTP route can send a quick 503 instead of
+   * holding the connection open for up to 15 seconds.
    */
   async _ensureToken() {
-    if (this.jwtToken) return; // already have it
+    if (this.jwtToken) return; // already have it — fast path
 
-    // Try refresh callback first
+    // One attempt via refresh callback (typically < 1s if session is valid)
     if (this._refreshCallback) {
       try {
         this.jwtToken = await this._refreshCallback();
         if (this.jwtToken) return;
-      } catch (_) {}
-    }
-
-    // Poll for token up to 15s (token may arrive via angelFeed.connect() in background)
-    for (let i = 0; i < 15; i++) {
-      await this._sleep(1000);
-      if (this.jwtToken) return;
-      if (this._refreshCallback) {
-        try { this.jwtToken = await this._refreshCallback(); } catch (_) {}
-        if (this.jwtToken) return;
+      } catch (_) {
+        // refresh failed — return immediately, caller handles missing token
       }
     }
-    console.warn('[OptionChain] _ensureToken: no JWT after 15s wait');
+    // Token unavailable — return without blocking.
+    // The route will return 503 and the frontend will retry.
+    console.warn('[OptionChain] _ensureToken: no JWT available');
   }
 
   _sleep(ms) { return new Promise(r => setTimeout(r, ms)); }

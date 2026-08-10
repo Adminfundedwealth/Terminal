@@ -164,11 +164,20 @@ export function calculateBollinger(data: OHLC[], period = 20, stdDev = 2): Bolli
 
 export function calculateVWAP(data: OHLC[]): { time: number; value: number }[] {
   const result: { time: number; value: number }[] = [];
+  // Check whether this instrument has real volume data.
+  // For pure index instruments, Angel One returns volume=0 for all bars.
+  // Using volume=1 as an equal-weight fallback would silently produce a
+  // plain typical-price moving average, which is NOT a true VWAP.
+  // Return empty so the indicator is hidden on volume-unavailable instruments.
+  const hasVolume = data.some(bar => (bar.volume || 0) > 0);
+  if (!hasVolume) return [];
+
   let cumTPV = 0, cumVol = 0;
   for (const bar of data) {
+    if ((bar.volume || 0) === 0) continue; // skip zero-volume bars
     const tp = (bar.high + bar.low + bar.close) / 3;
-    cumTPV += tp * (bar.volume || 1);
-    cumVol += bar.volume || 1;
+    cumTPV += tp * bar.volume;
+    cumVol += bar.volume;
     result.push({ time: bar.time, value: cumTPV / cumVol });
   }
   return result;
@@ -177,13 +186,16 @@ export function calculateVWAP(data: OHLC[]): { time: number; value: number }[] {
 // ─── Volume ──────────────────────────────────────────────────
 
 export function extractVolume(data: OHLC[]): { time: number; value: number; color: string }[] {
-  // Find max volume across all bars so we can normalize. For indices that
-  // report 0 volume from the broker, fall back to a placeholder of 1 so
-  // the bar is still rendered (otherwise value:0 = invisible histogram bar).
-  const maxVol = data.reduce((m, b) => Math.max(m, b.volume || 0), 0);
+  // If ALL bars have zero volume (e.g. pure index instruments — NIFTY, BANKNIFTY,
+  // FINNIFTY, MIDCPNIFTY, SENSEX), Angel One returns c[5]=0 for every candle.
+  // In that case return an empty array so ChartPanel can hide the volume pane
+  // and show "Volume unavailable" instead of fake flat bars.
+  const hasVolume = data.some(bar => (bar.volume || 0) > 0);
+  if (!hasVolume) return [];
+
   return data.map(bar => ({
     time: bar.time,
-    value: bar.volume > 0 ? bar.volume : (maxVol === 0 ? 1 : 0),
+    value: bar.volume || 0,
     color: bar.close >= bar.open ? 'rgba(38,166,154,0.5)' : 'rgba(239,83,80,0.5)',
   }));
 }

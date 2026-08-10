@@ -13,7 +13,7 @@ export class OIAnalyticsService {
   async getOIAnalytics(symbol = 'NIFTY', expiry = null) {
     try {
       // Get option chain data
-      const chainData = await this.ocs.getChain(symbol, expiry);
+      const chainData = await this.ocs.getOptionChain(symbol, expiry);
       if (!chainData || !chainData.length) {
         return { strikes: [], summary: null };
       }

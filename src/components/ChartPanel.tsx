@@ -3,6 +3,7 @@ import { createChart, type IChartApi, type ISeriesApi, ColorType, CrosshairMode 
 import { useAppStore } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
 import { getHistoricalData } from '@/services/api';
+import { wsService } from '@/services/websocket';
 import { cn, timeframeToLabel, formatPrice } from '@/utils/helpers';
 import type { ChartType, Timeframe, OHLC } from '@/types';
 import { Maximize2 } from 'lucide-react';
@@ -58,6 +59,8 @@ export function ChartPanel() {
 
   // Permanent in-chart volume histogram (always visible, like TradingView)
   const volumeSeriesRef = useRef<any>(null);
+  // True when the active instrument has no traded volume (pure index)
+  const [volumeUnavailable, setVolumeUnavailable] = useState(false);
 
   // Legacy fixed refs kept for layout (RSI, MACD sub-chart containers)
   const rsiChartRef = useRef<IChartApi | null>(null);
@@ -140,6 +143,17 @@ export function ChartPanel() {
   };
 
   const quote = useMarketStore((s) => activeSymbol ? s.quotes[activeSymbol.token] : undefined);
+
+  // Subscribe the active symbol with correct exchange hint so NFO/MCX/CDS tokens
+  // get live ticks from the right Angel One feed segment.
+  useEffect(() => {
+    if (!activeSymbol?.token) return;
+    const hints = activeSymbol.exchange && activeSymbol.exchange !== 'NSE'
+      ? { [activeSymbol.token]: activeSymbol.exchange }
+      : undefined;
+    wsService.subscribe([activeSymbol.token], hints);
+    return () => { wsService.unsubscribe([activeSymbol.token]); };
+  }, [activeSymbol?.token, activeSymbol?.exchange]);
 
   // Load drawings for active symbol
   useEffect(() => {
@@ -958,26 +972,31 @@ export function ChartPanel() {
       seriesRef.current = series as any;
     }
 
-    // ── Permanent volume bars (always visible, bottom 20% of main chart) ──
-    // Use dedicated priceScaleId 'vol' so it never conflicts with overlay
-    // indicators (priceScaleId:'') or the right price scale.
-    // rightPriceScale bottom:0.22 reserves the space; 'vol' scale fills it.
-    const vs = chartRef.current.addHistogramSeries({
-      priceFormat: { type: 'volume' },
-      priceScaleId: 'vol',
-      lastValueVisible: false,
-      priceLineVisible: false,
-      color: 'rgba(38,166,154,0.4)',
-    });
-    vs.priceScale().applyOptions({
-      scaleMargins: { top: 0.85, bottom: 0 },
-      borderVisible: false,
-    });
+    // ── Permanent volume bars ─────────────────────────────────────────────
+    // extractVolume() returns [] when all bars have zero volume (pure indices).
+    // In that case we skip the histogram entirely and show a "Volume unavailable"
+    // label in the UI instead of fake flat bars.
     const volData = extractVolume(data);
     if (volData.length > 0) {
+      const vs = chartRef.current.addHistogramSeries({
+        priceFormat: { type: 'volume' },
+        priceScaleId: 'vol',
+        lastValueVisible: false,
+        priceLineVisible: false,
+        color: 'rgba(38,166,154,0.4)',
+      });
+      vs.priceScale().applyOptions({
+        scaleMargins: { top: 0.85, bottom: 0 },
+        borderVisible: false,
+      });
       vs.setData(volData as any);
+      volumeSeriesRef.current = vs;
+      setVolumeUnavailable(false);
+    } else {
+      // No real volume — do not create a histogram series
+      volumeSeriesRef.current = null;
+      setVolumeUnavailable(true);
     }
-    volumeSeriesRef.current = vs;
 
     chartRef.current.timeScale().fitContent();
   };
@@ -1134,9 +1153,12 @@ export function ChartPanel() {
 
     switch (ind.type) {
       case 'volume': {
-        const vs = sc.addHistogramSeries({ priceFormat: { type: 'volume' }, priceScaleId: '' });
-        vs.priceScale().applyOptions({ scaleMargins: { top: 0.1, bottom: 0 } });
-        vs.setData(extractVolume(data) as any);
+        const volIndData = extractVolume(data);
+        if (volIndData.length > 0) {
+          const vs = sc.addHistogramSeries({ priceFormat: { type: 'volume' }, priceScaleId: '' });
+          vs.priceScale().applyOptions({ scaleMargins: { top: 0.1, bottom: 0 } });
+          vs.setData(volIndData as any);
+        }
         break;
       }
       case 'rsi': {
@@ -1302,6 +1324,29 @@ export function ChartPanel() {
   useEffect(() => {
     if (!seriesRef.current || !quote?.ltp) return;
 
+    // Guard: don't update chart if no historical data is loaded yet.
+    // Without this, the first live tick creates a single isolated candle on an
+    // empty chart which lightweight-charts auto-scales to fill the full viewport,
+    // producing the massive "big candle" appearance.
+    if (rawDataRef.current.length === 0) return;
+
+    const ltp = quote.ltp;
+
+    // Sanity-check: LTP must be a positive finite number.
+    if (!isFinite(ltp) || ltp <= 0) return;
+
+    // Sanity-check: LTP should be within ±50% of the last historical close.
+    // This catches bad ticks (e.g. stale/wrong exchange data) that would
+    // cause enormous candles. The ±50% band is wide enough for real moves.
+    const lastBar = rawDataRef.current[rawDataRef.current.length - 1];
+    if (lastBar && lastBar.close > 0) {
+      const ratio = ltp / lastBar.close;
+      if (ratio < 0.5 || ratio > 1.5) {
+        console.warn(`[ChartPanel] Ignoring suspicious tick: ltp=${ltp} vs lastClose=${lastBar.close} (ratio=${ratio.toFixed(3)})`);
+        return;
+      }
+    }
+
     // Snap timestamp to the start of the current candle window
     const resMinutes = timeframeToMinutes(timeframe);
     const nowMs = Date.now();
@@ -1316,7 +1361,9 @@ export function ChartPanel() {
       candleTime = snapped * 60;
     }
 
-    const ltp = quote.ltp;
+    // candleTime must be >= last historical bar time to avoid overwriting past data
+    if (lastBar && candleTime < lastBar.time) candleTime = lastBar.time;
+
     // quote.volume is cumulative day volume from Angel One — use it directly for display
     // The candle volume will be updated by the server-side candle aggregator
     const tickVolume = quote.volume || 0;
@@ -1328,8 +1375,9 @@ export function ChartPanel() {
       let updatedBar: { time: number; open: number; high: number; low: number; close: number; volume: number };
 
       if (!prevLiveCandle || prevLiveCandle.time !== candleTime) {
-        // New candle — open at current LTP
-        updatedBar = { time: candleTime, open: ltp, high: ltp, low: ltp, close: ltp, volume: tickVolume };
+        // New candle — open at last historical close (or current LTP if no history)
+        const openPrice = (lastBar && lastBar.close > 0) ? lastBar.close : ltp;
+        updatedBar = { time: candleTime, open: openPrice, high: Math.max(openPrice, ltp), low: Math.min(openPrice, ltp), close: ltp, volume: tickVolume };
       } else {
         // Update existing live candle — volume grows as new ticks arrive
         updatedBar = {
@@ -1346,11 +1394,12 @@ export function ChartPanel() {
       (seriesRef.current as any).update(updatedBar);
 
       // Update permanent volume histogram with live candle volume.
-      // Always update even when volume is 0 (indices) so the bar is visible.
-      if (volumeSeriesRef.current) {
+      // Only update when the series exists (real traded instruments).
+      // For pure index instruments volumeSeriesRef.current is null — do nothing.
+      if (volumeSeriesRef.current && updatedBar.volume > 0) {
         volumeSeriesRef.current.update({
           time: candleTime,
-          value: updatedBar.volume > 0 ? updatedBar.volume : 1,
+          value: updatedBar.volume,
           color: ltp >= updatedBar.open ? 'rgba(38,166,154,0.5)' : 'rgba(239,83,80,0.5)',
         });
       }
@@ -1577,6 +1626,16 @@ export function ChartPanel() {
                     Retry
                   </button>
                 </div>
+              </div>
+            )}
+            {/* Volume unavailable label — shown for pure index instruments (NIFTY, BANKNIFTY, etc.)
+                Angel One does not provide traded volume for computed index tokens.
+                This label replaces the misleading flat placeholder bars. */}
+            {volumeUnavailable && !isLoading && !noData && (
+              <div className="absolute bottom-[2px] left-2 z-[5] pointer-events-none">
+                <span className="text-[10px] text-fw-text-muted/50 font-mono">
+                  Volume — N/A (index)
+                </span>
               </div>
             )}
 
