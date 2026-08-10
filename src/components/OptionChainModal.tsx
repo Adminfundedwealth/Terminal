@@ -1,59 +1,157 @@
-﻿import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+﻿/**
+ * OptionChainModal.tsx — FundedWealth Trading Terminal
+ *
+ * Dynamic option chain panel.
+ * - Works for ANY underlying that has real NFO/BFO option contracts.
+ * - Capability is proven by the chain response itself, not by a hardcoded
+ *   symbol list.  Instruments whose segment is MCX or CDS receive an instant
+ *   "not available" state without making a backend request.
+ * - 15-second wall-clock budget: one timer from first attempt to success/error.
+ *   Retries run inside the budget; Retry Now starts a fresh budget.
+ * - Module-level caches reduce repeat latency without persisting stale data.
+ */
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useAppStore } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
 import { getOptionChain, getExpiries } from '@/services/api';
 import { cn, formatPrice, formatNumber } from '@/utils/helpers';
 import { useTradingStore } from '@/store/tradingStore';
-import type { OptionChainEntry } from '@/types';
+import type { OptionChainEntry, Instrument } from '@/types';
 
-const INDEX_SYMBOLS = ['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'MIDCPNIFTY', 'SENSEX'];
-const INDEX_TOKENS: Record<string, string> = {
-  NIFTY: '99926000', BANKNIFTY: '99926009', FINNIFTY: '99926037',
-  MIDCPNIFTY: '99926074', SENSEX: '99919000',
-};
-const LOT_SIZES: Record<string, number> = {
-  NIFTY: 50, BANKNIFTY: 15, FINNIFTY: 25, MIDCPNIFTY: 75, SENSEX: 10,
-};
+// ─── Constants ────────────────────────────────────────────────────────────────
+
 const STRIKES_AROUND_ATM = 20;
 
-// Retry schedule: 2s, 3s, 4s, 5s, 5s, 5s … capped at 5s
-const MAX_AUTO_RETRIES = 6;
-const retryDelay = (attempt: number) => Math.min((attempt + 1) * 1500, 5000);
+// Retry schedule within the 15-second budget
+const MAX_AUTO_RETRIES = 4;
+const retryDelay = (attempt: number) => Math.min((attempt + 1) * 1500, 4000);
 
-// Hard wall-clock timeout: if no data after this many ms, stop spinner and show error
-const LOAD_TIMEOUT_MS = 30_000;
+// Hard wall-clock budget from first load attempt to success/error.
+// Retries do NOT reset this clock.  Retry Now starts a NEW budget.
+const TOTAL_BUDGET_MS = 15_000;
 
-// ── Fallback IST-aware expiry calculation ──────────────────────────────────
-// Uses IST offset (+5:30) for day-of-week calculation so the result is
-// always the correct local date, regardless of the server's timezone.
-function buildFallbackExpiries(sym: string): string[] {
-  const dayMap: Record<string, number> = {
-    NIFTY: 2, BANKNIFTY: 3, FINNIFTY: 2, MIDCPNIFTY: 1, SENSEX: 5,
-  };
-  const targetDay = dayMap[sym] ?? 4;
+// ─── Module-level caches (survive symbol switches, cleared on page reload) ───
 
-  // IST = UTC + 5:30
+interface ExpiryCache { expiries: string[]; cachedAt: number }
+interface ChainCache  { chain: OptionChainEntry[]; cachedAt: number }
+
+const _expiryCache = new Map<string, ExpiryCache>();
+const _chainCache  = new Map<string, ChainCache>();
+const EXPIRY_CACHE_TTL = 5 * 60 * 1000;  // 5 minutes
+const CHAIN_CACHE_TTL  = 20 * 1000;      // 20 seconds (matches backend 30s TTL)
+
+// ─── Segments that are known NOT to have option chains via current backend ────
+// The backend optionChainService._searchScrip() uses exchange:'NFO' only.
+// MCX options and CDS options require different exchange parameters that are
+// not implemented in the current optionChainService.  Show instant unavailable.
+const UNSUPPORTED_SEGMENTS = new Set(['MCX', 'CDS']);
+
+// ─── Underlying derivation ────────────────────────────────────────────────────
+/**
+ * Derive the canonical underlying symbol from any instrument.
+ * Uses instrument metadata first; falls back to symbol string parsing.
+ *
+ * Examples:
+ *   RELIANCE FUT Jun 2026  →  RELIANCE
+ *   NIFTY 24500 CE         →  NIFTY
+ *   BANKNIFTY FUT JUL      →  BANKNIFTY
+ *   NIFTY                  →  NIFTY
+ *   RELIANCE               →  RELIANCE
+ */
+function deriveUnderlying(instrument: Instrument): string {
+  const sym = instrument.symbol;
+
+  // If instrument master provides explicit underlying via optionType, it IS
+  // already an option contract — strip strike and type
+  if (instrument.optionType === 'CE' || instrument.optionType === 'PE'
+      || instrument.instrumentType === 'CE' || instrument.instrumentType === 'PE') {
+    // e.g. "NIFTY 24500 CE" → strip strike + CE/PE
+    return sym.replace(/\s+\d+(?:\.\d+)?\s+(CE|PE)\s*$/i, '').trim().toUpperCase();
+  }
+
+  // Futures: strip " FUT" and anything after (month/expiry label)
+  if (instrument.instrumentType === 'FUT' || sym.includes(' FUT')) {
+    return sym.replace(/\s+FUT.*$/i, '').trim().toUpperCase();
+  }
+
+  // Already a plain underlying (EQ, Index)
+  return sym.toUpperCase();
+}
+
+/**
+ * Lot size for option orders — from the instrument master, never hardcoded.
+ * For FUT instruments: the futures lot size equals the options lot size.
+ * For EQ instruments: lotSize may be 1 (stock) or 50/15/25 etc (index).
+ */
+function deriveLotSize(instrument: Instrument): number {
+  return instrument.lotSize || 1;
+}
+
+/**
+ * Option exchange for strike order routing.
+ * BSE segment (SENSEX) → options trade on BFO.
+ * Everything else (NSE, NFO, etc.) → NSE/NFO.
+ */
+function deriveOptionExchange(instrument: Instrument): string {
+  return (instrument.segment === 'BSE' || instrument.exchange === 'BSE') ? 'BSE' : 'NSE';
+}
+
+// ─── IST-aware fallback expiry generator ─────────────────────────────────────
+/**
+ * Generic fallback expiry calculation when the backend returns nothing.
+ * Uses UTC+5:30 for correct IST day-of-week.
+ * For indices (lotSize > 1): weekly expiries starting next Thursday.
+ * For stocks (lotSize === 1): monthly last-Thursday (3 months).
+ * This is a last-resort fallback — real expiries come from getExpiries().
+ */
+function buildFallbackExpiries(underlying: string, lotSize: number): string[] {
   const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
   const nowIST = new Date(Date.now() + IST_OFFSET_MS);
-
   const fallback: string[] = [];
-  for (let i = 0; i < 6; i++) {
-    const d = new Date(nowIST);
-    const daysUntil = (targetDay - d.getUTCDay() + 7) % 7 || 7;
-    d.setUTCDate(d.getUTCDate() + daysUntil + i * 7);
-    const iso = d.toISOString().split('T')[0]; // YYYY-MM-DD in IST
-    fallback.push(iso);
+
+  if (lotSize > 1) {
+    // Index-style: weekly — use Thursday as generic fallback (real day from backend)
+    for (let i = 0; i < 6; i++) {
+      const d = new Date(nowIST);
+      const daysUntil = (4 - d.getUTCDay() + 7) % 7 || 7; // 4 = Thursday
+      d.setUTCDate(d.getUTCDate() + daysUntil + i * 7);
+      fallback.push(d.toISOString().split('T')[0]);
+    }
+  } else {
+    // Stock-style: monthly last Thursday
+    for (let i = 0; i < 3; i++) {
+      // Last day of month i+1 ahead (IST-based)
+      const y = nowIST.getUTCFullYear();
+      const m = nowIST.getUTCMonth() + i + 1; // +1 for next month
+      const lastDay = new Date(Date.UTC(y, m + 1, 0)); // day 0 of month+2 = last of month+1
+      while (lastDay.getUTCDay() !== 4) lastDay.setUTCDate(lastDay.getUTCDate() - 1);
+      fallback.push(lastDay.toISOString().split('T')[0]);
+    }
   }
   return fallback;
 }
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export function OptionChainModal() {
   const { activeSymbol, setActiveSymbol } = useAppStore();
   const { setOrderForm, setSelectedContract, selectedContract } = useTradingStore();
   const quotes = useMarketStore((s) => s.quotes);
 
+  // ── Derived from activeSymbol — recalculated on every render, no stale state
+  const underlying = useMemo(() =>
+    activeSymbol ? deriveUnderlying(activeSymbol) : '', [activeSymbol]);
+  const lotSize = useMemo(() =>
+    activeSymbol ? deriveLotSize(activeSymbol) : 1, [activeSymbol]);
+  const optExchange = useMemo(() =>
+    activeSymbol ? deriveOptionExchange(activeSymbol) : 'NSE', [activeSymbol]);
+
+  // Is this instrument segment known to be unsupported?
+  const segmentUnsupported = useMemo(() =>
+    activeSymbol ? UNSUPPORTED_SEGMENTS.has(activeSymbol.segment) : false,
+  [activeSymbol]);
+
   // ── UI state ──────────────────────────────────────────────────────────────
-  const [symbol, setSymbol] = useState('NIFTY');
   const [expiries, setExpiries] = useState<string[]>([]);
   const [selectedExpiry, setSelectedExpiry] = useState('');
   const [chain, setChain] = useState<OptionChainEntry[]>([]);
@@ -61,43 +159,38 @@ export function OptionChainModal() {
     | { type: 'idle' }
     | { type: 'loading'; label: string; attempt: number }
     | { type: 'error'; message: string }
+    | { type: 'unsupported'; instrument: string }
     | { type: 'ready' }
   >({ type: 'idle' });
 
-  // ── Internal control refs (never cause re-render) ─────────────────────────
+  // ── Control refs ──────────────────────────────────────────────────────────
   const isMountedRef     = useRef(true);
-  // Monotonically-increasing "session" counter. Incremented on every
-  // symbol change. Any async operation that captures an older session
-  // number is stale and must discard its result.
+  // Monotonic session counter — incremented on every underlying change.
+  // Every async callback checks session === sessionRef.current before touching state.
   const sessionRef       = useRef(0);
   const retryTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const timeoutTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Tracks whether a fetch is in flight for the current session.
+  // Budget timer: one wall-clock deadline per load attempt cycle.
+  // NOT reset by retries.  Reset only by Retry Now or symbol change.
+  const budgetTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Tracks whether a fetch is in flight (prevents simultaneous requests).
   const fetchInFlightRef = useRef(false);
+  // Records wall-clock start of the current budget period.
+  const budgetStartRef   = useRef(0);
 
-  // ── Lifecycle ──────────────────────────────────────────────────────────────
+  // ── Lifecycle ─────────────────────────────────────────────────────────────
   useEffect(() => {
     isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-      clearPendingTimers();
-    };
+    return () => { isMountedRef.current = false; clearAll(); };
   }, []);
 
-  // ── Symbol auto-sync from active symbol ──────────────────────────────────
-  useEffect(() => {
-    if (!activeSymbol) return;
-    const sym = activeSymbol.symbol.replace(/\s.*/, '').toUpperCase();
-    if (INDEX_SYMBOLS.includes(sym) && sym !== symbol) setSymbol(sym);
-  }, [activeSymbol?.symbol]);
-
-  // ── Spot price ─────────────────────────────────────────────────────────────
+  // ── Spot price — use active symbol's token directly ───────────────────────
   const spotPrice = useMemo(() => {
-    const q = quotes[INDEX_TOKENS[symbol]];
+    if (!activeSymbol) return 0;
+    const q = quotes[activeSymbol.token];
     return q?.ltp || 0;
-  }, [symbol, quotes]);
+  }, [activeSymbol?.token, quotes]);
 
-  // ── ATM-filtered chain ─────────────────────────────────────────────────────
+  // ── ATM-filtered chain ────────────────────────────────────────────────────
   const filteredChain = useMemo(() => {
     if (chain.length === 0 || spotPrice === 0) return chain;
     let atmIdx = 0, minDiff = Infinity;
@@ -110,19 +203,29 @@ export function OptionChainModal() {
     return chain.slice(s, e);
   }, [chain, spotPrice]);
 
-  // ── Timer helpers ──────────────────────────────────────────────────────────
-  const clearPendingTimers = useCallback(() => {
-    if (retryTimerRef.current)   { clearTimeout(retryTimerRef.current);   retryTimerRef.current   = null; }
-    if (timeoutTimerRef.current) { clearTimeout(timeoutTimerRef.current); timeoutTimerRef.current = null; }
+  // ── Timer management ──────────────────────────────────────────────────────
+  const clearAll = useCallback(() => {
+    if (retryTimerRef.current)  { clearTimeout(retryTimerRef.current);  retryTimerRef.current  = null; }
+    if (budgetTimerRef.current) { clearTimeout(budgetTimerRef.current); budgetTimerRef.current = null; }
     fetchInFlightRef.current = false;
   }, []);
 
-  // ── Core chain loader — takes sym + expiry explicitly, no closure capture ──
-  //
-  // `session` is the value of sessionRef.current at call time.
-  // Any state update is guarded by:  session === sessionRef.current
-  // This guarantees a NIFTY response cannot overwrite a BANKNIFTY state.
-  //
+  const startBudget = useCallback((session: number) => {
+    if (budgetTimerRef.current) clearTimeout(budgetTimerRef.current);
+    budgetStartRef.current = Date.now();
+    budgetTimerRef.current = setTimeout(() => {
+      if (!isMountedRef.current) return;
+      if (session !== sessionRef.current) return;
+      fetchInFlightRef.current = false;
+      if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null; }
+      setStatus({ type: 'error', message: 'Option chain data unavailable. Market may be closed or data service is starting up.' });
+    }, TOTAL_BUDGET_MS);
+  }, []);
+
+  const budgetExpired = useCallback(() =>
+    Date.now() - budgetStartRef.current >= TOTAL_BUDGET_MS, []);
+
+  // ── Core chain loader ─────────────────────────────────────────────────────
   const loadChain = useCallback(async (
     sym: string,
     expiry: string,
@@ -130,77 +233,64 @@ export function OptionChainModal() {
     session: number,
   ) => {
     if (!isMountedRef.current) return;
-    if (session !== sessionRef.current) return; // stale session
-    if (fetchInFlightRef.current) return;       // already fetching
+    if (session !== sessionRef.current) return;
+    if (fetchInFlightRef.current) return;
+    if (budgetExpired()) return; // budget already gone
+
+    // Check module-level chain cache
+    const ck = `${sym}:${expiry}`;
+    const cc = _chainCache.get(ck);
+    if (cc && (Date.now() - cc.cachedAt) < CHAIN_CACHE_TTL) {
+      setChain(cc.chain);
+      setStatus({ type: 'ready' });
+      if (budgetTimerRef.current) { clearTimeout(budgetTimerRef.current); budgetTimerRef.current = null; }
+      return;
+    }
 
     fetchInFlightRef.current = true;
     setStatus({ type: 'loading', label: `${sym} · ${expiry}`, attempt });
 
-    // Hard timeout — clears itself on success/error
-    if (timeoutTimerRef.current) clearTimeout(timeoutTimerRef.current);
-    timeoutTimerRef.current = setTimeout(() => {
-      if (!isMountedRef.current) return;
-      if (session !== sessionRef.current) return;
-      fetchInFlightRef.current = false;
-      setStatus({ type: 'error', message: 'Option chain data unavailable. Market may be closed or data service is starting up.' });
-    }, LOAD_TIMEOUT_MS);
-
     try {
       const data = await getOptionChain(sym, expiry);
 
-      // Clear hard timeout — we got a response
-      if (timeoutTimerRef.current) { clearTimeout(timeoutTimerRef.current); timeoutTimerRef.current = null; }
       fetchInFlightRef.current = false;
-
       if (!isMountedRef.current) return;
-      if (session !== sessionRef.current) return; // symbol changed while fetching
+      if (session !== sessionRef.current) return;
+      if (budgetExpired()) return;
 
       if (data && data.length > 0) {
+        _chainCache.set(ck, { chain: data, cachedAt: Date.now() });
         setChain(data);
         setStatus({ type: 'ready' });
+        if (budgetTimerRef.current) { clearTimeout(budgetTimerRef.current); budgetTimerRef.current = null; }
         return;
       }
 
-      // Empty response — treat as retryable
-      scheduleRetry(sym, expiry, attempt, session, 'empty');
+      // Empty → retryable (503 is handled via error path; empty means chain not yet ready)
+      scheduleRetry(sym, expiry, attempt, session);
     } catch (err: any) {
-      if (timeoutTimerRef.current) { clearTimeout(timeoutTimerRef.current); timeoutTimerRef.current = null; }
       fetchInFlightRef.current = false;
-
       if (!isMountedRef.current) return;
       if (session !== sessionRef.current) return;
-
-      scheduleRetry(sym, expiry, attempt, session, err);
+      if (budgetExpired()) return;
+      scheduleRetry(sym, expiry, attempt, session);
     }
-  }, []);
+  }, [budgetExpired]);
 
   const scheduleRetry = useCallback((
     sym: string,
     expiry: string,
     attempt: number,
     session: number,
-    reason: any,
   ) => {
     if (!isMountedRef.current) return;
     if (session !== sessionRef.current) return;
-
-    const isRetryable =
-      reason === 'empty' ||
-      reason?.message === 'empty' ||
-      reason?.message === 'Failed to fetch' ||
-      reason?.retryable === true ||
-      reason?.status === 503 ||
-      reason?.status === 429 ||
-      (reason?.status >= 500);
+    if (budgetExpired()) return; // let the budget timer handle the error state
 
     if (attempt >= MAX_AUTO_RETRIES) {
-      const msg503 = typeof reason?.message === 'string' && reason.message.toLowerCase().includes('market');
-      const message = msg503
-        ? 'Option chain data unavailable. Market may be closed.'
-        : isRetryable
-          ? 'Option chain data unavailable. Market may be closed or data service is starting up.'
-          : 'Could not load option chain. Please check your connection.';
-      setStatus({ type: 'error', message });
+      // Out of retries within budget — show error (budget timer may fire first anyway)
+      setStatus({ type: 'error', message: 'Option chain data unavailable. Market may be closed or data service is starting up.' });
+      if (budgetTimerRef.current) { clearTimeout(budgetTimerRef.current); budgetTimerRef.current = null; }
       return;
     }
 
@@ -208,100 +298,120 @@ export function OptionChainModal() {
     retryTimerRef.current = setTimeout(() => {
       if (!isMountedRef.current) return;
       if (session !== sessionRef.current) return;
+      if (budgetExpired()) return;
       loadChain(sym, expiry, attempt + 1, session);
     }, delay);
 
-    // Keep spinner visible during retry wait — update attempt counter
     setStatus({ type: 'loading', label: `${sym} · ${expiry}`, attempt: attempt + 1 });
-  }, [loadChain]);
+  }, [budgetExpired, loadChain]);
 
-  // ── Expiry + chain loader — called when symbol changes ────────────────────
-  const startSymbolLoad = useCallback(async (sym: string, session: number) => {
+  // ── Expiry discovery + chain kick-off ─────────────────────────────────────
+  const startLoad = useCallback(async (sym: string, session: number) => {
     if (!isMountedRef.current) return;
     if (session !== sessionRef.current) return;
 
+    // Start the wall-clock budget NOW — everything must fit inside it
+    startBudget(session);
+
     let expiryList: string[] = [];
 
-    try {
-      const data = await getExpiries(sym);
-      if (!isMountedRef.current) return;
-      if (session !== sessionRef.current) return;
+    // Check module-level expiry cache first
+    const ec = _expiryCache.get(sym);
+    if (ec && (Date.now() - ec.cachedAt) < EXPIRY_CACHE_TTL) {
+      expiryList = ec.expiries;
+    } else {
+      try {
+        const data = await getExpiries(sym);
+        if (!isMountedRef.current) return;
+        if (session !== sessionRef.current) return;
 
-      if (data && data.length > 0) {
-        expiryList = data;
+        // The /market/expiries endpoint ALWAYS returns something (fallback in api.js).
+        // The optionChainService expiries come from real searchScrip discovery —
+        // those are the real ones.  The instrumentService fallback also returns dates.
+        // We use whatever comes back; capability is proven by getOptionChain result.
+        if (data && data.length > 0) {
+          expiryList = data;
+          _expiryCache.set(sym, { expiries: data, cachedAt: Date.now() });
+        }
+      } catch {
+        // fall through to client-side fallback
       }
-    } catch {
-      // fall through to fallback
     }
 
     if (!isMountedRef.current) return;
     if (session !== sessionRef.current) return;
+    if (budgetExpired()) return;
 
     if (expiryList.length === 0) {
-      expiryList = buildFallbackExpiries(sym);
+      // Last-resort fallback using IST-aware calculation
+      expiryList = buildFallbackExpiries(sym, lotSize);
     }
 
     setExpiries(expiryList);
     const firstExpiry = expiryList[0];
     setSelectedExpiry(firstExpiry);
 
-    // Load chain directly — no useEffect dependency on selectedExpiry.
-    // Passing sym and expiry explicitly eliminates all stale closure risk.
+    // Load chain — passes sym + expiry explicitly, no closure-captured stale values
     loadChain(sym, firstExpiry, 0, session);
-  }, [loadChain]);
+  }, [startBudget, budgetExpired, loadChain, lotSize]);
 
-  // ── Trigger: symbol changes ───────────────────────────────────────────────
+  // ── Trigger: underlying changes ───────────────────────────────────────────
   useEffect(() => {
+    if (!activeSymbol) return;
+
     const session = ++sessionRef.current;
-    clearPendingTimers();
+    clearAll();
     setChain([]);
     setExpiries([]);
     setSelectedExpiry('');
-    setStatus({ type: 'loading', label: symbol, attempt: 0 });
-    startSymbolLoad(symbol, session);
-  }, [symbol]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── User-initiated: change expiry from dropdown ───────────────────────────
+    if (segmentUnsupported) {
+      // Known-unsupported segment — instant state, no backend request
+      setStatus({ type: 'unsupported', instrument: activeSymbol.symbol });
+      return;
+    }
+
+    setStatus({ type: 'loading', label: underlying, attempt: 0 });
+    startLoad(underlying, session);
+  }, [underlying, segmentUnsupported]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── User actions ──────────────────────────────────────────────────────────
   const handleExpiryChange = useCallback((expiry: string) => {
+    if (!activeSymbol || segmentUnsupported) return;
     const session = ++sessionRef.current;
-    clearPendingTimers();
+    clearAll();
     setChain([]);
     setSelectedExpiry(expiry);
-    setStatus({ type: 'loading', label: `${symbol} · ${expiry}`, attempt: 0 });
-    loadChain(symbol, expiry, 0, session);
-  }, [symbol, clearPendingTimers, loadChain]);
+    setStatus({ type: 'loading', label: `${underlying} · ${expiry}`, attempt: 0 });
+    startBudget(session);
+    loadChain(underlying, expiry, 0, session);
+  }, [underlying, activeSymbol, segmentUnsupported, clearAll, startBudget, loadChain]);
 
-  // ── User-initiated: change symbol from header buttons ────────────────────
-  const handleSymbolChange = useCallback((sym: string) => {
-    if (sym === symbol) return;
-    setSymbol(sym);
-  }, [symbol]);
-
-  // ── User-initiated: manual retry ──────────────────────────────────────────
   const handleManualRetry = useCallback(() => {
-    const sym    = symbol;
+    if (!activeSymbol) return;
+    const sym    = underlying;
     const expiry = selectedExpiry;
     const session = ++sessionRef.current;
-    clearPendingTimers();
+    clearAll();
     setChain([]);
     setStatus({ type: 'loading', label: `${sym} · ${expiry}`, attempt: 0 });
     if (expiry) {
+      startBudget(session);
       loadChain(sym, expiry, 0, session);
     } else {
-      startSymbolLoad(sym, session);
+      startLoad(sym, session);
     }
-  }, [symbol, selectedExpiry, clearPendingTimers, loadChain, startSymbolLoad]);
+  }, [underlying, selectedExpiry, activeSymbol, clearAll, startBudget, loadChain, startLoad]);
 
-  // ── Strike click ──────────────────────────────────────────────────────────
   const handleStrikeClick = useCallback((strike: number, type: 'CE' | 'PE', ltp?: number) => {
-    const lotSize = LOT_SIZES[symbol] ?? 50;
+    if (!activeSymbol) return;
     setActiveSymbol({
-      token: `${symbol}_${strike}_${type}`,
-      symbol: `${symbol} ${strike} ${type}`,
-      name: `${symbol} ${selectedExpiry} ${strike} ${type}`,
+      token: `${underlying}_${strike}_${type}`,
+      symbol: `${underlying} ${strike} ${type}`,
+      name: `${underlying} ${selectedExpiry} ${strike} ${type}`,
       segment: 'NFO',
       instrumentType: type,
-      exchange: symbol === 'SENSEX' ? 'BSE' : 'NSE',
+      exchange: optExchange,
       lotSize,
       tickSize: 0.05,
       expiry: selectedExpiry,
@@ -309,9 +419,9 @@ export function OptionChainModal() {
       optionType: type,
     });
     setSelectedContract({
-      symbol: `${symbol} ${strike} ${type}`,
-      token: `${symbol}_${strike}_${type}`,
-      underlying: symbol,
+      symbol: `${underlying} ${strike} ${type}`,
+      token: `${underlying}_${strike}_${type}`,
+      underlying,
       strike,
       optionType: type,
       expiry: selectedExpiry,
@@ -320,68 +430,92 @@ export function OptionChainModal() {
     });
     if (ltp && ltp > 0) setOrderForm({ price: ltp, orderType: 'LIMIT', qty: lotSize });
     else setOrderForm({ qty: lotSize });
-  }, [symbol, selectedExpiry, setActiveSymbol, setSelectedContract, setOrderForm]);
+  }, [underlying, selectedExpiry, lotSize, optExchange, activeSymbol, setActiveSymbol, setSelectedContract, setOrderForm]);
 
   // ── Render helpers ────────────────────────────────────────────────────────
   const isLoading = status.type === 'loading' || status.type === 'idle';
   const errorMessage = status.type === 'error' ? status.message : null;
-  const attemptDisplay = status.type === 'loading' && status.attempt > 0
+  const attemptLabel = status.type === 'loading' && status.attempt > 0
     ? ` (${status.attempt}/${MAX_AUTO_RETRIES})`
     : '';
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col h-full bg-fw-surface overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center gap-2 px-2 py-1.5 border-b border-fw-border flex-wrap">
+
+      {/* ── Header ── */}
+      <div className="flex items-center gap-2 px-2 py-1.5 border-b border-fw-border flex-wrap flex-shrink-0">
         <span className="text-[13px] font-bold text-fw-text">OPTION CHAIN</span>
-        <div className="flex items-center gap-0.5">
-          {INDEX_SYMBOLS.map((s) => (
-            <button
-              key={s}
-              onClick={() => handleSymbolChange(s)}
-              className={cn(
-                'px-1.5 py-0.5 text-[12px] rounded font-semibold transition-colors',
-                s === symbol ? 'bg-fw-accent text-white' : 'text-fw-text-secondary hover:text-fw-text',
-              )}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
-        <select
-          value={selectedExpiry}
-          onChange={(e) => handleExpiryChange(e.target.value)}
-          className="ml-auto bg-fw-bg text-fw-text text-[12px] border border-fw-border rounded px-1.5 py-0.5 font-mono"
-        >
-          {expiries.map((e) => <option key={e} value={e}>{e}</option>)}
-        </select>
+
+        {/* Current underlying — dynamic, no hardcoded symbol list */}
+        {underlying && (
+          <span className="text-[13px] font-semibold text-fw-accent tabular-nums">
+            {underlying}
+          </span>
+        )}
+
+        {/* Expiry dropdown — only when data is available or loading */}
+        {expiries.length > 0 && (
+          <select
+            value={selectedExpiry}
+            onChange={(e) => handleExpiryChange(e.target.value)}
+            className="bg-fw-bg text-fw-text text-[12px] border border-fw-border rounded px-1.5 py-0.5 font-mono"
+          >
+            {expiries.map((e) => <option key={e} value={e}>{e}</option>)}
+          </select>
+        )}
+
+        {/* Spot price */}
         {spotPrice > 0 && (
-          <span className="text-[12px] font-mono font-bold text-fw-accent tabular-nums">
+          <span className="ml-auto text-[12px] font-mono font-bold text-fw-accent tabular-nums">
             Spot: {formatPrice(spotPrice)}
           </span>
         )}
       </div>
 
-      {/* Body */}
+      {/* ── Body ── */}
       <div className="flex-1 overflow-auto text-[12px]">
-        {isLoading ? (
-          /* Loading — bounded by LOAD_TIMEOUT_MS hard timeout */
+
+        {/* ── No active symbol ── */}
+        {!activeSymbol ? (
+          <div className="flex flex-col items-center justify-center h-full gap-2 text-fw-text-muted">
+            <span className="text-[22px]">📊</span>
+            <p className="text-[13px]">Select an instrument</p>
+            <p className="text-[11px] text-fw-text-muted/60">Click any instrument in the watchlist</p>
+          </div>
+
+        /* ── Unsupported segment (MCX, CDS) — instant, no backend request ── */
+        ) : status.type === 'unsupported' ? (
+          <div className="flex flex-col items-center justify-center h-full gap-3 px-4 text-center">
+            <span className="text-[28px]">🔒</span>
+            <p className="text-[13px] text-fw-text-secondary font-semibold">
+              Option Chain Not Available
+            </p>
+            <p className="text-[12px] text-fw-text-muted max-w-[240px]">
+              {activeSymbol?.segment === 'MCX'
+                ? 'MCX commodity option chains are not currently supported.'
+                : activeSymbol?.segment === 'CDS'
+                  ? 'Currency derivative option chains are not currently supported.'
+                  : `Option chains are not available for ${status.instrument}.`}
+            </p>
+          </div>
+
+        /* ── Loading — bounded by 15s wall-clock budget ── */
+        ) : isLoading ? (
           <div className="flex flex-col items-center justify-center h-full gap-3">
             <div className="w-5 h-5 border-2 border-fw-accent border-t-transparent rounded-full animate-spin" />
             <p className="text-fw-text-secondary font-medium text-[13px]">
               {status.type === 'loading' && status.label
                 ? `Loading ${status.label}`
-                : `Loading ${symbol}…`}
+                : `Loading ${underlying}…`}
             </p>
             {status.type === 'loading' && status.attempt > 0 && (
-              <p className="text-fw-text-muted text-[11px]">
-                Retrying{attemptDisplay}
-              </p>
+              <p className="text-fw-text-muted text-[11px]">Retrying{attemptLabel}</p>
             )}
           </div>
+
+        /* ── Error / no contracts found ── */
         ) : errorMessage ? (
-          /* Error — always shows Retry Now */
           <div className="flex flex-col items-center justify-center h-full gap-3 px-4 text-center">
             <span className="text-[28px]">⛓</span>
             <p className="text-[13px] text-fw-text-secondary font-semibold">Option Chain Unavailable</p>
@@ -393,8 +527,9 @@ export function OptionChainModal() {
               Retry Now
             </button>
           </div>
+
+        /* ── Data table ── */
         ) : (
-          /* Data table */
           <table className="w-full border-collapse">
             <thead className="sticky top-0 bg-fw-surface z-10">
               <tr className="border-b border-fw-border text-[11px] text-fw-text-secondary uppercase">
@@ -423,7 +558,7 @@ export function OptionChainModal() {
                       (isSelCE || isSelPE) && 'bg-fw-accent/[0.10] border-l-2 border-l-fw-accent',
                     )}
                   >
-                    {/* CALL B/S */}
+                    {/* CALL side */}
                     <td className="px-0.5 py-[3px] text-center">
                       <button onClick={() => { handleStrikeClick(e.strike, 'CE', e.callLtp); setOrderForm({ side: 'BUY' }); }} className="text-[9px] text-green-400 font-bold hover:bg-green-900/30 px-1 rounded">B</button>
                       <button onClick={() => { handleStrikeClick(e.strike, 'CE', e.callLtp); setOrderForm({ side: 'SELL' }); }} className="text-[9px] text-red-400 font-bold hover:bg-red-900/30 px-1 rounded">S</button>
@@ -433,17 +568,16 @@ export function OptionChainModal() {
                     <td className="px-1 py-[3px] text-right font-mono tabular-nums text-green-400 cursor-pointer hover:underline" onClick={() => handleStrikeClick(e.strike, 'CE', e.callLtp)}>
                       {e.callLtp > 0 ? formatPrice(e.callLtp) : '—'}
                     </td>
-                    {/* STRIKE */}
+                    {/* Strike column */}
                     <td className={cn('px-1.5 py-[3px] text-center font-mono font-bold bg-fw-bg border-x border-fw-border tabular-nums text-[11px]', isAtm ? 'text-fw-accent' : 'text-fw-text')}>
                       {e.strike}
                     </td>
-                    {/* PUT */}
+                    {/* PUT side */}
                     <td className="px-1 py-[3px] text-left font-mono tabular-nums text-red-400 cursor-pointer hover:underline" onClick={() => handleStrikeClick(e.strike, 'PE', e.putLtp)}>
                       {e.putLtp > 0 ? formatPrice(e.putLtp) : '—'}
                     </td>
                     <td className="px-1 py-[3px] text-left font-mono tabular-nums text-fw-text-secondary">{formatNumber(e.putVolume || 0)}</td>
                     <td className="px-1 py-[3px] text-left font-mono tabular-nums text-fw-text-secondary">{formatNumber(e.putOi || 0)}</td>
-                    {/* PUT B/S */}
                     <td className="px-0.5 py-[3px] text-center">
                       <button onClick={() => { handleStrikeClick(e.strike, 'PE', e.putLtp); setOrderForm({ side: 'BUY' }); }} className="text-[9px] text-green-400 font-bold hover:bg-green-900/30 px-1 rounded">B</button>
                       <button onClick={() => { handleStrikeClick(e.strike, 'PE', e.putLtp); setOrderForm({ side: 'SELL' }); }} className="text-[9px] text-red-400 font-bold hover:bg-red-900/30 px-1 rounded">S</button>
