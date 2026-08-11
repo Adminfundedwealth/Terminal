@@ -733,11 +733,9 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
     const chain = await optionChainService.getOptionChain(symbol, expiry);
     console.log(`[OptionChain] Response: ${chain.length} strikes returned`);
 
-    if (chain.length === 0) {
-      // Return 503 so the frontend knows to retry — NOT a 200 with empty array
-      return res.status(503).json({ message: 'Option chain data unavailable — retrying' });
-    }
-
+    // Always return 200. Empty array means no contracts found for this
+    // symbol/expiry — that is valid data (e.g. SENSEX, expired expiry).
+    // 503 is reserved for service-unavailable (no JWT) only.
     return res.json(chain);
   });
 

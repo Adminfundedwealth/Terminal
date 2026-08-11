@@ -179,28 +179,26 @@ export class OptionChainService {
     if (!this.jwtToken) return [];
 
     console.log(`[OptionChain] Discovering expiries for ${sym}...`);
+
     const now = new Date();
 
-    // Build all candidate dates up front
-    const candidates = [];
-    for (let i = 0; i <= EXPIRY_SCAN_DAYS; i++) {
-      const date = new Date(now);
-      date.setDate(date.getDate() + i);
-      const iso = date.toISOString().split('T')[0];
-      candidates.push({ iso, angelFmt: this._isoToAngel(iso) });
-    }
+    // ── Step 1: Build smart high-probability candidate dates ──────────────
+    // Try specific patterns first (monthly last-Thu, quarterly, weekly Tue)
+    // rather than scanning every calendar day.  This means BANKNIFTY (monthly)
+    // is found in 1-2 requests instead of 83.
+    const candidates = this._buildSmartCandidates(now);
 
-    // Fan out in parallel batches of 10 — much faster than serial
-    const BATCH = 10;
-    const found = []; // { iso, index }
+    // ── Step 2: Fan out in parallel batches of 15, 100ms inter-batch gap ─
+    const BATCH = 15;
+    const found = []; // { iso, angelFmt, priority }
 
     for (let start = 0; start < candidates.length && found.length < 5; start += BATCH) {
       const batch = candidates.slice(start, start + BATCH);
       const results = await Promise.allSettled(
-        batch.map(({ iso, angelFmt }, bi) =>
+        batch.map(({ iso, angelFmt }) =>
           this._searchScrip(`${sym}${angelFmt}`)
-            .then(r => ({ iso, idx: start + bi, count: r?.length || 0 }))
-            .catch(() => ({ iso, idx: start + bi, count: 0 }))
+            .then(r => ({ iso, angelFmt, count: r?.length || 0 }))
+            .catch(() => ({ iso, angelFmt, count: 0 }))
         )
       );
       for (const r of results) {
@@ -208,17 +206,98 @@ export class OptionChainService {
           found.push(r.value);
         }
       }
-      // Small inter-batch pause to stay within rate limits
       if (start + BATCH < candidates.length && found.length < 5) {
-        await this._sleep(120);
+        await this._sleep(100);
       }
     }
 
-    // Sort by calendar order and return ISO strings
-    found.sort((a, b) => a.idx - b.idx);
-    const expiries = found.slice(0, 5).map(f => f.iso);
+    // Sort by calendar date
+    found.sort((a, b) => new Date(a.iso).getTime() - new Date(b.iso).getTime());
+    const expiries = [...new Set(found.slice(0, 5).map(f => f.iso))];
     console.log(`[OptionChain] Expiries for ${sym}: ${expiries.join(', ')}`);
     return expiries;
+  }
+
+  /**
+   * Build smart ordered candidate dates for expiry discovery.
+   *
+   * Priority order (checked first → fewest API calls needed):
+   *   1. Last Thursday of current + next 5 months   (monthly expiries: BANKNIFTY, MIDCPNIFTY, stocks)
+   *   2. Last Tuesday of current + next 5 months    (quarterly: FINNIFTY)
+   *   3. Every Tuesday for next 8 weeks             (weekly: NIFTY)
+   *   4. Sequential daily scan for 90 days          (catch-all fallback)
+   *
+   * De-duped, sorted ascending, weekends removed.
+   * Using IST date to avoid UTC midnight boundary issues.
+   */
+  _buildSmartCandidates(now) {
+    // Work in IST (UTC+5:30) to avoid midnight boundary issues
+    const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+    const nowIST = new Date(now.getTime() + IST_OFFSET_MS);
+
+    const seen = new Set();
+    const candidates = [];
+
+    const addDate = (date) => {
+      const iso = date.toISOString().split('T')[0];
+      const d = new Date(iso);
+      // Include today — on expiry day the contract is valid until 3:30 PM IST.
+      // Exclude only dates strictly before today (already expired).
+      const todayISO = nowIST.toISOString().split('T')[0];
+      if (iso < todayISO) return;
+      if (seen.has(iso)) return;
+      seen.add(iso);
+      candidates.push({ iso, angelFmt: this._isoToAngel(iso) });
+    };
+
+    // ── 1. Last Thursday of each of next 6 months (monthly expiry pattern) ──
+    for (let i = 0; i < 6; i++) {
+      const y = nowIST.getUTCFullYear();
+      const m = nowIST.getUTCMonth() + i; // 0-indexed, may overflow → handled below
+      // Last day of month
+      const lastDay = new Date(Date.UTC(y, m + 1, 0));
+      // Walk back to Thursday (4)
+      while (lastDay.getUTCDay() !== 4) lastDay.setUTCDate(lastDay.getUTCDate() - 1);
+      addDate(lastDay);
+    }
+
+    // ── 2. Last Tuesday of each of next 6 months (quarterly pattern) ─────
+    for (let i = 0; i < 6; i++) {
+      const y = nowIST.getUTCFullYear();
+      const m = nowIST.getUTCMonth() + i;
+      const lastDay = new Date(Date.UTC(y, m + 1, 0));
+      while (lastDay.getUTCDay() !== 2) lastDay.setUTCDate(lastDay.getUTCDate() - 1); // Tuesday
+      addDate(lastDay);
+    }
+
+    // ── 3. Every Tuesday for next 10 weeks (weekly NIFTY/FINNIFTY) ───────
+    for (let i = 0; i < 10; i++) {
+      const d = new Date(nowIST);
+      const daysUntilTue = (2 - d.getUTCDay() + 7) % 7 || 7;
+      d.setUTCDate(d.getUTCDate() + daysUntilTue + i * 7);
+      addDate(d);
+    }
+
+    // ── 4. Every Wednesday for next 10 weeks (legacy weekly BANKNIFTY) ───
+    for (let i = 0; i < 10; i++) {
+      const d = new Date(nowIST);
+      const daysUntilWed = (3 - d.getUTCDay() + 7) % 7 || 7;
+      d.setUTCDate(d.getUTCDate() + daysUntilWed + i * 7);
+      addDate(d);
+    }
+
+    // ── 5. Sequential daily scan as catch-all (skip weekends), includes today ─
+    for (let i = 0; i <= 90; i++) {
+      const d = new Date(now);
+      d.setDate(d.getDate() + i);
+      const dow = d.getDay();
+      if (dow === 0 || dow === 6) continue; // skip weekends
+      addDate(d);
+    }
+
+    // Sort ascending
+    candidates.sort((a, b) => new Date(a.iso).getTime() - new Date(b.iso).getTime());
+    return candidates;
   }
 
   // ── Chain fetch ───────────────────────────────────────────────────────────

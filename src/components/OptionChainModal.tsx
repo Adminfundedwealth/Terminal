@@ -46,6 +46,11 @@ const CHAIN_CACHE_TTL  = 20 * 1000;      // 20 seconds (matches backend 30s TTL)
 // not implemented in the current optionChainService.  Show instant unavailable.
 const UNSUPPORTED_SEGMENTS = new Set(['MCX', 'CDS']);
 
+// Angel One SmartConnect searchScrip does not return SENSEX option contracts
+// on any exchange (NFO/BFO/BSE/NSE confirmed by live API test).
+// Show a specific provider-limitation message instead of a generic error.
+const PROVIDER_UNAVAILABLE_UNDERLYINGS = new Set(['SENSEX']);
+
 // ─── Underlying derivation ────────────────────────────────────────────────────
 /**
  * Derive the canonical underlying symbol from any instrument.
@@ -55,7 +60,9 @@ const UNSUPPORTED_SEGMENTS = new Set(['MCX', 'CDS']);
  *   RELIANCE FUT Jun 2026  →  RELIANCE
  *   NIFTY 24500 CE         →  NIFTY
  *   BANKNIFTY FUT JUL      →  BANKNIFTY
+ *   NIFTY 50               →  NIFTY      (index with trailing number)
  *   NIFTY                  →  NIFTY
+ *   SENSEX 30              →  SENSEX
  *   RELIANCE               →  RELIANCE
  */
 function deriveUnderlying(instrument: Instrument): string {
@@ -74,8 +81,10 @@ function deriveUnderlying(instrument: Instrument): string {
     return sym.replace(/\s+FUT.*$/i, '').trim().toUpperCase();
   }
 
-  // Already a plain underlying (EQ, Index)
-  return sym.toUpperCase();
+  // Index symbols can have a trailing number suffix that is not part of the
+  // Angel One searchScrip name:  "NIFTY 50" → "NIFTY", "SENSEX 30" → "SENSEX"
+  // Strip a trailing space + pure-number word (e.g. " 50", " 30", " 100").
+  return sym.replace(/\s+\d+$/, '').trim().toUpperCase();
 }
 
 /**
@@ -150,6 +159,12 @@ export function OptionChainModal() {
   const segmentUnsupported = useMemo(() =>
     activeSymbol ? UNSUPPORTED_SEGMENTS.has(activeSymbol.segment) : false,
   [activeSymbol]);
+
+  // SENSEX: Angel One SmartConnect does not provide option contracts for SENSEX
+  // regardless of exchange parameter (confirmed live). Show specific message.
+  const providerUnavailable = useMemo(() =>
+    underlying ? PROVIDER_UNAVAILABLE_UNDERLYINGS.has(underlying) : false,
+  [underlying]);
 
   // ── UI state ──────────────────────────────────────────────────────────────
   const [expiries, setExpiries] = useState<string[]>([]);
@@ -366,14 +381,18 @@ export function OptionChainModal() {
     setSelectedExpiry('');
 
     if (segmentUnsupported) {
-      // Known-unsupported segment — instant state, no backend request
       setStatus({ type: 'unsupported', instrument: activeSymbol.symbol });
+      return;
+    }
+
+    if (providerUnavailable) {
+      setStatus({ type: 'unsupported', instrument: underlying });
       return;
     }
 
     setStatus({ type: 'loading', label: underlying, attempt: 0 });
     startLoad(underlying, session);
-  }, [underlying, segmentUnsupported]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [underlying, segmentUnsupported, providerUnavailable]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── User actions ──────────────────────────────────────────────────────────
   const handleExpiryChange = useCallback((expiry: string) => {
@@ -484,7 +503,7 @@ export function OptionChainModal() {
             <p className="text-[11px] text-fw-text-muted/60">Click any instrument in the watchlist</p>
           </div>
 
-        /* ── Unsupported segment (MCX, CDS) — instant, no backend request ── */
+        /* ── Unsupported segment or provider-unavailable ── */
         ) : status.type === 'unsupported' ? (
           <div className="flex flex-col items-center justify-center h-full gap-3 px-4 text-center">
             <span className="text-[28px]">🔒</span>
@@ -492,11 +511,13 @@ export function OptionChainModal() {
               Option Chain Not Available
             </p>
             <p className="text-[12px] text-fw-text-muted max-w-[240px]">
-              {activeSymbol?.segment === 'MCX'
-                ? 'MCX commodity option chains are not currently supported.'
-                : activeSymbol?.segment === 'CDS'
-                  ? 'Currency derivative option chains are not currently supported.'
-                  : `Option chains are not available for ${status.instrument}.`}
+              {PROVIDER_UNAVAILABLE_UNDERLYINGS.has(status.instrument)
+                ? `${status.instrument} option contracts are not available via this data provider (Angel One SmartConnect does not expose SENSEX options on NFO/BFO).`
+                : activeSymbol?.segment === 'MCX'
+                  ? 'MCX commodity option chains are not currently supported.'
+                  : activeSymbol?.segment === 'CDS'
+                    ? 'Currency derivative option chains are not currently supported.'
+                    : `Option chains are not available for ${status.instrument}.`}
             </p>
           </div>
 
