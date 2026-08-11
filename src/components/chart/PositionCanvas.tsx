@@ -338,8 +338,8 @@ export function PositionCanvas({
       });
 
       hitsRef.current = newHits;
-      // Enable pointer events when positions present OR in placement mode
-      el.style.pointerEvents = (posRef.current.length > 0 || placeRef.current != null) ? 'auto' : 'none';
+      // pointerEvents is always 'auto' — onDown returns without stopPropagation
+      // when find() hits nothing, so chart pan/zoom/drawing still receives events.
     };
 
     let on = true;
@@ -374,20 +374,37 @@ export function PositionCanvas({
     if (!el) return;
 
     const find = (mx: number, my: number): HR | null => {
-      // Priority 1: buttons with exact x bounds
+      // Priority 1: buttons with exact x bounds — closest y wins among matches
+      let bestBtn: HR | null = null;
+      let bestBtnDist = Infinity;
       for (const h of hitsRef.current) {
-        if (Math.abs(my - h.y) > HIT) continue;
-        if (h.x1 != null && h.x2 != null && mx >= h.x1 - 4 && mx <= h.x2 + 4) return h;
+        const dy = Math.abs(my - h.y);
+        if (dy > HIT) continue;
+        if (h.x1 != null && h.x2 != null && mx >= h.x1 - 4 && mx <= h.x2 + 4) {
+          if (dy < bestBtnDist) { bestBtnDist = dy; bestBtn = h; }
+        }
       }
-      // Priority 2: SL/TP drag — full line width
+      if (bestBtn) return bestBtn;
+
+      // Priority 2: SL/TP drag — full line width — CLOSEST Y wins (prevents SL shadowing TP)
+      let bestDrag: HR | null = null;
+      let bestDragDist = Infinity;
       for (const h of hitsRef.current) {
-        if ((h.role === 'sl_drag' || h.role === 'tp_drag') && Math.abs(my - h.y) <= HIT) return h;
+        if (h.role !== 'sl_drag' && h.role !== 'tp_drag') continue;
+        const dy = Math.abs(my - h.y);
+        if (dy <= HIT && dy < bestDragDist) { bestDragDist = dy; bestDrag = h; }
       }
-      // Priority 3: entry
+      if (bestDrag) return bestDrag;
+
+      // Priority 3: entry — closest y
+      let bestEntry: HR | null = null;
+      let bestEntryDist = Infinity;
       for (const h of hitsRef.current) {
-        if (h.role === 'entry' && Math.abs(my - h.y) <= HIT) return h;
+        if (h.role !== 'entry') continue;
+        const dy = Math.abs(my - h.y);
+        if (dy <= HIT && dy < bestEntryDist) { bestEntryDist = dy; bestEntry = h; }
       }
-      return null;
+      return bestEntry;
     };
 
     // ── Placement-mode mouse tracking ────────────────────────────────────
@@ -526,7 +543,6 @@ export function PositionCanvas({
           livePrice: snapTick(startPrice, tickRef.current),
           valid: true,
         };
-        el.style.pointerEvents = 'auto';
         document.body.style.cursor = 'crosshair';
       }
     };
@@ -667,7 +683,7 @@ export function PositionCanvas({
     <canvas ref={cvs} style={{
       position: 'absolute', top: 0, left: 0,
       zIndex: 20,
-      pointerEvents: 'none', // toggled in RAF loop
+      pointerEvents: 'auto', // always enabled — onDown passes through to chart when no hit
     }} />
   );
 }

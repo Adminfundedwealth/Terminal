@@ -13,6 +13,9 @@ class WebSocketService {
   private maxReconnectDelay = 15000;       // cap backoff at 15 seconds
   private handlers: Map<string, Set<MessageHandler>> = new Map();
   private subscribedTokens: Set<string> = new Set();
+  // exchange hints: token → exchange (e.g. "NFO", "MCX", "CDS")
+  // sent with every subscribe message so the server can forward to AngelFeed correctly
+  private exchangeHints: Map<string, string> = new Map();
   private isConnecting = false;
   private _reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -31,11 +34,18 @@ class WebSocketService {
         this.reconnectAttempts = 0;
         this._reconnectTimer = null;
 
-        // Resubscribe to tokens
+        // Resubscribe to tokens (with exchange hints)
         if (this.subscribedTokens.size > 0) {
+          const tokens = Array.from(this.subscribedTokens);
+          const hints: Record<string, string> = {};
+          tokens.forEach((t) => {
+            const h = this.exchangeHints.get(t);
+            if (h) hints[t] = h;
+          });
           this.send({
             type: 'subscribe',
-            tokens: Array.from(this.subscribedTokens),
+            tokens,
+            ...(Object.keys(hints).length > 0 ? { exchangeHints: hints } : {}),
           });
         }
       };
@@ -124,7 +134,21 @@ class WebSocketService {
       case 'position_update': {
         const position = data.data || data.position;
         if (position?.id) {
-          trading.updatePosition(position.id, position);
+          // Guard: do not overwrite a valid existing stopLoss/takeProfit with
+          // null/undefined from a stale MTM broadcast. Only update if the
+          // incoming value is a real number (> 0). A real update (e.g. user
+          // removed their SL) would arrive as 0, not null/undefined.
+          const existing = useTradingStore.getState().positions.find(
+            (p) => p.id === position.id
+          );
+          const safeUpdate = { ...position };
+          if ((position.stopLoss == null) && existing?.stopLoss) {
+            delete safeUpdate.stopLoss;
+          }
+          if ((position.takeProfit == null) && existing?.takeProfit) {
+            delete safeUpdate.takeProfit;
+          }
+          trading.updatePosition(position.id, safeUpdate);
         }
         break;
       }
@@ -174,17 +198,31 @@ class WebSocketService {
     }
   }
 
-  subscribe(tokens: string[]) {
+  subscribe(tokens: string[], exchangeHints?: Record<string, string>) {
     tokens.forEach((t) => this.subscribedTokens.add(t));
+    // Store exchange hints so they are resent on reconnect
+    if (exchangeHints) {
+      tokens.forEach((t) => {
+        if (exchangeHints[t]) this.exchangeHints.set(t, exchangeHints[t]);
+      });
+    }
     tokens.forEach((t) => useMarketStore.getState().subscribe(t));
 
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.send({ type: 'subscribe', tokens });
+      const hints: Record<string, string> = {};
+      tokens.forEach((t) => {
+        const h = this.exchangeHints.get(t);
+        if (h) hints[t] = h;
+      });
+      this.send({ type: 'subscribe', tokens, ...(Object.keys(hints).length > 0 ? { exchangeHints: hints } : {}) });
     }
   }
 
   unsubscribe(tokens: string[]) {
-    tokens.forEach((t) => this.subscribedTokens.delete(t));
+    tokens.forEach((t) => {
+      this.subscribedTokens.delete(t);
+      this.exchangeHints.delete(t);
+    });
     tokens.forEach((t) => useMarketStore.getState().unsubscribe(t));
 
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
