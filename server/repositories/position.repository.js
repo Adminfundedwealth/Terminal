@@ -243,7 +243,31 @@ export class PositionRepository extends BaseRepository {
 
     for (const pos of positions) {
       if (pos.qty === 0) continue;
-      const ltp = quoteProvider ? quoteProvider(pos.token) : pos.avg_price;
+
+      // ── Safe LTP resolution ──────────────────────────────────────────────
+      // NEVER use 0 as a fallback price. A zero LTP causes the entire
+      // position to appear worthless, generating a fake loss of
+      // (0 − avgPrice) × qty. This was the direct cause of the Aug-10
+      // incident where a single blank HCLTECH tick produced a false
+      // −₹59,000 daily-loss reading and nearly breached the account.
+      //
+      // Rules:
+      //   1. If a quoteProvider is supplied and returns a valid positive
+      //      number, use it for the MTM calculation.
+      //   2. If the quote is unavailable (null / undefined / 0 / NaN),
+      //      fall back to the position's own avg_price (= break-even,
+      //      unrealized P&L = 0 for that position). This is conservative:
+      //      it neither inflates gains nor fabricates losses.
+      //   3. Never use NaN or Infinity as a price.
+      let ltp = quoteProvider ? quoteProvider(pos.token) : null;
+
+      // Validate the returned LTP
+      if (ltp === null || ltp === undefined || !Number.isFinite(ltp) || ltp <= 0) {
+        // Quote unavailable or invalid — assume break-even for this position.
+        // This means unrealized P&L contribution = 0; no fake loss is generated.
+        ltp = pos.avg_price;
+      }
+
       const pnl = pos.side === 'LONG'
         ? (ltp - pos.avg_price) * pos.qty
         : (pos.avg_price - ltp) * pos.qty;

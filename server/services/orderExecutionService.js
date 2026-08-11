@@ -119,9 +119,14 @@ export class OrderExecutionService {
 
     try {
       // ── Step 1: Risk Validation ──────────────────────────────
+      // quoteProvider returns null for invalid/missing LTP — never 0.
+      // The risk engine and position repository both handle null safely
+      // by excluding that position from unrealized P&L (break-even fallback).
       const quoteProvider = (token) => {
         const q = this.marketDataEngine.getQuote(token);
-        return q?.ltp || 0;
+        const ltp = q?.ltp;
+        if (!ltp || !Number.isFinite(ltp) || ltp <= 0) return null;
+        return ltp;
       };
 
       let riskResult = { allowed: true };
@@ -300,9 +305,46 @@ export class OrderExecutionService {
    * Handle market order fill — assume immediate execution.
    */
   async _handleMarketFill(accountId, orderId, orderParams, brokerOrderId, brokerProvider, latencyMs) {
-    // Determine fill price (use LTP or broker avg price)
+    // ── Fill price safety guard ──────────────────────────────────────────────
+    // A market order MUST have a valid live LTP to fill against.
+    // Using fillPrice = 0 creates a position with avg_price = 0, which then
+    // generates a fake MTM loss of (0 - realPrice) × qty on every subsequent
+    // tick — the direct cause of the Aug-10 incident.
+    //
+    // Priority: validated live LTP > explicit order price (for LIMIT fills).
+    // For MARKET orders, orderParams.price is always 0 — so if LTP is also
+    // missing, we reject rather than persist a zero-price position.
     const quote = this.marketDataEngine.getQuote(orderParams.token);
-    const fillPrice = quote?.ltp || orderParams.price || 0;
+    const rawLtp = quote?.ltp;
+    const validLtp = (rawLtp && Number.isFinite(rawLtp) && rawLtp > 0) ? rawLtp : null;
+
+    // Resolve fill price: live LTP preferred, then explicit order price
+    const candidatePrice = validLtp ?? (orderParams.price > 0 ? orderParams.price : null);
+
+    if (!candidatePrice) {
+      // Market data unavailable — reject order rather than record at price 0
+      const reason = 'Market data unavailable — LTP is zero or missing. Order not executed.';
+      console.error(`[OrderExecution] REJECTED fill for order ${orderId} (${orderParams.symbol}): ${reason}`);
+      try {
+        await orderRepo.markRejected(orderId, reason);
+      } catch (e) { /* best effort */ }
+
+      eventBus.publish('order.updated', {
+        orderId,
+        status: 'REJECTED',
+        rejectReason: reason,
+        symbol: orderParams.symbol,
+        token: orderParams.token,
+        segment: orderParams.segment,
+        side: orderParams.side,
+        brokerOrderId,
+        brokerProvider,
+      }, { accountId });
+
+      return { orderId, status: 'REJECTED', message: reason };
+    }
+
+    const fillPrice = candidatePrice;
     const filledQty = orderParams.qty;
 
     // ── Step 4: Mark Order as FILLED ─────────────────────────
@@ -369,9 +411,12 @@ export class OrderExecutionService {
 
     // ── Step 7: Post-Trade Risk Check ────────────────────────
     try {
+      // Safe quoteProvider: returns null for invalid/missing LTP, never 0
       const quoteProvider = (token) => {
         const q = this.marketDataEngine.getQuote(token);
-        return q?.ltp || 0;
+        const ltp = q?.ltp;
+        if (!ltp || !Number.isFinite(ltp) || ltp <= 0) return null;
+        return ltp;
       };
       const riskResult = await RiskEngine.postTradeCheck(accountId, quoteProvider);
       if (riskResult.status === 'locked' || riskResult.status === 'breached') {
@@ -467,7 +512,9 @@ export class OrderExecutionService {
     try {
       const quoteProvider = (token) => {
         const q = this.marketDataEngine.getQuote(token);
-        return q?.ltp || 0;
+        const ltp = q?.ltp;
+        if (!ltp || !Number.isFinite(ltp) || ltp <= 0) return null;
+        return ltp;
       };
       await RiskEngine.postTradeCheck(accountId, quoteProvider);
     } catch (e) { /* non-blocking */ }

@@ -462,18 +462,65 @@ export class AngelFeedConnector {
   }
 
   /**
-   * Parse binary tick from SmartStream and push to MarketDataEngine.
+   * Parse binary tick from Angel One SmartStream V2 and push to MarketDataEngine.
+   *
+   * Byte layout verified against the official Angel One Python SDK:
+   *   github.com/angel-one/smartapi-python — SmartApi/smartWebSocketV2.py
+   *
+   * Common header (all modes):
+   *   [0]      subscription_mode  uint8
+   *   [1]      exchange_type      uint8
+   *   [2-26]   token              25-byte null-padded ASCII string
+   *   [27-34]  sequence_number    int64LE
+   *   [35-42]  exchange_timestamp int64LE
+   *   [43-50]  last_traded_price  int64LE  ÷ 100  ← LTP
+   *
+   * Mode 1 (LTP) — 51 bytes: header only.
+   *
+   * Mode 2 (Quote) — 123 bytes: header + OHLC fields:
+   *   [51-58]   last_traded_quantity   int64LE
+   *   [59-66]   average_traded_price   int64LE  ÷ 100
+   *   [67-74]   volume_trade_for_day   int64LE
+   *   [75-82]   total_buy_quantity     float64LE (IEEE 754 double)
+   *   [83-90]   total_sell_quantity    float64LE (IEEE 754 double)
+   *   [91-98]   open_price             int64LE  ÷ 100
+   *   [99-106]  high_price             int64LE  ÷ 100
+   *   [107-114] low_price              int64LE  ÷ 100
+   *   [115-122] closed_price           int64LE  ÷ 100  ← previous close
+   *
+   * Mode 3 (SnapQuote) — 379 bytes: Mode 2 fields + depth:
+   *   [123-130] last_traded_timestamp            int64LE
+   *   [131-138] open_interest                    int64LE
+   *   [139-146] open_interest_change_percentage  int64LE
+   *   [147-346] best_5_buy_and_sell_data         200 bytes (10 × 20-byte records)
+   *             Each record: flag(2) + qty(8,int64) + price(8,int64) + orders(2)
+   *   [347-354] upper_circuit_limit  int64LE ÷ 100
+   *   [355-362] lower_circuit_limit  int64LE ÷ 100
+   *   [363-370] 52_week_high         int64LE ÷ 100
+   *   [371-378] 52_week_low          int64LE ÷ 100
+   *
+   * Mode 4 (Depth 20) — depth fields use int32/int16 (not int64).
+   *   Not altered — no confirmed bugs in Mode 4 depth parsing.
+   *
+   * CRITICAL: All price fields are int64LE / 100 (not int32LE).
+   * Using readInt32LE on int64 fields reads only the lower 4 bytes, which
+   * produces accidental correctness for prices < ~₹21M but returns garbage
+   * for OHLC fields that land at wrong offsets — directly causing the
+   * SUNPHARMA/INFY/HCLTECH incident (wrong close → -99.99% changePercent,
+   * HCLTECH blank, false -₹59,000 daily loss).
    */
   _parseTick(buffer) {
-    if (buffer.length < 51) return; // Minimum LTP packet
+    // Minimum packet for LTP mode: 51 bytes
+    if (buffer.length < 51) return;
 
     const mode = buffer[0];
     const exchangeType = buffer[1];
     const token = buffer.slice(2, 27).toString('utf8').replace(/\0/g, '').trim();
     const exchange = EXCHANGE_TYPE_REVERSE[exchangeType] || 'NSE';
+    const now = Date.now();
 
     this.tickCount++;
-    this._lastTickTime = Date.now();
+    this._lastTickTime = now;
 
     // Clear stale state on first tick after staleness
     if (this._feedStale) {
@@ -483,95 +530,171 @@ export class AngelFeedConnector {
       this._emitFeedAlert('feed_recovered', 'Market data feed recovered — ticks resuming');
     }
 
+    // ── Helpers ──────────────────────────────────────────────────────────────
+    // Safe int64 read: returns null when buffer is too short for an 8-byte read.
+    const readI64 = (offset) => {
+      if (offset + 8 > buffer.length) return null;
+      return Number(buffer.readBigInt64LE(offset));
+    };
+
+    // Safe float64 read: returns null when buffer is too short.
+    const readF64 = (offset) => {
+      if (offset + 8 > buffer.length) return null;
+      return buffer.readDoubleLE(offset);
+    };
+
+    // Validate a price: must be a finite positive number.
+    // Returns the scaled value (÷100) or null if invalid.
+    const price = (raw) => {
+      if (raw === null || raw === undefined) return null;
+      const v = raw / 100;
+      if (!Number.isFinite(v) || v <= 0) return null;
+      return v;
+    };
+
+    // ── Mode 1 — LTP only (51 bytes) ─────────────────────────────────────────
     if (mode === 1) {
-      // LTP mode (51 bytes)
-      // LTP is at offset 43 (int32LE / 100)
-      const ltp = buffer.readInt32LE(43) / 100;
-      
-      this.marketDataEngine.pushQuote(token, {
-        token,
-        ltp,
-        exchange,
-        timestamp: Date.now(),
-      });
-    } else if (mode === 2 && buffer.length >= 123) {
-      // Quote mode (123 bytes) — includes OHLC, volume
-      // LTP at offset 43 (int32LE / 100)
-      const ltp = buffer.readInt32LE(43) / 100;
-      const lastTradedQty = buffer.readInt32LE(47);
-      const avgPrice = buffer.readInt32LE(51) / 100;
-      const volume = buffer.readInt32LE(55);
-      const totalBuyQty = buffer.readInt32LE(59);
-      const totalSellQty = buffer.readInt32LE(63);
-      const open = buffer.readInt32LE(67) / 100;
-      const high = buffer.readInt32LE(71) / 100;
-      const low = buffer.readInt32LE(75) / 100;
-      const lastClose = buffer.readInt32LE(79) / 100;
+      const rawLtp = readI64(43);
+      const ltp = price(rawLtp);
+
+      if (ltp === null) {
+        console.warn(`[MarketData] INVALID_LTP token=${token} exchange=${exchange} mode=1 reason="ltp=${rawLtp} is not a positive finite number"`);
+        return;
+      }
 
       this.marketDataEngine.pushQuote(token, {
         token,
         ltp,
-        open,
-        high,
-        low,
-        close: lastClose,
-        volume,
-        change: lastClose ? ltp - lastClose : 0,
-        changePercent: lastClose ? ((ltp - lastClose) / lastClose) * 100 : 0,
         exchange,
-        timestamp: Date.now(),
+        timestamp: now,
       });
-    } else if (mode === 3 && buffer.length >= 379) {
-      // SnapQuote mode (379 bytes) — includes full depth
-      // LTP at offset 43 (int32LE / 100)
-      const ltp = buffer.readInt32LE(43) / 100;
-      const lastClose = buffer.readInt32LE(47) / 100;
-      const open = buffer.readInt32LE(51) / 100;
-      const high = buffer.readInt32LE(55) / 100;
-      const low = buffer.readInt32LE(59) / 100;
-      const volume = buffer.readInt32LE(63);
+      return;
+    }
+
+    // ── Mode 2 — Quote (123 bytes) ────────────────────────────────────────────
+    if (mode === 2 && buffer.length >= 123) {
+      const rawLtp   = readI64(43);
+      const rawOpen  = readI64(91);
+      const rawHigh  = readI64(99);
+      const rawLow   = readI64(107);
+      const rawClose = readI64(115);       // previous close (closed_price)
+      const volume   = readI64(67) ?? 0;  // volume_trade_for_day
+
+      const ltp   = price(rawLtp);
+      const open  = price(rawOpen);
+      const high  = price(rawHigh);
+      const low   = price(rawLow);
+      const close = price(rawClose);      // previous close used for changePercent
+
+      if (ltp === null) {
+        console.warn(`[MarketData] INVALID_LTP token=${token} exchange=${exchange} mode=2 reason="ltp=${rawLtp} is not a positive finite number"`);
+        return;
+      }
+
+      // changePercent is ONLY calculated when we have a valid previous close.
+      // A garbage close byte range (old Int32 offset 79) is what caused -99.99%.
+      // With the correct offset (115) this now reads the real previous close.
+      const change        = (close !== null) ? ltp - close : null;
+      const changePercent = (close !== null) ? ((ltp - close) / close) * 100 : null;
 
       this.marketDataEngine.pushQuote(token, {
-        token, ltp, open, high, low, close: lastClose, volume,
-        change: ltp - lastClose,
-        changePercent: lastClose ? ((ltp - lastClose) / lastClose) * 100 : 0,
-        exchange, timestamp: Date.now(),
+        token,
+        ltp,
+        open:          open  ?? undefined,
+        high:          high  ?? undefined,
+        low:           low   ?? undefined,
+        close:         close ?? undefined,
+        volume:        Math.max(0, volume),
+        change:        change        ?? undefined,
+        changePercent: changePercent ?? undefined,
+        exchange,
+        timestamp: now,
+      });
+      return;
+    }
+
+    // ── Mode 3 — SnapQuote (379 bytes) ────────────────────────────────────────
+    if (mode === 3 && buffer.length >= 379) {
+      // OHLC fields identical to Mode 2
+      const rawLtp   = readI64(43);
+      const rawOpen  = readI64(91);
+      const rawHigh  = readI64(99);
+      const rawLow   = readI64(107);
+      const rawClose = readI64(115);
+      const volume   = readI64(67) ?? 0;
+
+      const ltp   = price(rawLtp);
+      const open  = price(rawOpen);
+      const high  = price(rawHigh);
+      const low   = price(rawLow);
+      const close = price(rawClose);
+
+      if (ltp === null) {
+        console.warn(`[MarketData] INVALID_LTP token=${token} exchange=${exchange} mode=3 reason="ltp=${rawLtp} is not a positive finite number"`);
+        return;
+      }
+
+      const change        = (close !== null) ? ltp - close : null;
+      const changePercent = (close !== null) ? ((ltp - close) / close) * 100 : null;
+
+      this.marketDataEngine.pushQuote(token, {
+        token,
+        ltp,
+        open:          open  ?? undefined,
+        high:          high  ?? undefined,
+        low:           low   ?? undefined,
+        close:         close ?? undefined,
+        volume:        Math.max(0, volume),
+        change:        change        ?? undefined,
+        changePercent: changePercent ?? undefined,
+        oi:            readI64(131) ?? undefined,
+        exchange,
+        timestamp: now,
       });
 
-      // Parse 5-level depth (starts at offset 87 in SnapQuote)
-      // Each level: 4 bytes qty + 4 bytes price + 2 bytes orders = 10 bytes
-      // 5 bid levels + 5 ask levels = 100 bytes
-      const depthOffset = 87;
+      // Parse best-5 depth from bytes 147–346.
+      // Each depth record is 20 bytes: flag(2) + qty(8,int64) + price(8,int64) + orders(2).
+      // flag === 0 → buy side; flag !== 0 → sell side.
       const bids = [];
       const asks = [];
+      const DEPTH_START = 147;
+      const RECORD_SIZE = 20;
+      const RECORDS = 10; // 5 buy + 5 sell interleaved by flag
 
-      for (let i = 0; i < 5; i++) {
-        const bidOff = depthOffset + (i * 10);
-        const askOff = depthOffset + 50 + (i * 10);
-        if (bidOff + 10 <= buffer.length) {
-          bids.push({
-            qty: buffer.readInt32LE(bidOff),
-            price: buffer.readInt32LE(bidOff + 4) / 100,
-            orders: buffer.readInt16LE(bidOff + 8),
-          });
-        }
-        if (askOff + 10 <= buffer.length) {
-          asks.push({
-            qty: buffer.readInt32LE(askOff),
-            price: buffer.readInt32LE(askOff + 4) / 100,
-            orders: buffer.readInt16LE(askOff + 8),
-          });
+      for (let i = 0; i < RECORDS; i++) {
+        const off = DEPTH_START + i * RECORD_SIZE;
+        if (off + RECORD_SIZE > buffer.length) break;
+
+        const flag   = buffer.readUInt16LE(off);
+        const qty    = Number(buffer.readBigInt64LE(off + 2));
+        const rawP   = Number(buffer.readBigInt64LE(off + 10));
+        const orders = buffer.readUInt16LE(off + 18);
+        const p      = rawP > 0 ? rawP / 100 : null;
+
+        if (p === null || qty < 0) continue;
+
+        const level = { price: p, qty, orders };
+        if (flag === 0) {
+          if (bids.length < 5) bids.push(level);
+        } else {
+          if (asks.length < 5) asks.push(level);
         }
       }
 
       if (bids.length > 0 || asks.length > 0) {
         this.marketDataEngine.pushDepth(token, {
           token, bids, asks,
-          totalBuyQty: bids.reduce((s, b) => s + b.qty, 0),
+          totalBuyQty:  bids.reduce((s, b) => s + b.qty, 0),
           totalSellQty: asks.reduce((s, a) => s + a.qty, 0),
         });
       }
+      return;
     }
+
+    // ── Mode 4 (Depth 20) and unrecognised modes ──────────────────────────────
+    // Mode 4 depth fields use int32/int16 (not int64) per the official SDK.
+    // No bugs have been confirmed in Mode 4 — not altered.
+    // Unrecognised modes are silently ignored.
   }
 
   /**

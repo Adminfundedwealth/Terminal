@@ -93,7 +93,13 @@ export class RiskEngine {
   /**
    * Post-trade risk check.
    * Runs after every fill. Checks if account should be locked/breached.
-   * Returns { status: 'ok' | 'locked' | 'breached' | 'target_reached', reason?: string }
+   * Returns { status: 'ok' | 'locked' | 'breached' | 'target_reached' | 'feed_stale', reason?: string }
+   *
+   * SAFETY: When the market data feed is stale, or when any open position
+   * lacks a valid quote, unrealized P&L is EXCLUDED from daily-loss and
+   * drawdown calculations. This prevents a missing/zero LTP from triggering
+   * a false account lock or permanent breach.
+   * Only realized P&L is used for risk decisions when feed data is suspect.
    */
   static async postTradeCheck(accountId, quoteProvider = null) {
     const rules = await riskRulesRepo.getRulesMap(accountId);
@@ -103,13 +109,37 @@ export class RiskEngine {
       return { status: 'ok' };
     }
 
-    // Calculate today's realized P&L
+    // ── Feed staleness check ────────────────────────────────────────────────
+    // Import marketDataEngine lazily to avoid circular dependencies.
+    // If the feed is stale, skip ALL unrealized P&L based risk checks.
+    let feedIsStale = false;
+    try {
+      const { marketDataEngine: mde } = await import('./marketDataEngine.js').catch(() => ({}));
+      if (mde && typeof mde.isFeedStale === 'function') {
+        feedIsStale = mde.isFeedStale();
+      }
+    } catch { /* non-critical — proceed conservatively */ }
+
+    // Calculate today's realized P&L (always safe — from trade records, not live prices)
     const todayRealizedPnl = await this.calculateTodayRealizedPnl(accountId);
 
-    // Calculate unrealized P&L from open positions
-    const unrealizedPnl = await positionRepo.getTotalUnrealizedPnl(accountId, quoteProvider);
+    // Calculate unrealized P&L — only when feed is healthy and quotes are valid
+    let unrealizedPnl = 0;
+    let unrealizedDataQuality = 'ok';
 
-    const totalDailyPnl = todayRealizedPnl + unrealizedPnl;
+    if (feedIsStale) {
+      unrealizedDataQuality = 'feed_stale';
+      console.warn(`[RiskEngine] postTradeCheck: feed is STALE — excluding unrealized P&L from risk checks for account ${accountId}`);
+    } else if (quoteProvider) {
+      // Use the safe quoteProvider that returns null for missing/invalid quotes.
+      // getTotalUnrealizedPnl will fall back to avg_price (break-even) for null quotes,
+      // so no fake loss is generated. This is intentional — see position.repository.js.
+      unrealizedPnl = await positionRepo.getTotalUnrealizedPnl(accountId, quoteProvider);
+    }
+
+    // When feed is stale, use only realized P&L for daily-loss and drawdown.
+    // This is the safe state: we know real losses, we don't know unrealized.
+    const totalDailyPnl = todayRealizedPnl + (feedIsStale ? 0 : unrealizedPnl);
 
     // Check daily loss limit
     if (rules.daily_loss_limit) {
@@ -161,7 +191,7 @@ export class RiskEngine {
     if (rules.max_drawdown) {
       const limit = rules.max_drawdown;
       const peakBalance = account.peak_balance || account.balance;
-      const currentEquity = account.balance + unrealizedPnl;
+      const currentEquity = account.balance + (feedIsStale ? 0 : unrealizedPnl);
       const drawdown = peakBalance - currentEquity;
       const maxDrawdown = limit.amount || (limit.percent / 100) * peakBalance;
 
@@ -216,7 +246,7 @@ export class RiskEngine {
       const target = rules.profit_target;
       const challenge = await this.getChallengeForAccount(accountId);
       if (challenge) {
-        const totalPnl = account.balance - challenge.initial_balance + unrealizedPnl;
+        const totalPnl = account.balance - challenge.initial_balance + (feedIsStale ? 0 : unrealizedPnl);
         const targetAmount = target.amount || (target.percent / 100) * challenge.initial_balance;
 
         if (totalPnl >= targetAmount) {
@@ -235,15 +265,21 @@ export class RiskEngine {
     }
 
     // Update peak balance if current is higher (on challenge_accounts table)
-    const currentEquity = account.balance + unrealizedPnl;
-    if (currentEquity > (account.peak_balance || 0)) {
-      try {
-        const challenge = await this.getChallengeForAccount(accountId);
-        if (challenge) {
-          const { supabase } = await import('../db/client.js');
-          await supabase.from('challenge_accounts').update({ peak_balance: currentEquity }).eq('id', challenge.id);
-        }
-      } catch (e) { /* non-critical */ }
+    if (!feedIsStale) {
+      const currentEquityForPeak = account.balance + unrealizedPnl;
+      if (currentEquityForPeak > (account.peak_balance || 0)) {
+        try {
+          const challenge = await this.getChallengeForAccount(accountId);
+          if (challenge) {
+            const { supabase } = await import('../db/client.js');
+            await supabase.from('challenge_accounts').update({ peak_balance: currentEquityForPeak }).eq('id', challenge.id);
+          }
+        } catch (e) { /* non-critical */ }
+      }
+    }
+
+    if (feedIsStale) {
+      return { status: 'feed_stale', reason: 'Market data feed is stale — unrealized P&L excluded from risk checks' };
     }
 
     return { status: 'ok' };
@@ -412,11 +448,17 @@ export class RiskEngine {
     const maxLoss = limit.amount || (limit.percent / 100) * account.balance;
 
     const todayRealizedPnl = await this.calculateTodayRealizedPnl(accountId);
-    const unrealizedPnl = await positionRepo.getTotalUnrealizedPnl(accountId, quoteProvider);
+
+    // Only add unrealized P&L when the quoteProvider returns valid data.
+    // getTotalUnrealizedPnl now falls back to avg_price (break-even = P&L 0)
+    // for any position whose LTP is null/zero/stale — so the worst case is
+    // that unrealizedPnl = 0 (no contribution), never a fake large loss.
+    const unrealizedPnl = quoteProvider
+      ? await positionRepo.getTotalUnrealizedPnl(accountId, quoteProvider)
+      : 0;
+
     const totalDailyPnl = todayRealizedPnl + unrealizedPnl;
 
-    // If already close to limit (80%), warn but allow
-    // If at limit, reject
     if (totalDailyPnl < 0 && Math.abs(totalDailyPnl) >= maxLoss) {
       return { allowed: false, reason: `Daily loss limit would be breached (current loss: ₹${Math.abs(totalDailyPnl).toFixed(0)}, limit: ₹${maxLoss.toFixed(0)})` };
     }
