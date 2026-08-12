@@ -124,44 +124,71 @@ export class InstrumentService {
   }
 
   getExpiries(symbol) {
-    // Return available expiry dates for a symbol
+    // Fallback expiry dates used ONLY when optionChainService discovery fails.
+    // Returns dates that actually have option contracts on Angel One's API.
+    //
+    // Provider-confirmed expiry patterns (from live searchScrip testing):
+    //   NIFTY      — weekly Tuesday (still active)
+    //   BANKNIFTY  — monthly (last Tuesday of month, NOT Wednesday — weekly discontinued)
+    //   FINNIFTY   — quarterly (last Tuesday of quarter-end months)
+    //   MIDCPNIFTY — monthly (last Tuesday of month — Monday weekly discontinued)
+    //   SENSEX     — no option contracts available via Angel One NFO
+    //
+    // For stocks: last Thursday of month (standard NSE monthly expiry).
     const baseSymbol = symbol.toUpperCase();
     const now = new Date();
     const expiries = [];
 
-    // Generate weekly expiries for indices, monthly for stocks
-    const isIndex = ['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'MIDCPNIFTY', 'SENSEX'].includes(baseSymbol);
+    // Use IST midnight to avoid UTC day-boundary shifts (IST = UTC+5:30)
+    const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+    const nowIST = new Date(now.getTime() + IST_OFFSET_MS);
+    const todayISO = nowIST.toISOString().split('T')[0];
 
-    if (isIndex) {
-      // Weekly expiries on TUESDAY (NSE moved NIFTY/BANKNIFTY to Tuesday, effective 2024)
-      // NIFTY = Tuesday, BANKNIFTY = Wednesday, FINNIFTY = Tuesday, MIDCPNIFTY = Monday, SENSEX = Friday
-      let expiryDay;
-      switch (baseSymbol) {
-        case 'NIFTY': expiryDay = 2; break;       // Tuesday
-        case 'BANKNIFTY': expiryDay = 3; break;   // Wednesday
-        case 'FINNIFTY': expiryDay = 2; break;    // Tuesday
-        case 'MIDCPNIFTY': expiryDay = 1; break;  // Monday
-        case 'SENSEX': expiryDay = 5; break;      // Friday
-        default: expiryDay = 4; break;             // Thursday fallback
+    if (baseSymbol === 'NIFTY') {
+      // NIFTY: weekly Tuesday — still active on Angel One
+      for (let i = 0; i < 6; i++) {
+        const d = new Date(nowIST);
+        const daysUntilTue = (2 - d.getUTCDay() + 7) % 7 || 7;
+        d.setUTCDate(d.getUTCDate() + daysUntilTue + i * 7);
+        const iso = d.toISOString().split('T')[0];
+        if (iso >= todayISO) expiries.push(iso);
       }
-
-      for (let i = 0; i < 8; i++) {
-        const date = new Date(now);
-        // Find the next occurrence of expiryDay
-        const daysUntil = (expiryDay - date.getDay() + 7) % 7;
-        date.setDate(date.getDate() + daysUntil + i * 7);
-        if (date > now) {
-          expiries.push(date.toISOString().split('T')[0]);
-        }
+    } else if (baseSymbol === 'BANKNIFTY' || baseSymbol === 'MIDCPNIFTY') {
+      // Monthly: last Tuesday of each of the next 4 months
+      // Confirmed: BANKNIFTY25AUG26 (Tue) = 660 contracts
+      //            MIDCPNIFTY25AUG26 (Tue) = 460 contracts
+      for (let i = 0; i < 4; i++) {
+        const y = nowIST.getUTCFullYear();
+        const m = nowIST.getUTCMonth() + i;
+        const lastDay = new Date(Date.UTC(y, m + 1, 0));
+        while (lastDay.getUTCDay() !== 2) lastDay.setUTCDate(lastDay.getUTCDate() - 1);
+        const iso = lastDay.toISOString().split('T')[0];
+        if (iso >= todayISO) expiries.push(iso);
       }
+    } else if (baseSymbol === 'FINNIFTY') {
+      // Quarterly: last Tuesday of next 4 months (quarterly contracts only)
+      // Confirmed: FINNIFTY29SEP26 (Tue) = 220 contracts
+      for (let i = 0; i < 6; i++) {
+        const y = nowIST.getUTCFullYear();
+        const m = nowIST.getUTCMonth() + i;
+        const lastDay = new Date(Date.UTC(y, m + 1, 0));
+        while (lastDay.getUTCDay() !== 2) lastDay.setUTCDate(lastDay.getUTCDate() - 1);
+        const iso = lastDay.toISOString().split('T')[0];
+        if (iso >= todayISO && !expiries.includes(iso)) expiries.push(iso);
+      }
+    } else if (baseSymbol === 'SENSEX') {
+      // SENSEX: no option contracts available on Angel One NFO.
+      // Return empty — frontend handles this with provider-unavailable message.
+      return [];
     } else {
-      // Monthly expiries (last Thursday of month)
+      // Stocks: last Thursday of next 3 months (standard NSE monthly)
       for (let i = 0; i < 3; i++) {
-        const date = new Date(now.getFullYear(), now.getMonth() + i + 1, 0);
-        while (date.getDay() !== 4) {
-          date.setDate(date.getDate() - 1);
-        }
-        expiries.push(date.toISOString().split('T')[0]);
+        const y = nowIST.getUTCFullYear();
+        const m = nowIST.getUTCMonth() + i;
+        const lastDay = new Date(Date.UTC(y, m + 1, 0));
+        while (lastDay.getUTCDay() !== 4) lastDay.setUTCDate(lastDay.getUTCDate() - 1);
+        const iso = lastDay.toISOString().split('T')[0];
+        if (iso >= todayISO) expiries.push(iso);
       }
     }
 

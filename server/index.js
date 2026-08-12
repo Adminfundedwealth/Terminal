@@ -527,22 +527,29 @@ async function connectAngelFeed() {
     // Initial propagation
     propagateToken(angelFeed.session);
 
-    // Pre-warm option chains for all 5 index pairs in the background.
-    // Runs in parallel � all 5 symbols warm concurrently so first user request hits cache instantly.
-    const WARMUP_SYMBOLS = ['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'MIDCPNIFTY', 'SENSEX'];
+    // Pre-warm option chains for all index pairs in the background.
+    // SEQUENTIAL with 2s gap between symbols — parallel warmup fires 75+
+    // concurrent Angel One searchScrip requests which triggers 403 rate
+    // limiting, causing expiry discovery to fail and the bad
+    // instrumentService fallback (discontinued weekly dates) to activate.
+    // SENSEX excluded — no option contracts available on Angel One NFO.
+    const WARMUP_SYMBOLS = ['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'MIDCPNIFTY'];
     (async () => {
-      console.log('[OptionChain] Starting startup warmup for all index pairs (parallel)...');
-      await Promise.allSettled(WARMUP_SYMBOLS.map(async (sym) => {
+      console.log('[OptionChain] Starting startup warmup (sequential, 2s gap)...');
+      for (const sym of WARMUP_SYMBOLS) {
         try {
           const expiries = await optionChainService.getExpiries(sym);
           if (expiries && expiries.length > 0) {
             await optionChainService.getOptionChain(sym, expiries[0]);
             console.log(`[OptionChain] Warmup done: ${sym} ${expiries[0]}`);
+          } else {
+            console.warn(`[OptionChain] Warmup: no expiries for ${sym}`);
           }
         } catch (e) {
           console.warn(`[OptionChain] Warmup failed for ${sym}:`, e.message);
         }
-      }));
+        await new Promise(r => setTimeout(r, 2000)); // 2s gap — prevent rate limit
+      }
       console.log('[OptionChain] Startup warmup complete.');
     })().catch(e => console.warn('[OptionChain] Warmup error:', e.message));
 

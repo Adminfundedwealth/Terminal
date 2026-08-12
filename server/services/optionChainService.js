@@ -188,8 +188,10 @@ export class OptionChainService {
     // is found in 1-2 requests instead of 83.
     const candidates = this._buildSmartCandidates(now);
 
-    // ── Step 2: Fan out in parallel batches of 15, 100ms inter-batch gap ─
-    const BATCH = 15;
+    // ── Step 2: Fan out in parallel batches of 5, 100ms inter-batch gap ─
+    // Batch size 5 (not 15) stays within Angel One rate limits even when
+    // multiple users load option chains concurrently.
+    const BATCH = 5;
     const found = []; // { iso, angelFmt, priority }
 
     for (let start = 0; start < candidates.length && found.length < 5; start += BATCH) {
