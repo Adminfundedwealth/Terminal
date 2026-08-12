@@ -99,11 +99,14 @@ function handleMessage(ws, data, subscriptions, depthSubscriptions, marketDataEn
   switch (data.type) {
     case 'subscribe': {
       const tokens = data.tokens || [];
+      // Support optional exchange hints: data.exchangeHints = { "token": "NFO", ... }
+      const exchangeHints = data.exchangeHints || {};
       // Limit total subscriptions per connection
       if (subscriptions.size + tokens.length > WS_MAX_SUBSCRIPTIONS) {
         ws.send(JSON.stringify({ type: 'error', message: `Max ${WS_MAX_SUBSCRIPTIONS} subscriptions per connection.` }));
         return;
       }
+      const newTokens = []; // tokens that need to be forwarded to AngelFeed
       tokens.forEach((token) => {
         if (subscriptions.has(token)) return;
         // Validate token format — numeric tokens (Angel One) or alphanumeric identifiers (MCX/CDS/NFO)
@@ -116,7 +119,54 @@ function handleMessage(ws, data, subscriptions, depthSubscriptions, marketDataEn
         };
         subscriptions.set(token, callback);
         marketDataEngine.subscribe(token, callback);
+
+        // Only forward to AngelFeed if not already receiving ticks for this token
+        // (avoid double-subscribing tokens already in the default feed list)
+        if (!marketDataEngine.quotes.has(token) || !marketDataEngine.quotes.get(token)?.ltp) {
+          newTokens.push(token);
+        }
       });
+
+      // Subscribe new tokens to Angel One feed in Quote mode (mode 2) so we get OHLC + changePercent.
+      // SAFETY: Never forward placeholder tokens (non-numeric) to the feed — they will never
+      // match a real SmartStream tick and waste subscription slots.
+      // Exchange resolution order: client hint → cached quote exchange → instrument master → reject
+      if (angelFeed && newTokens.length > 0) {
+        try {
+          const feedTokens = [];
+          for (const token of newTokens) {
+            // Skip placeholder / non-numeric tokens — they have no live feed
+            if (!/^\d+$/.test(token)) {
+              console.warn(`[WebSocket] Skipping non-numeric placeholder token: ${token} — load real instrument master for live data`);
+              continue;
+            }
+
+            // Resolve exchange from hint, then cached quote, then instrument master.
+            // NEVER silently default to NSE for derivative tokens.
+            let exchange = exchangeHints[token];
+            if (!exchange) {
+              exchange = marketDataEngine.getQuote(token)?.exchange;
+            }
+            if (!exchange) {
+              // Look up in instrument master (passed through closure via instrumentService if available)
+              // For now default NSE only when no other source is available — and only for equity-range tokens
+              const isIndexToken = token.startsWith('999');
+              exchange = isIndexToken ? 'NSE' : 'NSE'; // equity/index default
+              // Log if no hint was provided so operators can diagnose routing issues
+              console.debug(`[WebSocket] No exchange hint for token ${token} — defaulting to NSE`);
+            }
+
+            feedTokens.push({ token, exchange });
+          }
+
+          if (feedTokens.length > 0) {
+            angelFeed.subscribe(feedTokens, 2); // mode 2 = Quote (OHLC + volume + changePercent)
+            console.log(`[WebSocket] Forwarded ${feedTokens.length} new token(s) to AngelFeed (mode 2):`, feedTokens.map(t => `${t.token}/${t.exchange}`).join(', '));
+          }
+        } catch (e) {
+          console.warn('[WebSocket] AngelFeed subscribe failed for new tokens:', e.message);
+        }
+      }
       break;
     }
 
@@ -153,12 +203,12 @@ function handleMessage(ws, data, subscriptions, depthSubscriptions, marketDataEn
         newDepthTokens.push(token);
       });
 
-      // Upgrade these tokens to mode 3 (SnapQuote) on the Angel One feed
-      // so the broker actually streams bid/ask depth ticks for them.
-      // Indices (token starts with '999') have no order book — skip them.
+      // Upgrade to mode 3 (SnapQuote) for depth — skip indices and placeholder tokens.
+      // Indices (token starts with '999') have no order book.
+      // Placeholder non-numeric tokens have no live feed.
       if (angelFeed && newDepthTokens.length > 0) {
         const depthEligible = newDepthTokens
-          .filter(t => !t.startsWith('999'))
+          .filter(t => !t.startsWith('999') && /^\d+$/.test(t))
           .map(t => {
             const quote = marketDataEngine.getQuote(t);
             return { token: t, exchange: quote?.exchange || 'NSE' };

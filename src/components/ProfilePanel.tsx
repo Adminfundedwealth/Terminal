@@ -1,4 +1,4 @@
-﻿/**
+/**
  * PROFILE PANEL
  * 
  * Displays user info, account details, and challenge status.
@@ -43,9 +43,13 @@ export function ProfilePanel({ onClose }: ProfilePanelProps) {
   };
 
   const phase =
-    account?.challenge?.type === 'evaluation_phase1' ? 'Phase 1' :
-    account?.challenge?.type === 'evaluation_phase2' ? 'Phase 2' :
-    account?.challenge?.type === 'funded' ? 'Funded' :
+    account?.challenge?.type === 'flash_funding'           ? 'Flash'   :
+    account?.challenge?.type === 'instant_funding'         ? 'Instant' :
+    account?.challenge?.type === '1step_evaluation'        ? '1-Step'  :
+    account?.challenge?.type === '2step_evaluation_phase1' ? '2-Step'  :
+    account?.challenge?.type === 'evaluation_phase1'       ? 'Phase 1' :
+    account?.challenge?.type === 'evaluation_phase2'       ? 'Phase 2' :
+    account?.challenge?.type === 'funded'                  ? 'Funded'  :
     'Phase 1';
 
   const phaseColor =

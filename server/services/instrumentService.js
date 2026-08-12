@@ -1,15 +1,29 @@
 /**
  * Instrument Service
- * Manages all tradeable instruments across segments
- * NSE, BSE, NFO (Futures & Options), MCX, CDS
+ * Manages all tradeable instruments across segments.
+ *
+ * TOKEN VALIDITY:
+ *   NSE equity tokens (numeric) and index tokens (99926xxx) are valid Angel One
+ *   SmartStream tokens confirmed in live sessions.
+ *
+ *   All NFO/MCX/CDS tokens such as 'NF_FUT', 'GOLD_F', 'USDINR_F' are
+ *   PLACEHOLDER strings — not real Angel One broker tokens. They are tagged
+ *   { isPlaceholder: true } and must NOT be forwarded to the live feed.
+ *   Real numeric tokens must be obtained from the Angel One daily instrument
+ *   master CSV at server startup.
  */
 export class InstrumentService {
   constructor() {
     this.instruments = this.loadInstruments();
   }
 
+  /** Returns true when a token is a real numeric Angel One broker token. */
+  static isValidBrokerToken(token) {
+    return typeof token === 'string' && /^\d+$/.test(token);
+  }
+
   loadInstruments() {
-    // Complete instrument master - in production, this would be loaded from broker's instrument file daily
+    // ── NSE Equity — valid numeric tokens ───────────────────────────────────
     return [
       // NSE Equity
       { token: '2885', symbol: 'RELIANCE', name: 'Reliance Industries Ltd', segment: 'NSE', instrumentType: 'EQ', exchange: 'NSE', lotSize: 1, tickSize: 0.05 },
@@ -40,42 +54,43 @@ export class InstrumentService {
       { token: '99926074', symbol: 'MIDCPNIFTY', name: 'Midcap Nifty Index', segment: 'NSE', instrumentType: 'EQ', exchange: 'NSE', lotSize: 50, tickSize: 0.05 },
       { token: '99919000', symbol: 'SENSEX', name: 'BSE Sensex Index', segment: 'BSE', instrumentType: 'EQ', exchange: 'BSE', lotSize: 10, tickSize: 0.05 },
 
-      // Index Futures
-      { token: 'NF_FUT', symbol: 'NIFTY FUT', name: 'Nifty Futures Jun 2026', segment: 'NFO', instrumentType: 'FUT', exchange: 'NSE', lotSize: 50, tickSize: 0.05, expiry: '2026-06-25' },
-      { token: 'NF_FUT_N', symbol: 'NIFTY FUT JUL', name: 'Nifty Futures Jul 2026', segment: 'NFO', instrumentType: 'FUT', exchange: 'NSE', lotSize: 50, tickSize: 0.05, expiry: '2026-07-30' },
-      { token: 'NF_FUT_F', symbol: 'NIFTY FUT AUG', name: 'Nifty Futures Aug 2026', segment: 'NFO', instrumentType: 'FUT', exchange: 'NSE', lotSize: 50, tickSize: 0.05, expiry: '2026-08-27' },
-      { token: 'BNF_FUT', symbol: 'BANKNIFTY FUT', name: 'BankNifty Futures Jun 2026', segment: 'NFO', instrumentType: 'FUT', exchange: 'NSE', lotSize: 15, tickSize: 0.05, expiry: '2026-06-25' },
-      { token: 'BNF_FUT_N', symbol: 'BANKNIFTY FUT JUL', name: 'BankNifty Futures Jul 2026', segment: 'NFO', instrumentType: 'FUT', exchange: 'NSE', lotSize: 15, tickSize: 0.05, expiry: '2026-07-30' },
-      { token: 'FNF_FUT', symbol: 'FINNIFTY FUT', name: 'FinNifty Futures Jun 2026', segment: 'NFO', instrumentType: 'FUT', exchange: 'NSE', lotSize: 25, tickSize: 0.05, expiry: '2026-06-25' },
-      { token: 'MCN_FUT', symbol: 'MIDCPNIFTY FUT', name: 'MidcapNifty Futures Jun 2026', segment: 'NFO', instrumentType: 'FUT', exchange: 'NSE', lotSize: 50, tickSize: 0.05, expiry: '2026-06-25' },
-      { token: 'SEN_FUT', symbol: 'SENSEX FUT', name: 'Sensex Futures Jun 2026', segment: 'BFO', instrumentType: 'FUT', exchange: 'BSE', lotSize: 10, tickSize: 0.05, expiry: '2026-06-25' },
+      // Index Futures — PLACEHOLDER TOKENS (isPlaceholder: true)
+      // These string tokens are NOT real Angel One tokens. They produce no live ticks.
+      { token: 'NF_FUT',    symbol: 'NIFTY FUT',       name: 'Nifty Futures (current)',       segment: 'NFO', instrumentType: 'FUT', exchange: 'NSE', lotSize: 50,   tickSize: 0.05, expiry: '2026-08-28', isPlaceholder: true },
+      { token: 'NF_FUT_N',  symbol: 'NIFTY FUT JUL',   name: 'Nifty Futures Jul 2026',        segment: 'NFO', instrumentType: 'FUT', exchange: 'NSE', lotSize: 50,   tickSize: 0.05, expiry: '2026-07-30', isPlaceholder: true },
+      { token: 'NF_FUT_F',  symbol: 'NIFTY FUT AUG',   name: 'Nifty Futures Aug 2026',        segment: 'NFO', instrumentType: 'FUT', exchange: 'NSE', lotSize: 50,   tickSize: 0.05, expiry: '2026-08-27', isPlaceholder: true },
+      { token: 'BNF_FUT',   symbol: 'BANKNIFTY FUT',   name: 'BankNifty Futures (current)',   segment: 'NFO', instrumentType: 'FUT', exchange: 'NSE', lotSize: 15,   tickSize: 0.05, expiry: '2026-08-27', isPlaceholder: true },
+      { token: 'BNF_FUT_N', symbol: 'BANKNIFTY FUT JUL', name: 'BankNifty Futures Jul 2026',  segment: 'NFO', instrumentType: 'FUT', exchange: 'NSE', lotSize: 15,   tickSize: 0.05, expiry: '2026-07-30', isPlaceholder: true },
+      { token: 'FNF_FUT',   symbol: 'FINNIFTY FUT',    name: 'FinNifty Futures (current)',    segment: 'NFO', instrumentType: 'FUT', exchange: 'NSE', lotSize: 25,   tickSize: 0.05, expiry: '2026-08-26', isPlaceholder: true },
+      { token: 'MCN_FUT',   symbol: 'MIDCPNIFTY FUT',  name: 'MidcapNifty Futures (current)', segment: 'NFO', instrumentType: 'FUT', exchange: 'NSE', lotSize: 50,   tickSize: 0.05, expiry: '2026-08-25', isPlaceholder: true },
+      { token: 'SEN_FUT',   symbol: 'SENSEX FUT',      name: 'Sensex Futures (current)',      segment: 'BFO', instrumentType: 'FUT', exchange: 'BSE', lotSize: 10,   tickSize: 0.05, expiry: '2026-08-29', isPlaceholder: true },
 
-      // Stock Futures
-      { token: 'REL_FUT', symbol: 'RELIANCE FUT', name: 'Reliance Futures Jun 2026', segment: 'NFO', instrumentType: 'FUT', exchange: 'NSE', lotSize: 250, tickSize: 0.05, expiry: '2026-06-25' },
-      { token: 'SBIN_FUT', symbol: 'SBIN FUT', name: 'SBIN Futures Jun 2026', segment: 'NFO', instrumentType: 'FUT', exchange: 'NSE', lotSize: 1500, tickSize: 0.05, expiry: '2026-06-25' },
-      { token: 'HDFC_FUT', symbol: 'HDFCBANK FUT', name: 'HDFCBANK Futures Jun 2026', segment: 'NFO', instrumentType: 'FUT', exchange: 'NSE', lotSize: 550, tickSize: 0.05, expiry: '2026-06-25' },
-      { token: 'ICICI_FUT', symbol: 'ICICIBANK FUT', name: 'ICICIBANK Futures Jun 2026', segment: 'NFO', instrumentType: 'FUT', exchange: 'NSE', lotSize: 700, tickSize: 0.05, expiry: '2026-06-25' },
-      { token: 'TCS_FUT', symbol: 'TCS FUT', name: 'TCS Futures Jun 2026', segment: 'NFO', instrumentType: 'FUT', exchange: 'NSE', lotSize: 150, tickSize: 0.05, expiry: '2026-06-25' },
-      { token: 'INFY_FUT', symbol: 'INFY FUT', name: 'Infosys Futures Jun 2026', segment: 'NFO', instrumentType: 'FUT', exchange: 'NSE', lotSize: 300, tickSize: 0.05, expiry: '2026-06-25' },
+      // Stock Futures — PLACEHOLDER TOKENS
+      { token: 'REL_FUT',   symbol: 'RELIANCE FUT',  name: 'Reliance Futures (current)',  segment: 'NFO', instrumentType: 'FUT', exchange: 'NSE', lotSize: 250,  tickSize: 0.05, expiry: '2026-08-28', isPlaceholder: true },
+      { token: 'SBIN_FUT',  symbol: 'SBIN FUT',      name: 'SBIN Futures (current)',      segment: 'NFO', instrumentType: 'FUT', exchange: 'NSE', lotSize: 1500, tickSize: 0.05, expiry: '2026-08-28', isPlaceholder: true },
+      { token: 'HDFC_FUT',  symbol: 'HDFCBANK FUT',  name: 'HDFCBANK Futures (current)',  segment: 'NFO', instrumentType: 'FUT', exchange: 'NSE', lotSize: 550,  tickSize: 0.05, expiry: '2026-08-28', isPlaceholder: true },
+      { token: 'ICICI_FUT', symbol: 'ICICIBANK FUT', name: 'ICICIBANK Futures (current)', segment: 'NFO', instrumentType: 'FUT', exchange: 'NSE', lotSize: 700,  tickSize: 0.05, expiry: '2026-08-28', isPlaceholder: true },
+      { token: 'TCS_FUT',   symbol: 'TCS FUT',       name: 'TCS Futures (current)',       segment: 'NFO', instrumentType: 'FUT', exchange: 'NSE', lotSize: 150,  tickSize: 0.05, expiry: '2026-08-28', isPlaceholder: true },
+      { token: 'INFY_FUT',  symbol: 'INFY FUT',      name: 'Infosys Futures (current)',   segment: 'NFO', instrumentType: 'FUT', exchange: 'NSE', lotSize: 300,  tickSize: 0.05, expiry: '2026-08-28', isPlaceholder: true },
 
-      // MCX Commodities
-      { token: 'GOLD_F', symbol: 'GOLD', name: 'Gold Futures', segment: 'MCX', instrumentType: 'FUT', exchange: 'MCX', lotSize: 100, tickSize: 1, expiry: '2026-08-05' },
-      { token: 'GOLDM_F', symbol: 'GOLD MINI', name: 'Gold Mini Futures', segment: 'MCX', instrumentType: 'FUT', exchange: 'MCX', lotSize: 10, tickSize: 1, expiry: '2026-07-07' },
-      { token: 'SILVER_F', symbol: 'SILVER', name: 'Silver Futures', segment: 'MCX', instrumentType: 'FUT', exchange: 'MCX', lotSize: 30, tickSize: 1, expiry: '2026-09-04' },
-      { token: 'SILVERM_F', symbol: 'SILVER MINI', name: 'Silver Mini Futures', segment: 'MCX', instrumentType: 'FUT', exchange: 'MCX', lotSize: 5, tickSize: 1, expiry: '2026-07-07' },
-      { token: 'COPPER_F', symbol: 'COPPER', name: 'Copper Futures', segment: 'MCX', instrumentType: 'FUT', exchange: 'MCX', lotSize: 2500, tickSize: 0.05, expiry: '2026-07-30' },
-      { token: 'ZINC_F', symbol: 'ZINC', name: 'Zinc Futures', segment: 'MCX', instrumentType: 'FUT', exchange: 'MCX', lotSize: 5000, tickSize: 0.05, expiry: '2026-07-30' },
-      { token: 'ALUMINIUM_F', symbol: 'ALUMINIUM', name: 'Aluminium Futures', segment: 'MCX', instrumentType: 'FUT', exchange: 'MCX', lotSize: 5000, tickSize: 0.05, expiry: '2026-07-30' },
-      { token: 'CRUDE_F', symbol: 'CRUDEOIL', name: 'Crude Oil Futures', segment: 'MCX', instrumentType: 'FUT', exchange: 'MCX', lotSize: 100, tickSize: 1, expiry: '2026-07-19' },
-      { token: 'NG_F', symbol: 'NATURALGAS', name: 'Natural Gas Futures', segment: 'MCX', instrumentType: 'FUT', exchange: 'MCX', lotSize: 1250, tickSize: 0.1, expiry: '2026-07-26' },
+      // MCX Commodities — PLACEHOLDER TOKENS
+      { token: 'GOLD_F',      symbol: 'GOLD',       name: 'Gold Futures',        segment: 'MCX', instrumentType: 'FUT', exchange: 'MCX', lotSize: 100,  tickSize: 1,    expiry: '2026-08-05', isPlaceholder: true },
+      { token: 'GOLDM_F',     symbol: 'GOLD MINI',  name: 'Gold Mini Futures',   segment: 'MCX', instrumentType: 'FUT', exchange: 'MCX', lotSize: 10,   tickSize: 1,    expiry: '2026-07-07', isPlaceholder: true },
+      { token: 'SILVER_F',    symbol: 'SILVER',     name: 'Silver Futures',      segment: 'MCX', instrumentType: 'FUT', exchange: 'MCX', lotSize: 30,   tickSize: 1,    expiry: '2026-09-04', isPlaceholder: true },
+      { token: 'SILVERM_F',   symbol: 'SILVER MINI',name: 'Silver Mini Futures', segment: 'MCX', instrumentType: 'FUT', exchange: 'MCX', lotSize: 5,    tickSize: 1,    expiry: '2026-07-07', isPlaceholder: true },
+      { token: 'COPPER_F',    symbol: 'COPPER',     name: 'Copper Futures',      segment: 'MCX', instrumentType: 'FUT', exchange: 'MCX', lotSize: 2500, tickSize: 0.05, expiry: '2026-07-30', isPlaceholder: true },
+      { token: 'ZINC_F',      symbol: 'ZINC',       name: 'Zinc Futures',        segment: 'MCX', instrumentType: 'FUT', exchange: 'MCX', lotSize: 5000, tickSize: 0.05, expiry: '2026-07-30', isPlaceholder: true },
+      { token: 'ALUMINIUM_F', symbol: 'ALUMINIUM',  name: 'Aluminium Futures',   segment: 'MCX', instrumentType: 'FUT', exchange: 'MCX', lotSize: 5000, tickSize: 0.05, expiry: '2026-07-30', isPlaceholder: true },
+      { token: 'CRUDE_F',     symbol: 'CRUDEOIL',   name: 'Crude Oil Futures',   segment: 'MCX', instrumentType: 'FUT', exchange: 'MCX', lotSize: 100,  tickSize: 1,    expiry: '2026-07-19', isPlaceholder: true },
+      { token: 'NG_F',        symbol: 'NATURALGAS', name: 'Natural Gas Futures', segment: 'MCX', instrumentType: 'FUT', exchange: 'MCX', lotSize: 1250, tickSize: 0.1,  expiry: '2026-07-26', isPlaceholder: true },
 
-      // Currency Derivatives
-      { token: 'USDINR_F', symbol: 'USDINR FUT', name: 'USD/INR Futures Jun 2026', segment: 'CDS', instrumentType: 'FUT', exchange: 'NSE', lotSize: 1000, tickSize: 0.0025, expiry: '2026-06-25' },
-      { token: 'USDINR_FN', symbol: 'USDINR FUT JUL', name: 'USD/INR Futures Jul 2026', segment: 'CDS', instrumentType: 'FUT', exchange: 'NSE', lotSize: 1000, tickSize: 0.0025, expiry: '2026-07-29' },
-      { token: 'USDINR_FF', symbol: 'USDINR FUT AUG', name: 'USD/INR Futures Aug 2026', segment: 'CDS', instrumentType: 'FUT', exchange: 'NSE', lotSize: 1000, tickSize: 0.0025, expiry: '2026-08-27' },
-      { token: 'EURINR_F', symbol: 'EURINR FUT', name: 'EUR/INR Futures Jun 2026', segment: 'CDS', instrumentType: 'FUT', exchange: 'NSE', lotSize: 1000, tickSize: 0.0025, expiry: '2026-06-25' },
-      { token: 'GBPINR_F', symbol: 'GBPINR FUT', name: 'GBP/INR Futures Jun 2026', segment: 'CDS', instrumentType: 'FUT', exchange: 'NSE', lotSize: 1000, tickSize: 0.0025, expiry: '2026-06-25' },
-      { token: 'JPYINR_F', symbol: 'JPYINR FUT', name: 'JPY/INR Futures Jun 2026', segment: 'CDS', instrumentType: 'FUT', exchange: 'NSE', lotSize: 1000, tickSize: 0.0025, expiry: '2026-06-25' },
+      // Currency Derivatives — PLACEHOLDER TOKENS
+      { token: 'USDINR_F',  symbol: 'USDINR FUT',     name: 'USD/INR Futures (current)', segment: 'CDS', instrumentType: 'FUT', exchange: 'NSE', lotSize: 1000, tickSize: 0.0025, expiry: '2026-08-27', isPlaceholder: true },
+      { token: 'USDINR_FN', symbol: 'USDINR FUT JUL', name: 'USD/INR Futures Jul 2026',  segment: 'CDS', instrumentType: 'FUT', exchange: 'NSE', lotSize: 1000, tickSize: 0.0025, expiry: '2026-07-29', isPlaceholder: true },
+      { token: 'USDINR_FF', symbol: 'USDINR FUT AUG', name: 'USD/INR Futures Aug 2026',  segment: 'CDS', instrumentType: 'FUT', exchange: 'NSE', lotSize: 1000, tickSize: 0.0025, expiry: '2026-08-27', isPlaceholder: true },
+      { token: 'EURINR_F',  symbol: 'EURINR FUT',     name: 'EUR/INR Futures (current)', segment: 'CDS', instrumentType: 'FUT', exchange: 'NSE', lotSize: 1000, tickSize: 0.0025, expiry: '2026-08-27', isPlaceholder: true },
+      { token: 'GBPINR_F',  symbol: 'GBPINR FUT',     name: 'GBP/INR Futures (current)', segment: 'CDS', instrumentType: 'FUT', exchange: 'NSE', lotSize: 1000, tickSize: 0.0025, expiry: '2026-08-27', isPlaceholder: true },
+      { token: 'JPYINR_F',  symbol: 'JPYINR FUT',     name: 'JPY/INR Futures (current)', segment: 'CDS', instrumentType: 'FUT', exchange: 'NSE', lotSize: 1000, tickSize: 0.0025, expiry: '2026-08-27', isPlaceholder: true },
     ];
   }
 
@@ -98,6 +113,14 @@ export class InstrumentService {
 
   getByToken(token) {
     return this.instruments.find((inst) => inst.token === token);
+  }
+
+  /**
+   * Returns only instruments with valid numeric broker tokens that can
+   * receive live SmartStream ticks. Excludes all placeholder F&O/MCX/CDS entries.
+   */
+  getLiveSubscribable() {
+    return this.instruments.filter(inst => !inst.isPlaceholder);
   }
 
   getExpiries(symbol) {
