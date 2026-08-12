@@ -8,7 +8,7 @@
 import { X, User, Shield, TrendingUp, LogOut, Copy, CheckCircle } from 'lucide-react';
 import { useTradingStore } from '@/store/tradingStore';
 import { logout } from '@/hooks/useAuth';
-import { cn, getChallengeRulePct } from '@/utils/helpers';
+import { cn, getChallengeRulePct, formatChallengePhase } from '@/utils/helpers';
 import { useState } from 'react';
 
 interface ProfilePanelProps {
@@ -42,15 +42,8 @@ export function ProfilePanel({ onClose }: ProfilePanelProps) {
     await logout();
   };
 
-  const phase =
-    account?.challenge?.type === 'flash_funding'           ? 'Flash'   :
-    account?.challenge?.type === 'instant_funding'         ? 'Instant' :
-    account?.challenge?.type === '1step_evaluation'        ? '1-Step'  :
-    account?.challenge?.type === '2step_evaluation_phase1' ? '2-Step'  :
-    account?.challenge?.type === 'evaluation_phase1'       ? 'Phase 1' :
-    account?.challenge?.type === 'evaluation_phase2'       ? 'Phase 2' :
-    account?.challenge?.type === 'funded'                  ? 'Funded'  :
-    'Phase 1';
+
+  const phase = formatChallengePhase(account?.challenge?.plan, account?.challenge?.type);
 
   const phaseColor =
     phase === 'Funded' ? 'text-emerald-400 bg-emerald-900/20 border-emerald-800/30' :

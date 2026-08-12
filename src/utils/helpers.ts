@@ -69,20 +69,23 @@ export function formatChallengePhase(plan?: string | null, type?: string | null)
     : /2[-_ ]?step/.test(normalizedPlan) ? '2-Step'
     : normalizedPlan || '';
 
-  // If already funded, show funded label (include plan when available)
-  if (normalizedType.includes('funded')) {
-    return planLabel ? `${planLabel} Funded` : 'Funded';
-  }
-
+  // Exact canonical type matches first — highest priority
+  if (normalizedType === 'flash_funding')           return 'Flash';
+  if (normalizedType === 'instant_funding')         return 'Instant';
+  if (normalizedType === '1step_evaluation')        return '1-Step';
+  if (normalizedType === '2step_evaluation_phase1') return '2-Step';
+  // funded must be exact match — flash_funding / instant_funding must NOT match here
+  if (normalizedType === 'funded') return planLabel ? planLabel + ' Funded' : 'Funded';
+  
   // For plan-branded products (Flash / Instant) prefer the plan label
   // over generic 'Phase 1' even when type contains 'evaluation'.
   if (planLabel === 'Flash' || planLabel === 'Instant') return planLabel;
-
-  // Otherwise fall back to phase-based labels derived from type
+  
+  // Phase-based labels from legacy evaluation types
   if (normalizedType.includes('evaluation_phase1')) return 'Phase 1';
   if (normalizedType.includes('evaluation_phase2')) return 'Phase 2';
   if (normalizedType.includes('evaluation')) return 'Phase 1';
-
+  
   if (planLabel) return planLabel;
   return 'Phase 1';
 }
