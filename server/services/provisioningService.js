@@ -30,7 +30,7 @@ import { WebsiteCallbackClient } from '../clients/website.callback.js';
 import { LifecycleCallbackClient } from '../clients/lifecycle.callback.js';
 import { eventBus } from '../events/index.js';
 import { encryptCredentials } from './credentialEncryption.js';
-import { validateRuleProfile, profileToRuleRows, getDefaultFallbackProfile, getInstantFundingRuleProfile, get1StepRuleProfile, get2StepPhase1RuleProfile } from '../config/challengeRuleProfiles.js';
+import { validateRuleProfile, profileToRuleRows, getDefaultFallbackProfile, getFlashFundingRuleProfile, getInstantFundingRuleProfile, get1StepRuleProfile, get2StepPhase1RuleProfile } from '../config/challengeRuleProfiles.js';
 
 export class ProvisioningService {
 
@@ -85,6 +85,10 @@ export class ProvisioningService {
       const credentials = this._generateCredentials(plan);
 
       // 3. Get rule profile — Main Site provides it, fallback for backward compat
+      // planBalances: maps size plan to starting balance in INR
+      const planBalances = { '10K': 1000000, '25K': 2500000, '50K': 5000000, '1L': 10000000 };
+      const planBalance = planBalances[plan] || 1000000;
+
       let resolvedProfile;
       if (ruleProfile && typeof ruleProfile === 'object' && ruleProfile.rules) {
         // Main Site provided the full rule profile (SINGLE SOURCE OF TRUTH)
@@ -93,21 +97,22 @@ export class ProvisioningService {
           throw new ProvisioningError(`Invalid rule profile from Main Site: ${validation.errors.join(', ')}`, 'INVALID_RULE_PROFILE');
         }
         resolvedProfile = ruleProfile;
+      } else if (challengeType === 'flash') {
+        // Flash Funding — dedicated canonical profile
+        resolvedProfile = getFlashFundingRuleProfile(planBalance);
+        console.log(`[Provisioning] Using canonical Flash Funding rule profile for balance ₹${planBalance}`);
       } else if (challengeType === 'instant') {
         // Auto-build canonical Instant Funding profile from products catalog
-        const balance = planConfig.balance;
-        resolvedProfile = getInstantFundingRuleProfile(balance);
-        console.log(`[Provisioning] Using canonical Instant Funding rule profile for balance ₹${balance}`);
+        resolvedProfile = getInstantFundingRuleProfile(planBalance);
+        console.log(`[Provisioning] Using canonical Instant Funding rule profile for balance ₹${planBalance}`);
       } else if (challengeType === '1step') {
         // Auto-build canonical 1-Step profile
-        const balance = planConfig.balance;
-        resolvedProfile = get1StepRuleProfile(balance);
-        console.log(`[Provisioning] Using canonical 1-Step rule profile for balance ₹${balance}`);
+        resolvedProfile = get1StepRuleProfile(planBalance);
+        console.log(`[Provisioning] Using canonical 1-Step rule profile for balance ₹${planBalance}`);
       } else if (challengeType === '2step') {
         // Auto-build canonical 2-Step Phase 1 profile (Phase 2 seeded at promotion)
-        const balance = planConfig.balance;
-        resolvedProfile = get2StepPhase1RuleProfile(balance);
-        console.log(`[Provisioning] Using canonical 2-Step Phase 1 rule profile for balance ₹${balance}`);
+        resolvedProfile = get2StepPhase1RuleProfile(planBalance);
+        console.log(`[Provisioning] Using canonical 2-Step Phase 1 rule profile for balance ₹${planBalance}`);
       } else {
         // Fallback: use default profile (backward compatibility with older Main Site)
         resolvedProfile = getDefaultFallbackProfile(plan, challengeType || '2-step', 'phase_1');
@@ -115,12 +120,12 @@ export class ProvisioningService {
       }
 
       const planConfig = {
-        balance: resolvedProfile.initialBalance,
-        profitTarget: resolvedProfile.rules.profit_target?.percent || 8,
-        maxDD: resolvedProfile.rules.max_drawdown?.percent || 10,
-        dailyLoss: resolvedProfile.rules.daily_loss_limit?.percent || 5,
-        minDays: resolvedProfile.rules.min_trading_days?.count || 5,
-        maxDays: resolvedProfile.rules.max_calendar_days?.count || 30,
+        balance:      resolvedProfile.initialBalance || planBalance,
+        profitTarget: resolvedProfile.rules.profit_target?.percent  ?? 0,
+        maxDD:        resolvedProfile.rules.max_drawdown?.percent    ?? 10,
+        dailyLoss:    resolvedProfile.rules.daily_loss_limit?.percent ?? 5,
+        minDays:      resolvedProfile.rules.min_trading_days?.count   ?? 5,
+        maxDays:      resolvedProfile.rules.max_calendar_days?.count  ?? 30,
       };
 
       // 4. Create challenge_account

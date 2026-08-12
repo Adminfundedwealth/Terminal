@@ -73,6 +73,11 @@ export const RULE_TYPES = [
   'payout_threshold',
   'scaling',
   'inactivity_close',
+  // Flash-specific rule types
+  'per_position_loss',
+  'flash_duration',
+  'weekend_allowed',
+  'holiday_restriction',
 ];
 
 /**
@@ -143,6 +148,53 @@ export function profileToRuleRows(tradingAccountId, profile) {
   }
 
   return rows;
+}
+
+/**
+ * FLASH FUNDING — canonical rule profile.
+ * Called by provisioningService when planType === 'flash' AND no ruleProfile
+ * is provided by the Main Site.
+ *
+ * NOTE: The Flash Risk Engine reads live values from the flash_risk_profile
+ * DB table at runtime (via FlashRiskProfileService). These seeded risk_rules
+ * rows are kept for audit/history but the Flash Risk Engine does NOT use them
+ * for enforcement — it uses the centralized profile exclusively.
+ *
+ * @param {number} balance - account starting balance in INR
+ * @returns {object} rule profile
+ */
+export function getFlashFundingRuleProfile(balance) {
+  return {
+    challengeType: 'flash',
+    plan: 'flash',
+    phase: 'funded',
+    initialBalance: balance,
+    rules: {
+      // ── Core risk limits (Flash Risk Engine reads these from flash_risk_profile table) ──
+      per_position_loss:  { percent: 2,   amount: balance * 0.02 },
+      max_drawdown:       { percent: 4,   amount: balance * 0.04, type: 'static' },
+      profit_target:      { percent: 0,   amount: 0 },             // none
+
+      // ── Duration ─────────────────────────────────────────────────────────
+      flash_duration:     { hours: 24, timer_start_event: 'first_position' },
+
+      // ── Position / leverage ───────────────────────────────────────────────
+      max_positions:      { count: 50 },
+      leverage_limit:     { maxMultiplier: 50 },
+
+      // ── Session rules ─────────────────────────────────────────────────────
+      allowed_segments:   { segments: ['NSE', 'NFO', 'BFO', 'CDS', 'MCX'] },
+      trading_hours:      { start: '09:15', end: '15:30' },
+      no_overnight:       { allowed: true },                        // overnight ALLOWED
+      weekend_allowed:    { allowed: true },                        // weekend ALLOWED
+      holiday_restriction:{ enabled: false },                       // no holiday block
+
+      // ── Payout ────────────────────────────────────────────────────────────
+      profit_split:       { percent: 90 },
+      payout_threshold:   { percent: 3,   amount: balance * 0.03 },
+      consistency_rule:   { maxDayProfitPercent: 15 },
+    },
+  };
 }
 
 /**

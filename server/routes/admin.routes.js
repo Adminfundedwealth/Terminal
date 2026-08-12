@@ -23,6 +23,7 @@ import { requireAuth, requireFounder } from '../middleware/auth.js';
 import { AccountRepository } from '../repositories/account.repository.js';
 import { AuditLogger } from '../services/auditLogger.js';
 import { supabase } from '../db/client.js';
+import { FlashRiskProfileService } from '../services/flashRiskProfileService.js';
 
 const accountRepo = new AccountRepository();
 
@@ -346,6 +347,149 @@ export function createAdminRouter() {
       res.json({ success: true, events: data || [] });
     } catch (err) {
       res.status(500).json({ error: 'Failed to fetch risk events', message: err.message });
+    }
+  });
+
+  // ─── Flash Risk Management ───────────────────────────────────────────────
+  //
+  // GET  /api/admin/flash/profile       — read current Flash risk profile
+  // PUT  /api/admin/flash/profile       — update one or more Flash risk fields
+  // GET  /api/admin/flash/audit         — read Flash profile change history
+  //
+  // Changes take effect immediately (cache invalidated on write).
+  // Every write is appended to flash_risk_profile_audit (never overwritten).
+  // Instant / 1-Step / 2-Step are completely unaffected.
+
+  /**
+   * GET /api/admin/flash/profile
+   * Returns the current Flash Funding risk configuration.
+   */
+  router.get('/admin/flash/profile', async (req, res) => {
+    try {
+      const profile = await FlashRiskProfileService.getProfile();
+      res.json({ success: true, profile });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to fetch Flash profile', message: err.message });
+    }
+  });
+
+  /**
+   * PUT /api/admin/flash/profile
+   * Update one or more Flash risk fields.
+   *
+   * Body (all fields optional — send only the ones you want to change):
+   * {
+   *   duration_hours,
+   *   per_position_loss_pct, max_drawdown_pct,
+   *   max_open_positions, leverage_max,
+   *   allowed_segments,
+   *   trading_hours_start, trading_hours_end,
+   *   overnight_allowed, weekend_allowed, holiday_restriction,
+   *   profit_target_pct, profit_split_pct,
+   *   consistency_rule_pct, payout_threshold_pct
+   * }
+   *
+   * Changes are persisted to flash_risk_profile, cache is invalidated,
+   * and each changed field is appended to flash_risk_profile_audit.
+   */
+  router.put('/admin/flash/profile', async (req, res) => {
+    try {
+      const updates = req.body;
+      if (!updates || typeof updates !== 'object' || Object.keys(updates).length === 0) {
+        return res.status(400).json({ error: 'Request body must be a non-empty object with fields to update' });
+      }
+
+      const adminId = req.user.userId;
+      const updated = await FlashRiskProfileService.updateProfile(updates, adminId);
+
+      console.log(`[AdminRoutes] Flash profile updated by ${adminId}`);
+      res.json({ success: true, profile: updated, message: 'Flash risk profile updated. Changes are live immediately.' });
+    } catch (err) {
+      console.error('[AdminRoutes] Flash profile update error:', err.message);
+      res.status(500).json({ error: 'Failed to update Flash profile', message: err.message });
+    }
+  });
+
+  /**
+   * GET /api/admin/flash/audit
+   * Returns the audit log for Flash profile changes.
+   * Query: ?limit=50 (default 50, max 200)
+   */
+  router.get('/admin/flash/audit', async (req, res) => {
+    try {
+      const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 50));
+      const log = await FlashRiskProfileService.getAuditLog(limit);
+      res.json({ success: true, audit: log, count: log.length });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to fetch Flash audit log', message: err.message });
+    }
+  });
+
+  /**
+   * GET /api/admin/flash/accounts
+   * Lists all Flash Funding trading accounts with their timer status.
+   */
+  router.get('/admin/flash/accounts', async (req, res) => {
+    try {
+      if (!supabase) return res.status(503).json({ error: 'Database not configured' });
+
+      // Join trading_accounts → challenge_accounts WHERE plan='flash'
+      const { data, error } = await supabase
+        .from('trading_accounts')
+        .select(`
+          id, account_code, balance, status, locked_reason, created_at,
+          challenge_accounts!challenge_id (
+            id, plan, status, initial_balance, peak_balance,
+            first_position_at, started_at, expires_at
+          ),
+          terminal_traders!trader_id ( email, display_name )
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) throw new Error(error.message);
+
+      const profile = await FlashRiskProfileService.getProfile();
+      const durationMs = profile.duration_hours * 60 * 60 * 1000;
+
+      // Filter to Flash accounts only and enrich with timer info
+      const flashAccounts = (data || [])
+        .filter(row => {
+          const plan = (row.challenge_accounts?.plan || '').toLowerCase().replace(/[-_\s]/g, '');
+          return plan === 'flash';
+        })
+        .map(row => {
+          const ch = row.challenge_accounts;
+          const fpa = ch?.first_position_at;
+          const timerStarted = !!fpa;
+          const expiresAt = fpa
+            ? new Date(new Date(fpa).getTime() + durationMs).toISOString()
+            : null;
+          const expired = expiresAt ? Date.now() >= new Date(expiresAt).getTime() : false;
+          return {
+            id:              row.id,
+            accountCode:     row.account_code,
+            balance:         row.balance,
+            status:          row.status,
+            lockedReason:    row.locked_reason,
+            createdAt:       row.created_at,
+            trader:          row.terminal_traders,
+            challenge: {
+              id:              ch?.id,
+              status:          ch?.status,
+              initialBalance:  ch?.initial_balance,
+              peakBalance:     ch?.peak_balance,
+              firstPositionAt: fpa || null,
+              expiresAt:       expiresAt,
+              timerStarted,
+              expired,
+            },
+          };
+        });
+
+      res.json({ success: true, accounts: flashAccounts, count: flashAccounts.length });
+    } catch (err) {
+      console.error('[AdminRoutes] Flash accounts error:', err.message);
+      res.status(500).json({ error: 'Failed to fetch Flash accounts', message: err.message });
     }
   });
 

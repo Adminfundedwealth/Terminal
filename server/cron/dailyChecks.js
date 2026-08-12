@@ -15,6 +15,7 @@
 import { supabase } from '../db/client.js';
 import { ChallengeService } from '../services/challengeService.js';
 import { RiskEngine } from '../services/riskEngine.js';
+import { FlashRiskEngine } from '../services/flashRiskEngine.js';
 
 /**
  * Square off all positions for accounts that have the no_overnight rule
@@ -318,8 +319,19 @@ export function scheduleDailyChecks() {
       lastInactivityRun = dateKey;
       await runInactivityCheck();
     }
+
+    // Flash 24-hour expiry sweep — runs every minute, always
+    // Finds Flash accounts whose first_position_at is > 24h ago and expires them
+    try {
+      await FlashRiskEngine.sweepExpiredFlashAccounts();
+    } catch (e) {
+      // Non-fatal — next sweep will retry
+      if (!e.message?.includes('schema cache') && !e.message?.includes('not configured')) {
+        console.error('[Cron] Flash expiry sweep error:', e.message);
+      }
+    }
   }, 60000); // Check every minute
 
-  console.log('[Cron] Daily checks scheduler started (09:00 unlock, 15:15 square-off, 15:45 EOD metrics, 08:00 inactivity)');
+  console.log('[Cron] Daily checks scheduler started (09:00 unlock, 15:15 square-off, 15:45 EOD metrics, 08:00 inactivity, every-minute Flash expiry sweep)');
 }
 

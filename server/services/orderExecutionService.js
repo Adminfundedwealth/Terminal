@@ -23,6 +23,8 @@
  */
 
 import { RiskEngine } from './riskEngine.js';
+import { FlashRiskEngine } from './flashRiskEngine.js';
+import { FlashRiskProfileService } from './flashRiskProfileService.js';
 import { BrokerFactory } from '../brokers/broker.factory.js';
 import { PositionRepository } from '../repositories/position.repository.js';
 import { TradeRepository } from '../repositories/trade.repository.js';
@@ -131,7 +133,13 @@ export class OrderExecutionService {
 
       let riskResult = { allowed: true };
       try {
-        riskResult = await RiskEngine.validateOrder(accountId, orderParams, quoteProvider);
+        // ── Flash accounts use the dedicated Flash Risk Engine ────────────
+        // All other challenge types continue using the existing Risk Engine.
+        if (FlashRiskProfileService.isFlashAccount(account)) {
+          riskResult = await FlashRiskEngine.validateOrder(accountId, orderParams, quoteProvider, account);
+        } else {
+          riskResult = await RiskEngine.validateOrder(accountId, orderParams, quoteProvider);
+        }
       } catch (riskErr) {
         // PRODUCTION: Risk engine failure = REJECT order. Never allow trading when risk checks fail.
         console.error(`[OrderExecution] Risk engine error — REJECTING order: ${riskErr.message}`);
@@ -391,6 +399,46 @@ export class OrderExecutionService {
       }
     }
 
+    // ── Step 5b: Flash 24h timer — record first OPENING position ────────
+    // For Flash accounts only.
+    // The timer must start ONLY when the trader establishes their first
+    // open position — NOT on closing/reducing fills.
+    //
+    // We determine "opening" by checking whether the position is still open
+    // and has a non-zero qty AFTER the upsert in Step 5. If the fill resulted
+    // in qty=0 (full close) or reduced an existing position (partial close),
+    // it is a closing/reducing fill — timer must NOT start.
+    //
+    // Additionally the timer must not start if first_position_at is already
+    // set (idempotent guard is also inside recordFirstPosition, but checking
+    // here avoids the DB round-trip entirely for subsequent fills).
+    if (FlashRiskProfileService.isFlashAccount(account)) {
+      const challengeId = account.challenge_id || account.challenge?.id;
+      // Only proceed if this was an opening order (not a close order)
+      if (challengeId && !orderParams.isCloseOrder) {
+        // Check whether the position is now open and non-zero after the fill.
+        // An opening fill results in is_open=true, qty>0.
+        // A closing/reducing fill results in qty=0 or reduced qty.
+        // We verify by re-reading the position from the repo.
+        (async () => {
+          try {
+            const posAfter = await positionRepo.findOpenPosition(
+              accountId, orderParams.token, orderParams.productType
+            );
+            // posAfter is non-null with qty>0 only if we have an open position
+            const isOpeningFill = posAfter && posAfter.qty > 0;
+            if (isOpeningFill) {
+              await FlashRiskProfileService.recordFirstPosition(challengeId);
+            }
+          } catch (e) {
+            if (!e.message?.includes('schema cache')) {
+              console.error('[OrderExecution] Flash timer check failed:', e.message);
+            }
+          }
+        })();
+      }
+    }
+
     // ── Step 6: Record Trade ─────────────────────────────────
     try {
       await tradeRepo.recordTrade(accountId, orderId, {
@@ -418,8 +466,16 @@ export class OrderExecutionService {
         if (!ltp || !Number.isFinite(ltp) || ltp <= 0) return null;
         return ltp;
       };
-      const riskResult = await RiskEngine.postTradeCheck(accountId, quoteProvider);
-      if (riskResult.status === 'locked' || riskResult.status === 'breached') {
+
+      // ── Flash accounts use FlashRiskEngine; all others use RiskEngine ──
+      let riskResult;
+      if (FlashRiskProfileService.isFlashAccount(account)) {
+        riskResult = await FlashRiskEngine.postTradeCheck(accountId, quoteProvider, account);
+      } else {
+        riskResult = await RiskEngine.postTradeCheck(accountId, quoteProvider);
+      }
+
+      if (riskResult.status === 'locked' || riskResult.status === 'breached' || riskResult.status === 'expired') {
         console.warn(`[OrderExecution] Post-trade risk: ${riskResult.status} — ${riskResult.reason}`);
       }
     } catch (riskErr) {
@@ -516,7 +572,13 @@ export class OrderExecutionService {
         if (!ltp || !Number.isFinite(ltp) || ltp <= 0) return null;
         return ltp;
       };
-      await RiskEngine.postTradeCheck(accountId, quoteProvider);
+      // Flash accounts use FlashRiskEngine; all others use RiskEngine
+      const acct = await this._getAccount(accountId);
+      if (FlashRiskProfileService.isFlashAccount(acct)) {
+        await FlashRiskEngine.postTradeCheck(accountId, quoteProvider, acct);
+      } else {
+        await RiskEngine.postTradeCheck(accountId, quoteProvider);
+      }
     } catch (e) { /* non-blocking */ }
   }
 

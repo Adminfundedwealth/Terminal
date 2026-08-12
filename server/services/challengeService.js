@@ -278,8 +278,9 @@ export class ChallengeService {
   static getPlanConfig(plan) {
     const configs = {
       // Current plan keys
-      '2step': { phase1Target: 8, phase2Target: 5, evalMaxDD: 8, fundedMaxDD: 6, dailyLoss: 3, minDays: 5, fundedMinDays: 3, durationDays: 365 },
-      '1step': { phase1Target: 10, phase2Target: null, evalMaxDD: 6, fundedMaxDD: 6, dailyLoss: 3, minDays: 5, fundedMinDays: 3, durationDays: 365 },
+      'flash':  { phase1Target: 0,  phase2Target: null, evalMaxDD: 4,  fundedMaxDD: 4,  dailyLoss: 2, minDays: 0, fundedMinDays: 0, durationDays: 0 },
+      '2step':  { phase1Target: 8,  phase2Target: 5,    evalMaxDD: 8,  fundedMaxDD: 6,  dailyLoss: 3, minDays: 5, fundedMinDays: 3, durationDays: 365 },
+      '1step':  { phase1Target: 10, phase2Target: null, evalMaxDD: 6,  fundedMaxDD: 6,  dailyLoss: 3, minDays: 5, fundedMinDays: 3, durationDays: 365 },
       // Legacy keys — backward compatibility
       '10K': { phase1Target: 8, phase2Target: 5, evalMaxDD: 8, fundedMaxDD: 6, dailyLoss: 3, minDays: 5, fundedMinDays: 3, durationDays: 365 },
       '25K': { phase1Target: 8, phase2Target: 5, evalMaxDD: 8, fundedMaxDD: 6, dailyLoss: 3, minDays: 5, fundedMinDays: 3, durationDays: 365 },
