@@ -26,6 +26,7 @@ import { LifecycleCallbackClient } from '../clients/lifecycle.callback.js';
 import { EmailService } from './emailService.js';
 import { eventBus } from '../events/index.js';
 import { FlashRiskProfileService } from './flashRiskProfileService.js';
+import { InstantRiskProfileService } from './instantRiskProfileService.js';
 
 // Profit split configuration per plan — used for non-Flash accounts only.
 // Flash accounts read profit_split_pct from FlashRiskProfileService.
@@ -146,31 +147,44 @@ export class PayoutService {
 
     // Calculate payout amounts
     // Flash accounts: read profit_split and payout_threshold from Flash Risk Profile
-    const isFlash = (challenge.plan || '').toLowerCase().replace(/[-_\s]/g, '') === 'flash';
-    let flashProfile = null;
-    let minPayoutPct = 0; // payout threshold as % of balance (only enforced for Flash)
+    // Instant accounts: read from Instant Risk Profile (progressive split + threshold)
+    const normalized = (challenge.plan || '').toLowerCase().replace(/[-_\s]/g, '');
+    const isFlash   = normalized === 'flash';
+    const isInstant = normalized === 'instant';
+
+    let flashProfile   = null;
+    let instantProfile = null;
+    let minPayoutPct   = 0;
 
     if (isFlash) {
       try {
         flashProfile = await FlashRiskProfileService.getProfile();
         minPayoutPct = flashProfile.payout_threshold_pct || 3;
-      } catch { /* non-critical — fall through to standard logic */ }
+      } catch { /* non-critical */ }
     }
 
-    // Flash payout threshold: net profit must be >= payout_threshold_pct % of initial balance
-    if (isFlash && minPayoutPct > 0) {
+    if (isInstant) {
+      try {
+        instantProfile = await InstantRiskProfileService.getProfile();
+        minPayoutPct   = instantProfile.payout_threshold_pct || 5;
+      } catch { /* non-critical */ }
+    }
+
+    // Payout threshold: net profit must be >= threshold % of initial balance
+    if ((isFlash || isInstant) && minPayoutPct > 0) {
       const minPayoutAmount = (minPayoutPct / 100) * parseFloat(challenge.initial_balance);
       if (netProfit < minPayoutAmount) {
+        const planLabel = isFlash ? 'Flash' : 'Instant';
         return {
           eligible: false,
-          reason: `Flash payout requires minimum ${minPayoutPct}% profit (₹${Math.round(minPayoutAmount).toLocaleString('en-IN')}). Current: ₹${Math.round(netProfit).toLocaleString('en-IN')}`,
+          reason: `${planLabel} payout requires minimum ${minPayoutPct}% profit (₹${Math.round(minPayoutAmount).toLocaleString('en-IN')}). Current: ₹${Math.round(netProfit).toLocaleString('en-IN')}`,
           checks,
           financials: { netProfit, minPayoutAmount, plan: challenge.plan },
         };
       }
     }
 
-    const splitConfig = this.getSplitConfig(challenge.plan, flashProfile);
+    const splitConfig = this.getSplitConfig(challenge.plan, flashProfile, instantProfile, challenge.started_at);
     const payoutAmount = Math.round(netProfit * splitConfig.traderSplit * 100) / 100;
     const firmAmount = Math.round(netProfit * splitConfig.firmSplit * 100) / 100;
 
@@ -478,20 +492,33 @@ export class PayoutService {
   /**
    * Get split configuration for a plan.
    * Flash accounts read from FlashRiskProfileService (centralised Flash profile).
+   * Instant accounts read from InstantRiskProfileService (centralised Instant profile).
    * All other plans use the hardcoded SPLIT_CONFIGS table.
    *
    * @param {string} plan  - challenge_accounts.plan
    * @param {object} [flashProfile] - pre-loaded Flash profile (avoids extra async fetch)
+   * @param {object} [instantProfile] - pre-loaded Instant profile (avoids extra async fetch)
+   * @param {string} [startedAt] - challenge_accounts.started_at (for Instant progression)
    * @returns {{ traderSplit: number, firmSplit: number }}
    */
-  static getSplitConfig(plan, flashProfile = null) {
-    const isFlash = (plan || '').toLowerCase().replace(/[-_\s]/g, '') === 'flash';
-    if (isFlash) {
-      // Use the Flash Risk Profile value (default 90% = 0.90)
+  static getSplitConfig(plan, flashProfile = null, instantProfile = null, startedAt = null) {
+    const normalized = (plan || '').toLowerCase().replace(/[-_\s]/g, '');
+
+    if (normalized === 'flash') {
       const splitPct = flashProfile?.profit_split_pct ?? 90;
       const traderSplit = splitPct / 100;
       return { traderSplit, firmSplit: Math.round((1 - traderSplit) * 100) / 100 };
     }
+
+    if (normalized === 'instant') {
+      // Instant has a progressive split: initial (70%) → scaled (80%) after N days
+      const splitPct = instantProfile
+        ? InstantRiskProfileService.getEffectiveSplitPct(instantProfile, startedAt)
+        : (SPLIT_CONFIGS['10K']?.traderSplit * 100 ?? 80);
+      const traderSplit = splitPct / 100;
+      return { traderSplit, firmSplit: Math.round((1 - traderSplit) * 100) / 100 };
+    }
+
     return SPLIT_CONFIGS[plan] || SPLIT_CONFIGS['10K'];
   }
 

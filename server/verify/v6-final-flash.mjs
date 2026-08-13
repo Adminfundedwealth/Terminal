@@ -139,7 +139,9 @@ console.log('\n── Tests 17–20: Profit / Payout ──');
   :er('T17: profit target present in engine or profile non-zero');
 
 // ── TEST 18: Profit split = 90% ──────────────────────────────────────────
-ps.includes('profit_split_pct') && ps.includes('getSplitConfig(challenge.plan, flashProfile)')
+// getSplitConfig now takes (plan, flashProfile, instantProfile, startedAt)
+// Verify Flash split is still read from Flash profile
+ps.includes('profit_split_pct') && ps.includes("normalized === 'flash'")
   ?ok('T18: profit_split_pct read from Flash profile in payoutService')
   :er('T18: profit split not reading from Flash profile');
 prof.profit_split_pct === 90

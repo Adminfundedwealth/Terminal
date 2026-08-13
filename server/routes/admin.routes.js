@@ -24,6 +24,7 @@ import { AccountRepository } from '../repositories/account.repository.js';
 import { AuditLogger } from '../services/auditLogger.js';
 import { supabase } from '../db/client.js';
 import { FlashRiskProfileService } from '../services/flashRiskProfileService.js';
+import { InstantRiskProfileService } from '../services/instantRiskProfileService.js';
 
 const accountRepo = new AccountRepository();
 
@@ -490,6 +491,136 @@ export function createAdminRouter() {
     } catch (err) {
       console.error('[AdminRoutes] Flash accounts error:', err.message);
       res.status(500).json({ error: 'Failed to fetch Flash accounts', message: err.message });
+    }
+  });
+
+  // ─── Instant Risk Management ─────────────────────────────────────────────
+  //
+  // GET  /api/admin/instant/profile     — read current Instant risk profile
+  // PUT  /api/admin/instant/profile     — update one or more Instant risk fields
+  // GET  /api/admin/instant/audit       — Instant profile change history
+  // GET  /api/admin/instant/accounts    — list Instant accounts with status
+  //
+  // Independent from Flash. Changes only affect Instant accounts.
+  // Flash, 1-Step, 2-Step are completely unaffected.
+
+  /**
+   * GET /api/admin/instant/profile
+   */
+  router.get('/admin/instant/profile', async (req, res) => {
+    try {
+      const profile = await InstantRiskProfileService.getProfile();
+      res.json({ success: true, profile });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to fetch Instant profile', message: err.message });
+    }
+  });
+
+  /**
+   * PUT /api/admin/instant/profile
+   *
+   * Updatable fields (send only the ones to change):
+   * {
+   *   daily_loss_pct, max_drawdown_pct,
+   *   max_open_positions, leverage_max, max_position_size_pct,
+   *   allowed_segments,
+   *   trading_hours_start, trading_hours_end,
+   *   overnight_allowed, overnight_cutoff,
+   *   weekend_allowed, holiday_restriction,
+   *   profit_target_pct,
+   *   profit_split_initial_pct, profit_split_scaled_pct, profit_split_scale_days,
+   *   payout_threshold_pct, min_trading_days,
+   *   consistency_rule_pct, daily_profit_cap_pct,
+   *   risk_per_idea_pct, risk_per_idea_window_min,
+   *   inactivity_close_days
+   * }
+   */
+  router.put('/admin/instant/profile', async (req, res) => {
+    try {
+      const updates = req.body;
+      if (!updates || typeof updates !== 'object' || Object.keys(updates).length === 0) {
+        return res.status(400).json({ error: 'Request body must be a non-empty object' });
+      }
+      const adminId = req.user.userId;
+      const updated = await InstantRiskProfileService.updateProfile(updates, adminId);
+      console.log(`[AdminRoutes] Instant profile updated by ${adminId}`);
+      res.json({ success: true, profile: updated, message: 'Instant risk profile updated. Changes are live immediately.' });
+    } catch (err) {
+      console.error('[AdminRoutes] Instant profile update error:', err.message);
+      res.status(500).json({ error: 'Failed to update Instant profile', message: err.message });
+    }
+  });
+
+  /**
+   * GET /api/admin/instant/audit
+   */
+  router.get('/admin/instant/audit', async (req, res) => {
+    try {
+      const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 50));
+      const log = await InstantRiskProfileService.getAuditLog(limit);
+      res.json({ success: true, audit: log, count: log.length });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to fetch Instant audit log', message: err.message });
+    }
+  });
+
+  /**
+   * GET /api/admin/instant/accounts
+   * Lists all Instant Funding accounts with their current status.
+   */
+  router.get('/admin/instant/accounts', async (req, res) => {
+    try {
+      if (!supabase) return res.status(503).json({ error: 'Database not configured' });
+
+      const { data, error } = await supabase
+        .from('trading_accounts')
+        .select(`
+          id, account_code, balance, status, locked_reason, created_at,
+          challenge_accounts!challenge_id (
+            id, plan, type, status, initial_balance, peak_balance,
+            min_trading_days, started_at, expires_at
+          ),
+          terminal_traders!trader_id ( email, display_name )
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) throw new Error(error.message);
+
+      const profile = await InstantRiskProfileService.getProfile();
+
+      const instantAccounts = (data || [])
+        .filter(row => {
+          const plan = (row.challenge_accounts?.plan || '').toLowerCase().replace(/[-_\s]/g, '');
+          return plan === 'instant';
+        })
+        .map(row => {
+          const ch = row.challenge_accounts;
+          const effectiveSplit = InstantRiskProfileService.getEffectiveSplitPct(profile, ch?.started_at);
+          return {
+            id:              row.id,
+            accountCode:     row.account_code,
+            balance:         row.balance,
+            status:          row.status,
+            lockedReason:    row.locked_reason,
+            createdAt:       row.created_at,
+            trader:          row.terminal_traders,
+            challenge: {
+              id:             ch?.id,
+              status:         ch?.status,
+              type:           ch?.type,
+              initialBalance: ch?.initial_balance,
+              peakBalance:    ch?.peak_balance,
+              startedAt:      ch?.started_at,
+              expiresAt:      ch?.expires_at,
+            },
+            effectiveSplitPct: effectiveSplit,
+          };
+        });
+
+      res.json({ success: true, accounts: instantAccounts, count: instantAccounts.length, profile });
+    } catch (err) {
+      console.error('[AdminRoutes] Instant accounts error:', err.message);
+      res.status(500).json({ error: 'Failed to fetch Instant accounts', message: err.message });
     }
   });
 

@@ -29,6 +29,7 @@ import { AuditRepository } from '../repositories/audit.repository.js';
 import { MarginService } from './marginService.js';
 import { HolidayService } from './holidayService.js';
 import { LifecycleCallbackClient } from '../clients/lifecycle.callback.js';
+import { InstantRiskProfileService } from './instantRiskProfileService.js';
 
 const riskRulesRepo = new RiskRulesRepository();
 const positionRepo = new PositionRepository();
@@ -39,11 +40,64 @@ const auditRepo = new AuditRepository();
 
 export class RiskEngine {
   /**
+   * Build the authoritative rules map for an account.
+   *
+   * For Instant accounts: reads live values from instant_risk_profile table
+   * (via InstantRiskProfileService) and converts them to the same rules-map
+   * shape that the individual check functions expect.  This completely
+   * replaces the per-account risk_rules rows for enforcement purposes.
+   * The risk_rules rows remain in the DB for audit/history only.
+   *
+   * For all other account types: returns the existing risk_rules map unchanged.
+   *
+   * @param {string} accountId
+   * @param {object} account  - trading_accounts row (with challenge joined)
+   * @returns {object} rules map
+   */
+  static async _getRulesMap(accountId, account) {
+    // Detect Instant account by plan field
+    if (InstantRiskProfileService.isInstantAccount(account)) {
+      const ip = await InstantRiskProfileService.getProfile();
+      const balance = parseFloat(account?.balance) || 0;
+
+      // Convert flat instant_risk_profile columns to the rules-map shape
+      // used by every individual check function.
+      return {
+        daily_loss_limit:    { percent: ip.daily_loss_pct,    amount: (ip.daily_loss_pct / 100) * balance },
+        max_drawdown:        { percent: ip.max_drawdown_pct,  amount: (ip.max_drawdown_pct / 100) * balance, type: 'static' },
+        profit_target:       ip.profit_target_pct > 0
+          ? { percent: ip.profit_target_pct, amount: (ip.profit_target_pct / 100) * balance }
+          : null, // null = no profit target check
+        max_positions:       { count: ip.max_open_positions },
+        leverage_limit:      { maxMultiplier: ip.leverage_max },
+        max_position_size:   { percent: ip.max_position_size_pct, amount: (ip.max_position_size_pct / 100) * balance },
+        allowed_segments:    { segments: Array.isArray(ip.allowed_segments) ? ip.allowed_segments : ['NSE','NFO','BFO','MCX','CDS'] },
+        trading_hours:       { start: ip.trading_hours_start, end: ip.trading_hours_end },
+        no_overnight:        ip.overnight_allowed
+          ? null  // null = no overnight check (allowed)
+          : { cutoffTime: ip.overnight_cutoff || '15:15', allowedProducts: ['MIS'] },
+        news_blackout:       { windows: [], blockAll: false },   // managed separately if needed
+        daily_profit_cap:    { percent: ip.daily_profit_cap_pct, amount: (ip.daily_profit_cap_pct / 100) * balance },
+        consistency_rule:    { maxDayProfitPercent: ip.consistency_rule_pct },
+        risk_per_trade_idea: { percent: ip.risk_per_idea_pct, amount: (ip.risk_per_idea_pct / 100) * balance, sameDirectionWindowMinutes: ip.risk_per_idea_window_min },
+        inactivity_close:    { days: ip.inactivity_close_days },
+        // Weekend + holiday handled by hardcoded checks — not in rules map
+        // but we store flags so callers can inspect:
+        _instant_weekend_allowed:  ip.weekend_allowed,
+        _instant_holiday_restriction: ip.holiday_restriction,
+        _instant_profile: ip, // for payout/split access
+      };
+    }
+
+    // Non-Instant: return per-account risk_rules from DB
+    return riskRulesRepo.getRulesMap(accountId);
+  }
+
+  /**
    * Pre-trade validation.
    * Returns { allowed: true } or { allowed: false, reason: "..." }
    */
   static async validateOrder(accountId, orderParams, quoteProvider = null) {
-    const rules = await riskRulesRepo.getRulesMap(accountId);
     const account = await accountRepo.findById(accountId);
 
     if (!account) {
@@ -54,19 +108,45 @@ export class RiskEngine {
     }
 
     // ── Close/exit orders bypass ALL trading rules ──────────────────────────
-    // Closing a position REDUCES risk — it must never be blocked by risk rules
-    // like daily loss limit, max positions, trading hours, etc.
-    // Only the hard account-status check above applies to close orders.
     if (orderParams.isCloseOrder) {
       return { allowed: true };
     }
 
+    // Load authoritative rules map.
+    // For Instant accounts: built from instant_risk_profile table (admin-editable).
+    // For all other types: loaded from per-account risk_rules DB rows.
+    const rules = await this._getRulesMap(accountId, account);
+
+    // ── Weekend / holiday checks for Instant accounts ────────────────────────
+    // The instant_risk_profile controls whether weekends and holidays block trading.
+    // For all other account types, the hardcoded HolidayService checks apply.
+    const isInstant = InstantRiskProfileService.isInstantAccount(account);
+    if (isInstant) {
+      // Weekend check (Instant-profile-controlled)
+      if (!rules._instant_weekend_allowed) {
+        const day = new Date().getDay();
+        if (day === 0 || day === 6) {
+          return { allowed: false, reason: `Market is closed (${day === 0 ? 'Sunday' : 'Saturday'}). Instant Funding does not allow weekend trading.` };
+        }
+      }
+      // Holiday check (Instant-profile-controlled)
+      if (rules._instant_holiday_restriction) {
+        const { isClosed, holidayName } = HolidayService.checkMarketClosed();
+        if (isClosed && holidayName) {
+          return { allowed: false, reason: `Market is closed today (holiday: ${holidayName})` };
+        }
+      }
+    }
+
     // Check each rule (new positions only)
     const checks = [
-      () => this.checkMarketHoliday(),
-      () => this.checkWeekend(),
+      // For non-Instant accounts the hardcoded holiday/weekend checks still run:
+      ...(!isInstant ? [
+        () => this.checkMarketHoliday(),
+        () => this.checkWeekend(),
+      ] : []),
       () => this.checkAllowedSegments(rules, orderParams),
-      () => this.checkTradingHours(rules),
+      () => this.checkTradingHoursIST(rules),
       () => this.checkNoOvernight(rules, orderParams),
       () => this.checkNewsBlackout(rules),
       () => this.checkDailyProfitCap(rules, accountId),
@@ -102,12 +182,14 @@ export class RiskEngine {
    * Only realized P&L is used for risk decisions when feed data is suspect.
    */
   static async postTradeCheck(accountId, quoteProvider = null) {
-    const rules = await riskRulesRepo.getRulesMap(accountId);
     const account = await accountRepo.findById(accountId);
 
     if (!account || account.status !== 'active') {
       return { status: 'ok' };
     }
+
+    // Load authoritative rules map (Instant = from instant_risk_profile, others = risk_rules)
+    const rules = await this._getRulesMap(accountId, account);
 
     // ── Feed staleness check ────────────────────────────────────────────────
     // Import marketDataEngine lazily to avoid circular dependencies.
@@ -329,6 +411,26 @@ export class RiskEngine {
 
     if (currentTime < start || currentTime > end) {
       return { allowed: false, reason: `Trading not allowed outside ${start} - ${end}. Current: ${currentTime}` };
+    }
+    return { allowed: true };
+  }
+
+  /**
+   * IST-aware trading hours check.
+   * Always evaluates against IST (UTC+5:30) regardless of server timezone.
+   * Used by the new Instant routing — Instant accounts get IST enforcement.
+   */
+  static async checkTradingHoursIST(rules) {
+    if (!rules.trading_hours) return { allowed: true };
+
+    const { start, end } = rules.trading_hours;
+    // Convert current time to IST explicitly
+    const istMs   = Date.now() + (5 * 60 + 30) * 60 * 1000;
+    const istDate = new Date(istMs);
+    const currentTime = `${String(istDate.getUTCHours()).padStart(2,'0')}:${String(istDate.getUTCMinutes()).padStart(2,'0')}`;
+
+    if (currentTime < start || currentTime > end) {
+      return { allowed: false, reason: `Trading not allowed outside ${start}–${end} IST. Current IST: ${currentTime}` };
     }
     return { allowed: true };
   }
