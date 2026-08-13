@@ -354,7 +354,29 @@ export class AngelOneAdapter {
       return resp.data;
     } catch (err) {
       if (err.response?.status === 401) {
-        // Token expired — try refresh
+        // ── SAFETY: Do NOT automatically retry POST requests on 401 ──────────
+        //
+        // For mutating methods (POST, PUT, PATCH, DELETE) a 401 can arrive
+        // AFTER the broker has already processed the request (the order was
+        // accepted but the response was lost or the JWT expired in transit).
+        // Silently resending the same payload would create a DUPLICATE broker
+        // order with no idempotency protection.
+        //
+        // Safe behavior:
+        //   GET  → refresh session and retry (read-only, safe to repeat)
+        //   POST/PUT/PATCH/DELETE → refresh session so the NEXT call succeeds,
+        //                           but throw so the caller can decide whether
+        //                           to retry with its own context/idempotency.
+        //
+        if (method !== 'GET') {
+          // Attempt to refresh the session so subsequent requests work
+          try { await this.refreshSession(); } catch (_) { /* best effort */ }
+          // Re-throw so the caller (executeOrder) marks the order REJECTED
+          // rather than silently sending a second broker request.
+          throw err;
+        }
+
+        // GET requests are idempotent — safe to retry after token refresh
         try {
           await this.refreshSession();
           const opts = {
@@ -366,7 +388,7 @@ export class AngelOneAdapter {
           const resp = await axios(opts);
           return resp.data;
         } catch (refreshErr) {
-          // Full reconnect
+          // Full reconnect as last resort for GET
           await this.connect();
           throw err;
         }
