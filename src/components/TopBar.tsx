@@ -1,5 +1,5 @@
-﻿import { Search, Moon, Palette, Shield, Zap, TrendingUp, TrendingDown, Activity, Target, AlertTriangle, Bell } from 'lucide-react';
-import { useAppStore } from '@/store/appStore';
+﻿import { Search, Shield, Zap, TrendingUp, TrendingDown, Activity, Target, AlertTriangle, Bell, Home, BarChart3, TrendingUp as StocksIcon, Activity as OptionIcon, LineChart, Diamond, DollarSign, ClipboardList, List, Layers, AlignJustify, CalendarDays } from 'lucide-react';
+import { useAppStore, type Workspace } from '@/store/appStore';
 import { useTradingStore } from '@/store/tradingStore';
 import { useMarketStore } from '@/store/marketStore';
 import { cn, formatPrice, getChallengeRulePct, formatChallengePhase } from '@/utils/helpers';
@@ -140,14 +140,22 @@ export function TopBar() {
           })}
         </div>
 
-        {/* Panel Toggles */}
-        <div className="flex items-center gap-0.5 mr-3 flex-shrink-0">
-          <PanelBtn label="WL" active={panels.watchlist} onClick={() => togglePanel('watchlist')} />
-          <PanelBtn label="ORD" active={panels.orderPanel} onClick={() => togglePanel('orderPanel')} />
-          <PanelBtn label="OC" active={showOptionChain} onClick={() => setShowOptionChain(!showOptionChain)} />
+        {/* ── TOP NAV LINKS ── */}
+        <nav className="flex items-center gap-0.5 mr-3 flex-shrink-0">
+          <NavLink ws="home"    label="HOME"     icon={<Home size={11} />} />
+          <NavLink ws="index"   label="INDEX"    icon={<BarChart3 size={11} />} />
+          <NavLink ws="stocks"  label="STOCKS"   icon={<TrendingUp size={11} />} />
+          <NavLink ws="options" label="OPTION"   icon={<Activity size={11} />} />
+          <NavLink ws="futures" label="FUTURES"  icon={<LineChart size={11} />} />
+          <NavLink ws="mcx"    label="MCX"      icon={<Diamond size={11} />} />
+          <NavLink ws="cds"    label="CDS"      icon={<DollarSign size={11} />} />
+          <div className="w-px h-4 bg-fw-border/40 mx-1" />
+          <PanelBtn label="ORD" active={panels.orderPanel}  onClick={() => togglePanel('orderPanel')} />
+          <PanelBtn label="WL"  active={panels.watchlist}   onClick={() => togglePanel('watchlist')} />
           <PanelBtn label="DOM" active={panels.marketDepth} onClick={() => togglePanel('marketDepth')} />
           <PanelBtn label="BTM" active={panels.bottomPanel} onClick={() => togglePanel('bottomPanel')} />
-        </div>
+          <PanelBtn label="CAL" active={false} onClick={() => setBottomTab('journal')} title="Calendar" />
+        </nav>
 
         <div className="flex-1" />
 
@@ -222,9 +230,28 @@ function MetricInline({ label, value, className }: { label: string; value: strin
   );
 }
 
-function PanelBtn({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+function NavLink({ ws, label, icon }: { ws: Workspace; label: string; icon?: React.ReactNode }) {
+  const { activeWorkspace, setActiveWorkspace } = useAppStore();
+  const active = activeWorkspace === ws;
   return (
-    <button onClick={onClick}
+    <button
+      onClick={() => setActiveWorkspace(ws)}
+      className={cn(
+        'flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider transition-all',
+        active
+          ? 'bg-fw-accent/15 text-fw-accent border border-fw-accent/30'
+          : 'text-fw-text-muted hover:text-fw-text hover:bg-fw-hover/40 border border-transparent'
+      )}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
+
+function PanelBtn({ label, active, onClick, title }: { label: string; active: boolean; onClick: () => void; title?: string }) {
+  return (
+    <button onClick={onClick} title={title}
       className={cn('fw-badge transition-all cursor-pointer', active ? 'fw-badge-blue' : 'fw-badge-muted hover:opacity-80')}>
       {label}
     </button>

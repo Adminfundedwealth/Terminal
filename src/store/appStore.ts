@@ -17,7 +17,7 @@ async function syncWatchlistToBackend(watchlistId: string, watchlist: Watchlist 
   }
 }
 
-export type Workspace = 'index' | 'stocks' | 'futures' | 'options' | 'mcx' | 'cds';
+export type Workspace = 'home' | 'index' | 'stocks' | 'futures' | 'options' | 'mcx' | 'cds';
 export type TerminalLayout = 'standard' | 'dom' | 'options' | 'commodity' | 'currency' | 'compact';
 
 interface PanelVisibility {
@@ -112,7 +112,8 @@ const defaultWatchlists: Watchlist[] = [
 ];
 
 // Default instruments per workspace (auto-load on workspace switch)
-const workspaceDefaults: Record<Workspace, Instrument> = {
+const workspaceDefaults: Record<Workspace, Instrument | null> = {
+  home: null,
   index: { token: '99926000', symbol: 'NIFTY 50', name: 'Nifty 50', segment: 'NSE', instrumentType: 'EQ', exchange: 'NSE', lotSize: 50, tickSize: 0.05 },
   stocks: { token: '2885', symbol: 'RELIANCE', name: 'Reliance Industries', segment: 'NSE', instrumentType: 'EQ', exchange: 'NSE', lotSize: 1, tickSize: 0.05 },
   futures: { token: '26000', symbol: 'NIFTY FUT', name: 'Nifty Futures', segment: 'NFO', instrumentType: 'FUT', exchange: 'NSE', lotSize: 50, tickSize: 0.05, expiry: '2026-07-31' },
@@ -130,7 +131,7 @@ export const useAppStore = create<AppState>()(
       chartType: 'candlestick',
       activeSymbol: workspaceDefaults.index,
       watchlists: defaultWatchlists,
-      activeWorkspace: 'index',
+      activeWorkspace: 'home',
       terminalLayout: 'standard',
       showOptionChain: false,
       showMarketDepth: false,
@@ -156,12 +157,12 @@ export const useAppStore = create<AppState>()(
         const layout: TerminalLayout = ws === 'options' ? 'options' : ws === 'mcx' ? 'commodity' : ws === 'cds' ? 'currency' : 'standard';
         set({
           activeWorkspace: ws,
-          activeSymbol: defaultSymbol,
+          ...(defaultSymbol ? { activeSymbol: defaultSymbol } : {}),
           showOptionChain: showOC,
           terminalLayout: layout,
           panels: {
-            watchlist: true,
-            orderPanel: true,
+            watchlist: ws !== 'home',
+            orderPanel: ws !== 'home',
             bottomPanel: true,
             marketDepth: ws === 'futures' || ws === 'mcx',
             optionChain: showOC,

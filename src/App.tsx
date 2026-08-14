@@ -18,6 +18,7 @@ import { RiskMonitor } from '@/components/RiskMonitor';
 import { TerminalReadiness } from '@/components/TerminalReadiness';
 import { ToastProvider } from '@/components/ToastProvider';
 import { MobileLayout } from '@/components/MobileLayout';
+import { HomeDashboard } from '@/components/HomeDashboard';
 import { useHotkeys } from '@/hooks/useHotkeys';
 import { useAuth } from '@/hooks/useAuth';
 import { useWatchlistSync } from '@/hooks/useWatchlistSync';
@@ -232,6 +233,7 @@ export default function App() {
   }
 
   const showOC = showOptionChain || activeWorkspace === 'options';
+  const isHome = activeWorkspace === 'home';
 
   // Mobile layout
   if (isMobile) {
@@ -260,87 +262,133 @@ export default function App() {
         <TopBar />
 
         {/* Main Content */}
-        <div className="flex flex-1 overflow-hidden">
-          {/* Left - Watchlist */}
-          {panels.watchlist && (
-            <>
-              <div
-                style={{ width: watchlistWidth, minWidth: 180 }}
-                className="border-r border-fw-border flex flex-col overflow-hidden flex-shrink-0"
-              >
-                <ErrorBoundary fallbackTitle="Watchlist Error">
-                  <Watchlist />
-                </ErrorBoundary>
-              </div>
-              <VDivider onDrag={handleWatchlistResize} />
-            </>
-          )}
+        <div className="flex flex-1 overflow-hidden min-h-0">
 
-          {/* Center - Chart + OC + Bottom */}
-          <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-            {/* Chart + Option Chain side by side for options workspace */}
-            <div className="flex flex-1 overflow-hidden">
-              <div className={showOC ? 'w-[55%] min-w-[300px] flex-shrink-0' : 'flex-1'}>
-                <ErrorBoundary fallbackTitle="Chart Error">
-                  <ChartPanel />
-                </ErrorBoundary>
-              </div>
-              {showOC && (
+          {/* ── HOME WORKSPACE ── */}
+          {isHome ? (
+            <>
+              {/* Watchlist column on Home */}
+              {panels.watchlist && (
                 <>
-                  <VDivider onDrag={() => {}} />
-                  <div className="flex-1 overflow-hidden min-w-0">
-                    <ErrorBoundary fallbackTitle="Option Chain Error">
-                      <OptionChainModal />
+                  <div
+                    style={{ width: watchlistWidth, minWidth: 180 }}
+                    className="border-r border-fw-border flex flex-col overflow-hidden flex-shrink-0"
+                  >
+                    <ErrorBoundary fallbackTitle="Watchlist Error">
+                      <Watchlist />
                     </ErrorBoundary>
                   </div>
+                  <VDivider onDrag={handleWatchlistResize} />
                 </>
               )}
-            </div>
-
-            {/* Bottom Panel */}
-            {panels.bottomPanel && (
-              <>
-                <HDivider onDrag={handleBottomResize} />
-                <div
-                  style={{ height: bottomPanelHeight, minHeight: 140 }}
-                  className="border-t border-fw-border overflow-hidden flex-shrink-0"
-                >
-                  <ErrorBoundary fallbackTitle="Panel Error">
-                    <BottomPanel />
+              {/* Home Dashboard fills remaining space */}
+              <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+                <div className="flex-1 overflow-hidden">
+                  <ErrorBoundary fallbackTitle="Home Dashboard Error">
+                    <HomeDashboard />
                   </ErrorBoundary>
                 </div>
-              </>
-            )}
-          </div>
-
-          {/* Right - Order + DOM + Risk */}
-          {panels.orderPanel && (
-            <>
-              <VDivider onDrag={handleOrderPanelResize} />
-              <div
-                style={{ width: orderPanelWidth, minWidth: 240 }}
-                className="border-l border-fw-border flex flex-col overflow-hidden flex-shrink-0"
-              >
-                <ErrorBoundary fallbackTitle="Risk Widget Error">
-                  <TerminalReadiness />
-                  <RiskWidget />
-                </ErrorBoundary>
-                <div className="flex-1 overflow-y-auto min-h-0">
-                  <ErrorBoundary fallbackTitle="Order Panel Error">
-                    <OrderPanel />
-                  </ErrorBoundary>
-                </div>
-                {panels.marketDepth && (
+                {/* Bottom Trading Dock on Home */}
+                {panels.bottomPanel && (
                   <>
-                    <HDivider onDrag={handleDepthResize} />
-                    <div style={{ height: depthPanelHeight, minHeight: 200, maxHeight: 600 }} className="flex-shrink-0 overflow-hidden">
-                      <ErrorBoundary fallbackTitle="Market Depth Error">
-                        <MarketDepthPanel />
+                    <HDivider onDrag={handleBottomResize} />
+                    <div
+                      style={{ height: bottomPanelHeight, minHeight: 140 }}
+                      className="border-t border-fw-border overflow-hidden flex-shrink-0"
+                    >
+                      <ErrorBoundary fallbackTitle="Panel Error">
+                        <BottomPanel />
                       </ErrorBoundary>
                     </div>
                   </>
                 )}
               </div>
+            </>
+          ) : (
+            /* ── CHART WORKSPACES ── */
+            <>
+              {/* Left - Watchlist */}
+              {panels.watchlist && (
+                <>
+                  <div
+                    style={{ width: watchlistWidth, minWidth: 180 }}
+                    className="border-r border-fw-border flex flex-col overflow-hidden flex-shrink-0"
+                  >
+                    <ErrorBoundary fallbackTitle="Watchlist Error">
+                      <Watchlist />
+                    </ErrorBoundary>
+                  </div>
+                  <VDivider onDrag={handleWatchlistResize} />
+                </>
+              )}
+
+              {/* Center - Chart + OC + Bottom */}
+              <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+                {/* Chart + Option Chain side by side for options workspace */}
+                <div className="flex flex-1 overflow-hidden">
+                  <div className={showOC ? 'w-[55%] min-w-[300px] flex-shrink-0' : 'flex-1'}>
+                    <ErrorBoundary fallbackTitle="Chart Error">
+                      <ChartPanel />
+                    </ErrorBoundary>
+                  </div>
+                  {showOC && (
+                    <>
+                      <VDivider onDrag={() => {}} />
+                      <div className="flex-1 overflow-hidden min-w-0">
+                        <ErrorBoundary fallbackTitle="Option Chain Error">
+                          <OptionChainModal />
+                        </ErrorBoundary>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Bottom Panel */}
+                {panels.bottomPanel && (
+                  <>
+                    <HDivider onDrag={handleBottomResize} />
+                    <div
+                      style={{ height: bottomPanelHeight, minHeight: 140 }}
+                      className="border-t border-fw-border overflow-hidden flex-shrink-0"
+                    >
+                      <ErrorBoundary fallbackTitle="Panel Error">
+                        <BottomPanel />
+                      </ErrorBoundary>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Right - Order + DOM + Risk */}
+              {panels.orderPanel && (
+                <>
+                  <VDivider onDrag={handleOrderPanelResize} />
+                  <div
+                    style={{ width: orderPanelWidth, minWidth: 240 }}
+                    className="border-l border-fw-border flex flex-col overflow-hidden flex-shrink-0"
+                  >
+                    <ErrorBoundary fallbackTitle="Risk Widget Error">
+                      <TerminalReadiness />
+                      <RiskWidget />
+                    </ErrorBoundary>
+                    <div className="flex-1 overflow-y-auto min-h-0">
+                      <ErrorBoundary fallbackTitle="Order Panel Error">
+                        <OrderPanel />
+                      </ErrorBoundary>
+                    </div>
+                    {panels.marketDepth && (
+                      <>
+                        <HDivider onDrag={handleDepthResize} />
+                        <div style={{ height: depthPanelHeight, minHeight: 200, maxHeight: 600 }} className="flex-shrink-0 overflow-hidden">
+                          <ErrorBoundary fallbackTitle="Market Depth Error">
+                            <MarketDepthPanel />
+                          </ErrorBoundary>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </>
+              )}
             </>
           )}
         </div>
