@@ -289,7 +289,7 @@ export function ChartPanel() {
         return;
       }
 
-      if (mode === 'none' || mode === 'crosshair' || !param.time) return;
+      if (mode === 'crosshair' || !param.time) return;
       const price = seriesRef.current ? (seriesRef.current as any).coordinateToPrice(param.point.y) : 0;
       if (price == null || price === 0) return;
 

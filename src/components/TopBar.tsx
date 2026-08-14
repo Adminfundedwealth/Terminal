@@ -24,7 +24,7 @@ const PULSE_TOKENS = [
 ];
 
 export function TopBar() {
-  const { theme, setTheme, setSearchOpen, showOptionChain, setShowOptionChain, panels, togglePanel, setBottomTab } = useAppStore();
+  const { theme, setTheme, setSearchOpen, showOptionChain, setShowOptionChain, panels, togglePanel, setBottomTab, activeWorkspace, setActiveWorkspace } = useAppStore();
   const account = useTradingStore((s) => s.account);
   const positions = useTradingStore((s) => s.positions);
   const marketStatus = useMarketStore((s) => s.marketStatus);
@@ -140,13 +140,78 @@ export function TopBar() {
           })}
         </div>
 
-        {/* Panel Toggles */}
-        <div className="flex items-center gap-0.5 mr-3 flex-shrink-0">
-          <PanelBtn label="WL" active={panels.watchlist} onClick={() => togglePanel('watchlist')} />
-          <PanelBtn label="ORD" active={panels.orderPanel} onClick={() => togglePanel('orderPanel')} />
-          <PanelBtn label="OC" active={showOptionChain} onClick={() => setShowOptionChain(!showOptionChain)} />
-          <PanelBtn label="DOM" active={panels.marketDepth} onClick={() => togglePanel('marketDepth')} />
-          <PanelBtn label="BTM" active={panels.bottomPanel} onClick={() => togglePanel('bottomPanel')} />
+        {/* Workspace Navigation */}
+        <div className="flex items-center gap-1 mr-3 flex-shrink-0 overflow-x-auto scrollbar-none">
+          {[
+            { id: 'home', label: 'HOME' },
+            { id: 'index', label: 'INDEX' },
+            { id: 'stocks', label: 'STOCKS' },
+            { id: 'options', label: 'OPTION' },
+            { id: 'futures', label: 'FUTURES' },
+            { id: 'mcx', label: 'MCX' },
+            { id: 'cds', label: 'CDS' },
+            { id: 'orders', label: 'ORD' },
+            { id: 'watchlist', label: 'WL' },
+            { id: 'dom', label: 'DOM' },
+            { id: 'bottom', label: 'BTM' },
+            { id: 'calendar', label: 'CALENDAR' },
+          ].map((item) => {
+            const isActive = item.id === 'home'
+              ? activeWorkspace === 'home'
+              : item.id === 'index' ? activeWorkspace === 'index'
+              : item.id === 'stocks' ? activeWorkspace === 'stocks'
+              : item.id === 'options' ? activeWorkspace === 'options'
+              : item.id === 'futures' ? activeWorkspace === 'futures'
+              : item.id === 'mcx' ? activeWorkspace === 'mcx'
+              : item.id === 'cds' ? activeWorkspace === 'cds'
+              : false;
+
+            const onNavClick = () => {
+              if (item.id === 'orders') {
+                setBottomTab('orders');
+                return;
+              }
+              if (item.id === 'watchlist') {
+                togglePanel('watchlist');
+                return;
+              }
+              if (item.id === 'dom') {
+                togglePanel('marketDepth');
+                return;
+              }
+              if (item.id === 'bottom') {
+                togglePanel('bottomPanel');
+                return;
+              }
+              if (item.id === 'calendar') {
+                setBottomTab('activity');
+                return;
+              }
+              if (item.id === 'home') {
+                setActiveWorkspace('home');
+                return;
+              }
+              if (item.id === 'index') setActiveWorkspace('index');
+              if (item.id === 'stocks') setActiveWorkspace('stocks');
+              if (item.id === 'options') setActiveWorkspace('options');
+              if (item.id === 'futures') setActiveWorkspace('futures');
+              if (item.id === 'mcx') setActiveWorkspace('mcx');
+              if (item.id === 'cds') setActiveWorkspace('cds');
+            };
+
+            return (
+              <button
+                key={item.id}
+                onClick={onNavClick}
+                className={cn(
+                  'px-2 py-1 rounded-md text-[11px] font-bold tracking-[0.14em] transition-colors whitespace-nowrap',
+                  isActive ? 'bg-fw-accent/15 text-fw-accent border border-fw-accent/35' : 'text-fw-text-secondary hover:text-fw-text hover:bg-fw-hover/50'
+                )}
+              >
+                {item.label}
+              </button>
+            );
+          })}
         </div>
 
         <div className="flex-1" />

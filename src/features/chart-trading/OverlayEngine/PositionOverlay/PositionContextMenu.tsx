@@ -53,7 +53,7 @@ export function PositionContextMenu({ positionId, lineType, x, y, onClose }: Pro
   }, [onClose]);
 
   const run = useCallback(
-    (fn: () => Promise<void>) => {
+    (fn: () => Promise<unknown>) => {
       fn().catch((err) => console.error('[ContextMenu]', err));
       onClose();
     },

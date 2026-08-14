@@ -18,6 +18,7 @@ import { RiskMonitor } from '@/components/RiskMonitor';
 import { TerminalReadiness } from '@/components/TerminalReadiness';
 import { ToastProvider } from '@/components/ToastProvider';
 import { MobileLayout } from '@/components/MobileLayout';
+import { HomeWorkspace } from '@/components/HomeWorkspace';
 import { useHotkeys } from '@/hooks/useHotkeys';
 import { useAuth } from '@/hooks/useAuth';
 import { useWatchlistSync } from '@/hooks/useWatchlistSync';
@@ -278,24 +279,32 @@ export default function App() {
 
           {/* Center - Chart + OC + Bottom */}
           <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-            {/* Chart + Option Chain side by side for options workspace */}
-            <div className="flex flex-1 overflow-hidden">
-              <div className={showOC ? 'w-[55%] min-w-[300px] flex-shrink-0' : 'flex-1'}>
-                <ErrorBoundary fallbackTitle="Chart Error">
-                  <ChartPanel />
-                </ErrorBoundary>
+            {activeWorkspace === 'home' ? (
+              <div className="flex-1 overflow-hidden">
+                <HomeWorkspace />
               </div>
-              {showOC && (
-                <>
-                  <VDivider onDrag={() => {}} />
-                  <div className="flex-1 overflow-hidden min-w-0">
-                    <ErrorBoundary fallbackTitle="Option Chain Error">
-                      <OptionChainModal />
+            ) : (
+              <>
+                {/* Chart + Option Chain side by side for options workspace */}
+                <div className="flex flex-1 overflow-hidden">
+                  <div className={showOC ? 'w-[55%] min-w-[300px] flex-shrink-0' : 'flex-1'}>
+                    <ErrorBoundary fallbackTitle="Chart Error">
+                      <ChartPanel />
                     </ErrorBoundary>
                   </div>
-                </>
-              )}
-            </div>
+                  {showOC && (
+                    <>
+                      <VDivider onDrag={() => {}} />
+                      <div className="flex-1 overflow-hidden min-w-0">
+                        <ErrorBoundary fallbackTitle="Option Chain Error">
+                          <OptionChainModal />
+                        </ErrorBoundary>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </>
+            )}
 
             {/* Bottom Panel */}
             {panels.bottomPanel && (
