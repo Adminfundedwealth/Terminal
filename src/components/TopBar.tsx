@@ -142,19 +142,19 @@ export function TopBar() {
 
         {/* ── TOP NAV LINKS ── */}
         <nav className="flex items-center gap-0.5 mr-3 flex-shrink-0">
-          <NavLink ws="home"    label="HOME"     icon={<Home size={11} />} />
-          <NavLink ws="index"   label="INDEX"    icon={<BarChart3 size={11} />} />
-          <NavLink ws="stocks"  label="STOCKS"   icon={<TrendingUp size={11} />} />
-          <NavLink ws="options" label="OPTION"   icon={<Activity size={11} />} />
-          <NavLink ws="futures" label="FUTURES"  icon={<LineChart size={11} />} />
-          <NavLink ws="mcx"    label="MCX"      icon={<Diamond size={11} />} />
-          <NavLink ws="cds"    label="CDS"      icon={<DollarSign size={11} />} />
+          <NavLink ws="home"     label="HOME"     icon={<Home size={11} />} />
+          <NavLink ws="index"    label="INDEX"    icon={<BarChart3 size={11} />} />
+          <NavLink ws="stocks"   label="STOCKS"   icon={<TrendingUp size={11} />} />
+          <NavLink ws="options"  label="OPTION"   icon={<Activity size={11} />} />
+          <NavLink ws="futures"  label="FUTURES"  icon={<LineChart size={11} />} />
+          <NavLink ws="mcx"     label="MCX"      icon={<Diamond size={11} />} />
+          <NavLink ws="cds"     label="CDS"      icon={<DollarSign size={11} />} />
           <div className="w-px h-4 bg-fw-border/40 mx-1" />
-          <PanelBtn label="ORD" active={panels.orderPanel}  onClick={() => togglePanel('orderPanel')} />
-          <PanelBtn label="WL"  active={panels.watchlist}   onClick={() => togglePanel('watchlist')} />
-          <PanelBtn label="DOM" active={panels.marketDepth} onClick={() => togglePanel('marketDepth')} />
-          <PanelBtn label="BTM" active={panels.bottomPanel} onClick={() => togglePanel('bottomPanel')} />
-          <PanelBtn label="CAL" active={false} onClick={() => setBottomTab('journal')} title="Calendar" />
+          <NavLink ws="ord"     label="ORD"      />
+          <NavLink ws="wl"      label="WL"       />
+          <NavLink ws="dom"     label="DOM"      />
+          <NavLink ws="btm"     label="BTM"      />
+          <NavLink ws="calendar" label="CAL"     />
         </nav>
 
         <div className="flex-1" />

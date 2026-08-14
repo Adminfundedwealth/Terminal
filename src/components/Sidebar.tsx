@@ -13,13 +13,13 @@ import { logout } from '@/hooks/useAuth';
 const DASHBOARD_URL = (import.meta as any).env?.VITE_FW_DASHBOARD_URL || 'https://fundedwealth.com';
 
 const WORKSPACES: { id: Workspace; icon: React.ReactNode; label: string; color: string }[] = [
-  { id: 'home',    icon: <Home size={18} />,       label: 'Home',    color: '#7C3AED' },
-  { id: 'index',   icon: <BarChart3 size={18} />,   label: 'Index',   color: '#2962ff' },
-  { id: 'stocks',  icon: <TrendingUp size={18} />,  label: 'Stocks',  color: '#26a69a' },
-  { id: 'futures', icon: <LineChart size={18} />,   label: 'Futures', color: '#ff9800' },
-  { id: 'options', icon: <Activity size={18} />,    label: 'Options', color: '#ab47bc' },
-  { id: 'mcx',    icon: <Diamond size={18} />,     label: 'MCX',    color: '#f59e0b' },
-  { id: 'cds',    icon: <DollarSign size={18} />,  label: 'CDS',    color: '#06b6d4' },
+  { id: 'home',     icon: <Home size={18} />,       label: 'Home',     color: '#7C3AED' },
+  { id: 'index',    icon: <BarChart3 size={18} />,   label: 'Index',    color: '#2962ff' },
+  { id: 'stocks',   icon: <TrendingUp size={18} />,  label: 'Stocks',   color: '#26a69a' },
+  { id: 'futures',  icon: <LineChart size={18} />,   label: 'Futures',  color: '#ff9800' },
+  { id: 'options',  icon: <Activity size={18} />,    label: 'Options',  color: '#ab47bc' },
+  { id: 'mcx',     icon: <Diamond size={18} />,     label: 'MCX',     color: '#f59e0b' },
+  { id: 'cds',     icon: <DollarSign size={18} />,  label: 'CDS',     color: '#06b6d4' },
 ];
 
 export function Sidebar() {

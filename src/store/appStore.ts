@@ -17,7 +17,7 @@ async function syncWatchlistToBackend(watchlistId: string, watchlist: Watchlist 
   }
 }
 
-export type Workspace = 'home' | 'index' | 'stocks' | 'futures' | 'options' | 'mcx' | 'cds';
+export type Workspace = 'home' | 'index' | 'stocks' | 'futures' | 'options' | 'mcx' | 'cds' | 'ord' | 'wl' | 'dom' | 'btm' | 'calendar';
 export type TerminalLayout = 'standard' | 'dom' | 'options' | 'commodity' | 'currency' | 'compact';
 
 interface PanelVisibility {
@@ -39,7 +39,7 @@ interface AppState {
   terminalLayout: TerminalLayout;
   showOptionChain: boolean;
   showMarketDepth: boolean;
-  bottomTab: 'positions' | 'orders' | 'trades' | 'journal' | 'alerts' | 'analytics' | 'risk' | 'ai' | 'accounts' | 'activity' | 'scanner';
+  bottomTab: 'positions' | 'orders' | 'trades' | 'journal' | 'alerts' | 'analytics' | 'risk' | 'ai' | 'accounts' | 'activity' | 'scanner' | 'admin';
   searchOpen: boolean;
   panels: PanelVisibility;
   pinnedTokens: string[];
@@ -113,13 +113,18 @@ const defaultWatchlists: Watchlist[] = [
 
 // Default instruments per workspace (auto-load on workspace switch)
 const workspaceDefaults: Record<Workspace, Instrument | null> = {
-  home: null,
-  index: { token: '99926000', symbol: 'NIFTY 50', name: 'Nifty 50', segment: 'NSE', instrumentType: 'EQ', exchange: 'NSE', lotSize: 50, tickSize: 0.05 },
-  stocks: { token: '2885', symbol: 'RELIANCE', name: 'Reliance Industries', segment: 'NSE', instrumentType: 'EQ', exchange: 'NSE', lotSize: 1, tickSize: 0.05 },
-  futures: { token: '26000', symbol: 'NIFTY FUT', name: 'Nifty Futures', segment: 'NFO', instrumentType: 'FUT', exchange: 'NSE', lotSize: 50, tickSize: 0.05, expiry: '2026-07-31' },
-  options: { token: '99926000', symbol: 'NIFTY', name: 'Nifty 50', segment: 'NSE', instrumentType: 'EQ', exchange: 'NSE', lotSize: 50, tickSize: 0.05 },
-  mcx: { token: '429604', symbol: 'GOLD', name: 'Gold Futures', segment: 'MCX', instrumentType: 'FUT', exchange: 'MCX', lotSize: 100, tickSize: 1, expiry: '2026-08-05' },
-  cds: { token: '11091', symbol: 'USDINR', name: 'USD/INR Futures', segment: 'CDS', instrumentType: 'FUT', exchange: 'NSE', lotSize: 1000, tickSize: 0.0025, expiry: '2026-07-30' },
+  home:     null,
+  index:    { token: '99926000', symbol: 'NIFTY 50',      name: 'Nifty 50',           segment: 'NSE', instrumentType: 'EQ',  exchange: 'NSE', lotSize: 50,   tickSize: 0.05 },
+  stocks:   { token: '2885',     symbol: 'RELIANCE',       name: 'Reliance Industries', segment: 'NSE', instrumentType: 'EQ',  exchange: 'NSE', lotSize: 1,    tickSize: 0.05 },
+  futures:  { token: '26000',    symbol: 'NIFTY FUT',      name: 'Nifty Futures',       segment: 'NFO', instrumentType: 'FUT', exchange: 'NSE', lotSize: 50,   tickSize: 0.05, expiry: '2026-07-31' },
+  options:  { token: '99926000', symbol: 'NIFTY',          name: 'Nifty 50',           segment: 'NSE', instrumentType: 'EQ',  exchange: 'NSE', lotSize: 50,   tickSize: 0.05 },
+  mcx:      { token: '429604',   symbol: 'GOLD',           name: 'Gold Futures',        segment: 'MCX', instrumentType: 'FUT', exchange: 'MCX', lotSize: 100,  tickSize: 1,    expiry: '2026-08-05' },
+  cds:      { token: '11091',    symbol: 'USDINR',         name: 'USD/INR Futures',     segment: 'CDS', instrumentType: 'FUT', exchange: 'NSE', lotSize: 1000, tickSize: 0.0025, expiry: '2026-07-30' },
+  ord:      null,
+  wl:       null,
+  dom:      null,
+  btm:      null,
+  calendar: null,
 };
 
 export const useAppStore = create<AppState>()(
@@ -154,6 +159,7 @@ export const useAppStore = create<AppState>()(
       setActiveWorkspace: (ws) => {
         const defaultSymbol = workspaceDefaults[ws];
         const showOC = ws === 'options';
+        const isChartWs = ['index', 'stocks', 'futures', 'options', 'mcx', 'cds'].includes(ws);
         const layout: TerminalLayout = ws === 'options' ? 'options' : ws === 'mcx' ? 'commodity' : ws === 'cds' ? 'currency' : 'standard';
         set({
           activeWorkspace: ws,
@@ -161,10 +167,10 @@ export const useAppStore = create<AppState>()(
           showOptionChain: showOC,
           terminalLayout: layout,
           panels: {
-            watchlist: ws !== 'home',
-            orderPanel: ws !== 'home',
+            watchlist: isChartWs || ws === 'home',
+            orderPanel: isChartWs || ws === 'dom',
             bottomPanel: true,
-            marketDepth: ws === 'futures' || ws === 'mcx',
+            marketDepth: ws === 'futures' || ws === 'mcx' || ws === 'dom',
             optionChain: showOC,
           },
         });
@@ -208,7 +214,7 @@ export const useAppStore = create<AppState>()(
       setActiveWatchlistTab: (activeWatchlistTab) => set({ activeWatchlistTab }),
     }),
     {
-      name: 'fw-terminal-v4',
+      name: 'fw-terminal-v5',
       partialize: (state) => ({
         theme: state.theme,
         timeframe: state.timeframe,
