@@ -1,4 +1,4 @@
-﻿import { Search, Shield, Zap, TrendingUp, TrendingDown, Activity, Target, AlertTriangle, Bell, Home, BarChart3, TrendingUp as StocksIcon, Activity as OptionIcon, LineChart, Diamond, DollarSign, ClipboardList, List, Layers, AlignJustify, CalendarDays } from 'lucide-react';
+﻿import { Search, Shield, Zap, TrendingUp, Activity, Target, AlertTriangle, Bell, Home, BarChart3, LineChart, Diamond, DollarSign } from 'lucide-react';
 import { useAppStore, type Workspace } from '@/store/appStore';
 import { useTradingStore } from '@/store/tradingStore';
 import { useMarketStore } from '@/store/marketStore';
@@ -77,7 +77,7 @@ export function TopBar() {
   const riskBg = riskLevel === 'HIGH' ? 'bg-red-900/15 border-red-800/30' : riskLevel === 'CAUTION' ? 'bg-orange-900/15 border-orange-800/30' : 'bg-emerald-900/15 border-emerald-800/30';
 
   return (
-    <header className="min-h-[64px] bg-gradient-to-b from-[#0e1018] to-[#0c0e14] border-b border-fw-border flex flex-col select-none overflow-hidden">
+    <header className="bg-gradient-to-b from-[#0e1018] to-[#0c0e14] border-b border-fw-border flex flex-col select-none overflow-hidden">
       {/* Row 1: Main Command Bar */}
       <div className="flex items-center px-3 h-[38px]">
         {/* Brand */}
@@ -115,30 +115,7 @@ export function TopBar() {
           </div>
         </div>
 
-        {/* Index Pulse Strip */}
-        <div className="flex items-center gap-4 mr-3 pr-3 border-r border-fw-border/30 flex-shrink-0 overflow-hidden">
-          {PULSE_TOKENS.map(({ token, symbol }) => {
-            const q = quotes[token];
-            const up = (q?.changePercent || 0) >= 0;
-            return (
-              <div key={token} className="flex items-center gap-1.5">
-                <span className="pulse-symbol">{symbol}</span>
-                {q ? (
-                  <>
-                    <span className={cn('pulse-price tv-smooth-value', up ? 'text-green' : 'text-red')}>
-                      {formatPrice(q.ltp)}
-                    </span>
-                    <span className={cn('tv-change-pill', up ? 'tv-change-pill-up' : 'tv-change-pill-down')}>
-                      {up ? '+' : ''}{(q.changePercent || 0).toFixed(2)}%
-                    </span>
-                  </>
-                ) : (
-                  <span className="text-[12px] text-fw-text-muted/50 font-mono">—</span>
-                )}
-              </div>
-            );
-          })}
-        </div>
+        {/* Index Pulse Strip — moved to nav row, removed standalone strip */}
 
         {/* ── TOP NAV LINKS ── */}
         <nav className="flex items-center gap-0.5 mr-3 flex-shrink-0">
@@ -176,47 +153,6 @@ export function TopBar() {
         </div>
       </div>
 
-      {/* Row 2: Account Metrics + Challenge Context Strip */}
-      <div className="flex items-center px-3 h-[28px] border-t border-fw-border/20 bg-[#090b10]">
-        {/* Account Metrics — stacked label/value pairs */}
-        <div className="flex items-center gap-5 mr-4 pr-4 border-r border-fw-border/20">
-          <MetricInline label="Balance" value={`₹${formatCompact(balance)}`} />
-          <MetricInline label="Equity" value={`₹${formatCompact(equity)}`} className={equity >= balance ? 'text-emerald-400' : 'text-red-400'} />
-          <MetricInline label="Margin" value={`₹${formatCompact(marginInfo?.usedMargin || 0)}`} className="text-orange-400" />
-          <div className="flex items-center gap-1.5">
-            {pnlValue >= 0 ? <TrendingUp size={10} className="text-green" /> : <TrendingDown size={10} className="text-red" />}
-            <span className="topbar-metric-label">P&amp;L</span>
-            <span className={cn('topbar-metric-value tv-smooth-value', pnlValue >= 0 ? 'text-green' : 'text-red')}>
-              {pnlValue >= 0 ? '+' : ''}₹{formatCompact(Math.abs(pnlValue))}
-            </span>
-          </div>
-        </div>
-
-        {/* Challenge Risk Context */}
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1.5">
-            <AlertTriangle size={9} className="text-red-400/70" />
-            <span className="topbar-metric-label">Daily Left</span>
-            <span className="topbar-metric-value text-red-400 tabular-nums">₹{formatCompact(dailyLossRemaining)}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Activity size={9} className="text-orange-400/70" />
-            <span className="topbar-metric-label">DD Left</span>
-            <span className="topbar-metric-value text-orange-400 tabular-nums">₹{formatCompact(ddRemaining)}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Target size={9} className="text-emerald-400/70" />
-            <span className="topbar-metric-label">Target</span>
-            <span className="topbar-metric-value text-emerald-400 tabular-nums">{targetPct.toFixed(0)}%</span>
-            <div className="w-16 h-[3px] rounded-full bg-fw-border/30 overflow-hidden">
-              <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${targetPct}%` }} />
-            </div>
-          </div>
-        </div>
-
-        <div className="flex-1" />
-        <span className="tv-support text-fw-text-muted/50 font-mono">{new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
-      </div>
     </header>
   );
 }
