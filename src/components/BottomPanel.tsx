@@ -1,9 +1,9 @@
-﻿import { useState, useEffect } from 'react';
+﻿import { useState, useEffect, useRef, useCallback } from 'react';
 import { useTradingStore } from '@/store/tradingStore';
 import { useAppStore } from '@/store/appStore';
 import { getPositions, getOrders, getTrades, exitPosition, partialClosePosition, reversePosition, cancelOrder, placeOrder, closeAllPositions, breakEvenPosition, attachStopLoss, attachTakeProfit } from '@/services/api';
 import { cn, formatPrice, formatPnl, getChangeColor } from '@/utils/helpers';
-import { RefreshCw, X, RotateCcw, Plus, Edit, TrendingUp, Shield, Target, StopCircle, Activity } from 'lucide-react';
+import { RefreshCw, X, RotateCcw, Plus, Edit, TrendingUp, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/components/ToastProvider';
 import { JournalPanel } from '@/components/JournalPanel';
 import { AlertsPanel } from '@/components/AlertsPanel';
@@ -18,6 +18,65 @@ import type { Position, Order, Trade } from '@/types';
 type OrderFilter = 'all' | 'open' | 'filled' | 'cancelled' | 'rejected';
 type TradeFilter = 'today' | 'week' | 'month';
 
+// ─── Confirmation Dialog ─────────────────────────────────────────────────────
+// Lightweight inline confirmation — same visual style as OrderPanel confirm dialog.
+
+interface ConfirmState {
+  action: 'exit' | 'reverse' | 'close-all';
+  positionId?: string;
+  label: string;       // e.g. "Exit NIFTY LONG 50"
+}
+
+function ConfirmDialog({
+  state,
+  onConfirm,
+  onCancel,
+}: {
+  state: ConfirmState;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  // Close on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel(); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [onCancel]);
+
+  const isDangerous = state.action === 'close-all' || state.action === 'reverse';
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="bg-[#12141f] border border-fw-border rounded-xl shadow-2xl p-5 w-[260px] flex flex-col gap-4">
+        <div className="flex items-center gap-2">
+          <AlertTriangle size={15} className={isDangerous ? 'text-orange-400' : 'text-red-400'} />
+          <span className="text-[13px] font-black text-fw-text">Confirm Action</span>
+        </div>
+        <p className="text-[13px] text-fw-text-secondary leading-relaxed">{state.label}</p>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={onCancel}
+            className="py-2 rounded-md text-[13px] font-bold bg-fw-bg border border-fw-border text-fw-text-secondary hover:text-fw-text transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className={cn(
+              'py-2 rounded-md text-[13px] font-black text-white transition-all active:scale-[0.97]',
+              isDangerous ? 'bg-orange-600 hover:bg-orange-500' : 'bg-red-600 hover:bg-red-500'
+            )}
+          >
+            Confirm
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── BottomPanel ─────────────────────────────────────────────────────────────
+
 export function BottomPanel() {
   const { bottomTab, setBottomTab } = useAppStore();
   const { positions, orders, trades, setPositions, setOrders, setTrades } = useTradingStore();
@@ -25,6 +84,16 @@ export function BottomPanel() {
   const [orderFilter, setOrderFilter] = useState<OrderFilter>('all');
   const [tradeFilter, setTradeFilter] = useState<TradeFilter>('today');
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // ── Per-action in-flight guard ────────────────────────────────────────────
+  // Key: positionId (or 'close-all' for global). Value: true while request is running.
+  // Prevents double-click from submitting twice.
+  const inFlightRef = useRef<Set<string>>(new Set());
+
+  // ── Confirmation dialog state ─────────────────────────────────────────────
+  const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
+  // Store the actual callback to execute after confirmation
+  const pendingActionRef = useRef<(() => Promise<unknown>) | null>(null);
 
   const refreshData = async (signal?: AbortSignal) => {
     setIsRefreshing(true);
@@ -48,10 +117,97 @@ export function BottomPanel() {
   useEffect(() => {
     const controller = new AbortController();
     refreshData(controller.signal);
-    // Poll every 10s — WS handles real-time updates; this is just a safety net sync
+    // Poll every 10s — WS handles real-time updates; this is a safety-net sync
     const interval = setInterval(() => refreshData(controller.signal), 10000);
     return () => { controller.abort(); clearInterval(interval); };
   }, [tradeFilter]);
+
+  // ── Guard helper — prevents concurrent/double submissions ─────────────────
+  const withGuard = useCallback(
+    async (key: string, fn: () => Promise<unknown>, toastTitle: string) => {
+      if (inFlightRef.current.has(key)) return; // already in flight
+      inFlightRef.current.add(key);
+      try {
+        await fn();
+        refreshData();
+      } catch (e: any) {
+        showToast({ type: 'danger', title: toastTitle, message: e?.message || 'Action failed' });
+      } finally {
+        inFlightRef.current.delete(key);
+      }
+    },
+    [showToast]
+  );
+
+  // ── Confirmation helpers ──────────────────────────────────────────────────
+  const requestConfirm = useCallback((state: ConfirmState, action: () => Promise<unknown>) => {
+    pendingActionRef.current = action;
+    setConfirmState(state);
+  }, []);
+
+  const handleConfirm = useCallback(async () => {
+    const action = pendingActionRef.current;
+    const state = confirmState;
+    setConfirmState(null);
+    pendingActionRef.current = null;
+    if (!action || !state) return;
+
+    const key = state.positionId ?? 'close-all';
+    await withGuard(key, action, 'Action Failed');
+  }, [confirmState, withGuard]);
+
+  const handleCancelConfirm = useCallback(() => {
+    setConfirmState(null);
+    pendingActionRef.current = null;
+  }, []);
+
+  // ── Position action handlers ──────────────────────────────────────────────
+
+  const handleExitPosition = useCallback((id: string) => {
+    const pos = positions.find(p => p.id === id);
+    const side = pos ? (pos.qty > 0 ? 'LONG' : 'SHORT') : '';
+    const sym = pos?.symbol ?? '';
+    const qty = pos ? Math.abs(pos.qty) : 0;
+    requestConfirm(
+      { action: 'exit', positionId: id, label: `Exit ${side} ${sym} × ${qty}?` },
+      () => exitPosition(id)
+    );
+  }, [positions, requestConfirm]);
+
+  const handlePartialClose = useCallback((id: string, pct: number) => {
+    const pos = positions.find(p => p.id === id);
+    if (!pos) return;
+    const closeQty = Math.max(1, Math.round(Math.abs(pos.qty) * (pct / 100)));
+    // Partial close goes directly — user already clicked a specific % button
+    // which is already an explicit choice. We add the in-flight guard only.
+    withGuard(
+      id,
+      () => partialClosePosition(id, closeQty),
+      'Partial Close Failed'
+    );
+  }, [positions, withGuard]);
+
+  const handleCloseAll = useCallback(() => {
+    const count = positions.filter(p => p.qty !== 0).length;
+    requestConfirm(
+      { action: 'close-all', label: `Close ALL ${count} open position${count !== 1 ? 's' : ''}? This cannot be undone.` },
+      () => closeAllPositions()
+    );
+  }, [positions, requestConfirm]);
+
+  const handleReversePosition = useCallback((id: string) => {
+    const pos = positions.find(p => p.id === id);
+    const side = pos ? (pos.qty > 0 ? 'LONG' : 'SHORT') : '';
+    const sym = pos?.symbol ?? '';
+    requestConfirm(
+      { action: 'reverse', positionId: id, label: `Reverse ${side} ${sym}? This closes the current position and opens the opposite side.` },
+      () => reversePosition(id)
+    );
+  }, [positions, requestConfirm]);
+
+  const handleCancelOrder = useCallback(async (id: string) => {
+    await withGuard(id, () => cancelOrder(id), 'Cancel Failed');
+  }, [withGuard]);
 
   const filteredOrders = orders.filter((o) => {
     if (orderFilter === 'all') return true;
@@ -60,42 +216,6 @@ export function BottomPanel() {
 
   const totalPnl = positions.reduce((sum, p) => sum + p.pnl, 0);
   const totalMtm = positions.reduce((sum, p) => sum + p.mtm, 0);
-
-  const handleExitPosition = async (id: string) => {
-    try { await exitPosition(id); refreshData(); } catch (e: any) {
-      showToast({ type: 'danger', title: 'Exit Failed', message: e?.message || 'Could not close position' });
-    }
-  };
-
-  const handlePartialClose = async (id: string, pct: number) => {
-    const pos = positions.find(p => p.id === id);
-    if (!pos) return;
-    const closeQty = Math.max(1, Math.round(Math.abs(pos.qty) * (pct / 100)));
-    try { await partialClosePosition(id, closeQty); refreshData(); } catch (e: any) {
-      showToast({ type: 'danger', title: 'Partial Close Failed', message: e?.message || 'Could not close partial qty' });
-    }
-  };
-
-  const handleCloseAll = async () => {
-    try {
-      await closeAllPositions();
-      refreshData();
-    } catch (e: any) {
-      showToast({ type: 'danger', title: 'Close All Failed', message: e?.message || 'Some positions may not have closed' });
-    }
-  };
-
-  const handleReversePosition = async (id: string) => {
-    try { await reversePosition(id); refreshData(); } catch (e: any) {
-      showToast({ type: 'danger', title: 'Reverse Failed', message: e?.message || 'Could not reverse position' });
-    }
-  };
-
-  const handleCancelOrder = async (id: string) => {
-    try { await cancelOrder(id); refreshData(); } catch (e: any) {
-      showToast({ type: 'danger', title: 'Cancel Failed', message: e?.message || 'Could not cancel order' });
-    }
-  };
 
   const tabs = [
     { id: 'positions' as const, label: 'Positions', count: positions.length },
@@ -112,132 +232,151 @@ export function BottomPanel() {
   ];
 
   return (
-    <div className="h-full flex flex-col bg-gradient-to-b from-[#0d0f15] to-[#0b0d12]">
-      {/* Tabs — Professional Console Strip */}
-      <div className="flex items-center border-b border-fw-border px-1 bg-[#0a0c12] flex-shrink-0">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setBottomTab(tab.id)}
-            className={cn(
-              'px-3 py-2 border-b-2 transition-all relative',
-              bottomTab === tab.id
-                ? 'fw-tab-active border-fw-accent bg-fw-accent/[0.04]'
-                : 'fw-tab-inactive border-transparent hover:opacity-80 hover:bg-fw-hover/20'
-            )}
-          >
-            {tab.label}
-            {tab.count > 0 && (
-              <span className={cn(
-                'ml-1.5 px-1.5 min-w-[16px] text-center text-[8px] rounded-full font-mono inline-block',
-                bottomTab === tab.id ? 'bg-fw-accent/20 text-fw-accent' : 'bg-fw-border text-fw-text-muted'
-              )}>
-                {tab.count}
-              </span>
-            )}
-          </button>
-        ))}
+    <>
+      {/* Confirmation dialog — rendered outside table so it is always on top */}
+      {confirmState && (
+        <ConfirmDialog
+          state={confirmState}
+          onConfirm={handleConfirm}
+          onCancel={handleCancelConfirm}
+        />
+      )}
 
-        <div className="flex-1" />
-
-        {/* Total P&L summary — L1 value, L4 label */}
-        {bottomTab === 'positions' && positions.length > 0 && (
-          <div className="flex items-center gap-4 mr-3">
-            <div className="flex flex-col items-end gap-0">
-              <span className="topbar-metric-label">MTM</span>
-              <span className={cn('topbar-metric-value tabular-nums', getChangeColor(totalMtm))}>
-                {formatPnl(totalMtm)}
-              </span>
-            </div>
-            <div className="flex flex-col items-end gap-0">
-              <span className="topbar-metric-label">Total P&amp;L</span>
-              <span className={cn('risk-value tabular-nums', getChangeColor(totalPnl))}>
-                {formatPnl(totalPnl)}
-              </span>
-            </div>
+      <div className="h-full flex flex-col bg-gradient-to-b from-[#0d0f15] to-[#0b0d12]">
+        {/* Tabs — Professional Console Strip */}
+        <div className="flex items-center border-b border-fw-border px-1 bg-[#0a0c12] flex-shrink-0">
+          {tabs.map((tab) => (
             <button
-              onClick={handleCloseAll}
-              className="px-2.5 py-1 tv-label-sm font-bold text-red-400 bg-red-900/20 border border-red-800/30 rounded hover:bg-red-900/40 transition-colors uppercase tracking-wider"
-              title="Close all open positions"
+              key={tab.id}
+              onClick={() => setBottomTab(tab.id)}
+              className={cn(
+                'px-3 py-2 border-b-2 transition-all relative',
+                bottomTab === tab.id
+                  ? 'fw-tab-active border-fw-accent bg-fw-accent/[0.04]'
+                  : 'fw-tab-inactive border-transparent hover:opacity-80 hover:bg-fw-hover/20'
+              )}
             >
-              CLOSE ALL
+              {tab.label}
+              {tab.count > 0 && (
+                <span className={cn(
+                  'ml-1.5 px-1.5 min-w-[16px] text-center text-[8px] rounded-full font-mono inline-block',
+                  bottomTab === tab.id ? 'bg-fw-accent/20 text-fw-accent' : 'bg-fw-border text-fw-text-muted'
+                )}>
+                  {tab.count}
+                </span>
+              )}
             </button>
-          </div>
-        )}
+          ))}
 
-        {/* Order Filters */}
-        {bottomTab === 'orders' && (
-          <div className="flex items-center gap-1 mr-3">
-            {(['all', 'open', 'filled', 'cancelled', 'rejected'] as OrderFilter[]).map((f) => (
+          <div className="flex-1" />
+
+          {/* Total P&L summary */}
+          {bottomTab === 'positions' && positions.length > 0 && (
+            <div className="flex items-center gap-4 mr-3">
+              <div className="flex flex-col items-end gap-0">
+                <span className="topbar-metric-label">MTM</span>
+                <span className={cn('topbar-metric-value tabular-nums', getChangeColor(totalMtm))}>
+                  {formatPnl(totalMtm)}
+                </span>
+              </div>
+              <div className="flex flex-col items-end gap-0">
+                <span className="topbar-metric-label">Total P&amp;L</span>
+                <span className={cn('risk-value tabular-nums', getChangeColor(totalPnl))}>
+                  {formatPnl(totalPnl)}
+                </span>
+              </div>
               <button
-                key={f}
-                onClick={() => setOrderFilter(f)}
-                className={cn(
-                  'px-2 py-1 text-[11px] rounded-md capitalize font-semibold transition-colors tracking-wide',
-                  orderFilter === f ? 'bg-fw-accent text-white' : 'text-fw-text-secondary hover:text-fw-text hover:bg-fw-hover'
-                )}
+                onClick={handleCloseAll}
+                className="px-2.5 py-1 tv-label-sm font-bold text-red-400 bg-red-900/20 border border-red-800/30 rounded hover:bg-red-900/40 transition-colors uppercase tracking-wider"
+                title="Close all open positions"
               >
-                {f}
+                CLOSE ALL
               </button>
-            ))}
-          </div>
-        )}
+            </div>
+          )}
 
-        {/* Trade Filters */}
-        {bottomTab === 'trades' && (
-          <div className="flex items-center gap-1 mr-3">
-            {(['today', 'week', 'month'] as TradeFilter[]).map((f) => (
-              <button
-                key={f}
-                onClick={() => setTradeFilter(f)}
-                className={cn(
-                  'px-2 py-1 text-[11px] rounded-md capitalize font-semibold transition-colors tracking-wide',
-                  tradeFilter === f ? 'bg-fw-accent text-white' : 'text-fw-text-secondary hover:text-fw-text hover:bg-fw-hover'
-                )}
-              >
-                {f}
-              </button>
-            ))}
-          </div>
-        )}
+          {/* Order Filters */}
+          {bottomTab === 'orders' && (
+            <div className="flex items-center gap-1 mr-3">
+              {(['all', 'open', 'filled', 'cancelled', 'rejected'] as OrderFilter[]).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setOrderFilter(f)}
+                  className={cn(
+                    'px-2 py-1 text-[11px] rounded-md capitalize font-semibold transition-colors tracking-wide',
+                    orderFilter === f ? 'bg-fw-accent text-white' : 'text-fw-text-secondary hover:text-fw-text hover:bg-fw-hover'
+                  )}
+                >
+                  {f}
+                </button>
+              ))}
+            </div>
+          )}
 
-        <button
-          onClick={() => refreshData()}
-          className={cn('p-1.5 rounded-md hover:bg-fw-hover text-fw-text-secondary transition-colors', isRefreshing && 'animate-spin')}
-        >
-          <RefreshCw size={13} />
-        </button>
+          {/* Trade Filters */}
+          {bottomTab === 'trades' && (
+            <div className="flex items-center gap-1 mr-3">
+              {(['today', 'week', 'month'] as TradeFilter[]).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setTradeFilter(f)}
+                  className={cn(
+                    'px-2 py-1 text-[11px] rounded-md capitalize font-semibold transition-colors tracking-wide',
+                    tradeFilter === f ? 'bg-fw-accent text-white' : 'text-fw-text-secondary hover:text-fw-text hover:bg-fw-hover'
+                  )}
+                >
+                  {f}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <button
+            onClick={() => refreshData()}
+            className={cn('p-1.5 rounded-md hover:bg-fw-hover text-fw-text-secondary transition-colors', isRefreshing && 'animate-spin')}
+          >
+            <RefreshCw size={13} />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-auto">
+          {bottomTab === 'positions' && (
+            <PositionsTable
+              positions={positions}
+              inFlightKeys={inFlightRef}
+              onExit={handleExitPosition}
+              onPartialClose={handlePartialClose}
+              onReverse={handleReversePosition}
+            />
+          )}
+          {bottomTab === 'orders' && <OrdersTable orders={filteredOrders} onCancel={handleCancelOrder} />}
+          {bottomTab === 'trades' && <TradesTable trades={trades} />}
+          {bottomTab === 'journal' && <JournalPanel />}
+          {bottomTab === 'alerts' && <AlertsPanel />}
+          {bottomTab === 'analytics' && <AnalyticsPanel />}
+          {bottomTab === 'risk' && <RiskPanel />}
+          {bottomTab === 'ai' && <AIPanel />}
+          {bottomTab === 'accounts' && <AccountManager />}
+          {bottomTab === 'activity' && <ActivityPanel />}
+          {bottomTab === 'scanner' && <ScannerPanel />}
+        </div>
       </div>
-
-      {/* Content */}
-      <div className="flex-1 overflow-auto">
-        {bottomTab === 'positions' && (
-          <PositionsTable
-            positions={positions}
-            onExit={handleExitPosition}
-            onPartialClose={handlePartialClose}
-            onReverse={handleReversePosition}
-          />
-        )}
-        {bottomTab === 'orders' && <OrdersTable orders={filteredOrders} onCancel={handleCancelOrder} />}
-        {bottomTab === 'trades' && <TradesTable trades={trades} />}
-        {bottomTab === 'journal' && <JournalPanel />}
-        {bottomTab === 'alerts' && <AlertsPanel />}
-        {bottomTab === 'analytics' && <AnalyticsPanel />}
-        {bottomTab === 'risk' && <RiskPanel />}
-        {bottomTab === 'ai' && <AIPanel />}
-        {bottomTab === 'accounts' && <AccountManager />}
-        {bottomTab === 'activity' && <ActivityPanel />}
-        {bottomTab === 'scanner' && <ScannerPanel />}
-      </div>
-    </div>
+    </>
   );
 }
 
-// ─── Positions Table (TASK 2 + TASK 3) ────────────────────────────────────────
+// ─── Positions Table ──────────────────────────────────────────────────────────
 
-function PositionsTable({ positions, onExit, onPartialClose, onReverse }: {
+function PositionsTable({
+  positions,
+  inFlightKeys,
+  onExit,
+  onPartialClose,
+  onReverse,
+}: {
   positions: Position[];
+  inFlightKeys: React.MutableRefObject<Set<string>>;
   onExit: (id: string) => void;
   onPartialClose: (id: string, pct: number) => void;
   onReverse: (id: string) => void;
@@ -249,19 +388,30 @@ function PositionsTable({ positions, onExit, onPartialClose, onReverse }: {
   const setOrderForm = useTradingStore((s) => s.setOrderForm);
 
   const handleBreakEven = async (id: string) => {
+    if (inFlightKeys.current.has(id + ':be')) return;
+    inFlightKeys.current.add(id + ':be');
     try { await breakEvenPosition(id); } catch {}
+    finally { inFlightKeys.current.delete(id + ':be'); }
   };
 
   const handleSL = async (id: string, price: string) => {
     const val = parseFloat(price);
     if (!val || val <= 0) return;
+    const key = id + ':sl';
+    if (inFlightKeys.current.has(key)) return;
+    inFlightKeys.current.add(key);
     try { await attachStopLoss(id, val); setSlInput(null); } catch {}
+    finally { inFlightKeys.current.delete(key); }
   };
 
   const handleTP = async (id: string, price: string) => {
     const val = parseFloat(price);
     if (!val || val <= 0) return;
+    const key = id + ':tp';
+    if (inFlightKeys.current.has(key)) return;
+    inFlightKeys.current.add(key);
     try { await attachTakeProfit(id, val); setTpInput(null); } catch {}
+    finally { inFlightKeys.current.delete(key); }
   };
 
   if (positions.length === 0) {
@@ -290,10 +440,13 @@ function PositionsTable({ positions, onExit, onPartialClose, onReverse }: {
           const unrealized = (pos.ltp - pos.avgPrice) * pos.qty;
           const marginUsed = pos.avgPrice * Math.abs(pos.qty) * 0.2;
           const isExpanded = expandedId === pos.id;
+          // Derive per-row in-flight state for button disabled feedback
+          const isExitInFlight = inFlightKeys.current.has(pos.id);
+          const isReverseInFlight = inFlightKeys.current.has(pos.id);
 
           return (
             <tr key={pos.id} className="group">
-              {/* Symbol — L3 name + L5 product type badge */}
+              {/* Symbol */}
               <td>
                 <div className="flex items-center gap-2">
                   <div className={cn('w-1.5 h-5 rounded-full flex-shrink-0', pos.qty > 0 ? 'bg-green' : 'bg-red')} />
@@ -309,25 +462,17 @@ function PositionsTable({ positions, onExit, onPartialClose, onReverse }: {
                   {side}
                 </span>
               </td>
-              {/* Qty — L2, colored by direction */}
               <td className={cn('font-mono font-semibold tabular-nums text-[13px]', pos.qty > 0 ? 'text-green' : 'text-red')}>
                 {Math.abs(pos.qty)}
               </td>
-              {/* Avg Price — L2 secondary */}
               <td className="font-mono tabular-nums text-[13px] text-fw-text-secondary">{formatPrice(pos.avgPrice)}</td>
-              {/* LTP — L2, slightly prominent */}
               <td className="font-mono font-semibold tabular-nums text-[13px] text-fw-text">{formatPrice(pos.ltp)}</td>
-              {/* MTM — L1 P&L: most important value, largest */}
-              <td className={cn('font-mono font-bold tabular-nums text-[14px] letter-spacing-[-0.1px]', getChangeColor(pos.mtm))}>{formatPnl(pos.mtm)}</td>
-              {/* Realized */}
+              <td className={cn('font-mono font-bold tabular-nums text-[14px]', getChangeColor(pos.mtm))}>{formatPnl(pos.mtm)}</td>
               <td className={cn('font-mono tabular-nums text-[12px]', getChangeColor(pos.pnl - unrealized))}>{formatPnl(pos.pnl - unrealized)}</td>
-              {/* Unrealized */}
               <td className={cn('font-mono tabular-nums text-[12px]', getChangeColor(unrealized))}>{formatPnl(unrealized)}</td>
-              {/* Margin — L4 muted */}
               <td className="font-mono tabular-nums text-[12px] text-fw-text-muted">₹{formatPrice(marginUsed)}</td>
               <td>
                 <div className="flex items-center gap-0.5 flex-wrap">
-                  {/* ── TASK 3: Position Actions ──────────────────── */}
 
                   {/* Partial Close toggle */}
                   <button
@@ -341,32 +486,69 @@ function PositionsTable({ positions, onExit, onPartialClose, onReverse }: {
                     %
                   </button>
 
-                  {/* Exit (100%) */}
-                  <button onClick={() => onExit(pos.id)} className="p-1 rounded hover:bg-red-900/30 text-red-400 transition-colors" title="Exit 100%">
+                  {/* Exit (100%) — confirmation required, disabled while in-flight */}
+                  <button
+                    onClick={() => onExit(pos.id)}
+                    disabled={isExitInFlight}
+                    className={cn(
+                      'p-1 rounded hover:bg-red-900/30 text-red-400 transition-colors',
+                      isExitInFlight && 'opacity-40 cursor-not-allowed'
+                    )}
+                    title="Exit 100%"
+                  >
                     <X size={12} />
                   </button>
 
-                  {/* Reverse */}
-                  <button onClick={() => onReverse(pos.id)} className="p-1 rounded hover:bg-fw-hover text-fw-text-secondary hover:text-fw-text transition-colors" title="Reverse">
+                  {/* Reverse — confirmation required, disabled while in-flight */}
+                  <button
+                    onClick={() => onReverse(pos.id)}
+                    disabled={isReverseInFlight}
+                    className={cn(
+                      'p-1 rounded hover:bg-fw-hover text-fw-text-secondary hover:text-fw-text transition-colors',
+                      isReverseInFlight && 'opacity-40 cursor-not-allowed'
+                    )}
+                    title="Reverse"
+                  >
                     <RotateCcw size={12} />
                   </button>
 
-                  {/* BE / TP / SL action buttons */}
-                  <button onClick={() => handleBreakEven(pos.id)} className="px-1.5 py-0.5 rounded text-[11px] font-bold bg-fw-bg border border-fw-border text-fw-text-secondary hover:text-fw-accent hover:border-fw-accent transition-colors" title="Break Even — Set SL at entry price">BE</button>
+                  {/* BE */}
+                  <button
+                    onClick={() => handleBreakEven(pos.id)}
+                    disabled={inFlightKeys.current.has(pos.id + ':be')}
+                    className={cn(
+                      'px-1.5 py-0.5 rounded text-[11px] font-bold bg-fw-bg border border-fw-border text-fw-text-secondary hover:text-fw-accent hover:border-fw-accent transition-colors',
+                      inFlightKeys.current.has(pos.id + ':be') && 'opacity-40 cursor-not-allowed'
+                    )}
+                    title="Break Even — Set SL at entry price"
+                  >
+                    BE
+                  </button>
 
                   {/* Take Profit */}
-                  <button onClick={() => setTpInput(tpInput?.id === pos.id ? null : { id: pos.id, price: '' })} className={cn('px-1.5 py-0.5 rounded text-[11px] font-bold bg-fw-bg border border-fw-border text-fw-text-secondary hover:text-green hover:border-green transition-colors', tpInput?.id === pos.id && 'border-green text-green')} title="Take Profit">TP</button>
+                  <button
+                    onClick={() => setTpInput(tpInput?.id === pos.id ? null : { id: pos.id, price: '' })}
+                    className={cn('px-1.5 py-0.5 rounded text-[11px] font-bold bg-fw-bg border border-fw-border text-fw-text-secondary hover:text-green hover:border-green transition-colors', tpInput?.id === pos.id && 'border-green text-green')}
+                    title="Take Profit"
+                  >
+                    TP
+                  </button>
 
                   {/* Stop Loss */}
-                  <button onClick={() => setSlInput(slInput?.id === pos.id ? null : { id: pos.id, price: '' })} className={cn('px-1.5 py-0.5 rounded text-[11px] font-bold bg-fw-bg border border-fw-border text-fw-text-secondary hover:text-red hover:border-red transition-colors', slInput?.id === pos.id && 'border-red text-red')} title="Stop Loss">SL</button>
+                  <button
+                    onClick={() => setSlInput(slInput?.id === pos.id ? null : { id: pos.id, price: '' })}
+                    className={cn('px-1.5 py-0.5 rounded text-[11px] font-bold bg-fw-bg border border-fw-border text-fw-text-secondary hover:text-red hover:border-red transition-colors', slInput?.id === pos.id && 'border-red text-red')}
+                    title="Stop Loss"
+                  >
+                    SL
+                  </button>
 
                   {/* Trailing Stop Loss — not yet implemented */}
                   <PosActionBtn label="TSL" title="Trailing Stop Loss — coming soon" className="opacity-40 cursor-not-allowed" />
 
-                  {/* Modify — opens SL/TP inputs pre-filled with current avg price */}
+                  {/* Modify */}
                   <button
                     onClick={() => {
-                      // Toggle SL input pre-filled with current avg price as a starting point
                       setSlInput(slInput?.id === pos.id ? null : { id: pos.id, price: String(pos.avgPrice) });
                       setTpInput(null);
                     }}
@@ -376,7 +558,7 @@ function PositionsTable({ positions, onExit, onPartialClose, onReverse }: {
                     <Edit size={12} />
                   </button>
 
-                  {/* Add — pre-fills order panel with same symbol + side to add to position */}
+                  {/* Add — pre-fills order panel */}
                   <button
                     onClick={() => {
                       setOrderForm({
@@ -387,7 +569,7 @@ function PositionsTable({ positions, onExit, onPartialClose, onReverse }: {
                         productType: pos.productType as any,
                         qty: Math.abs(pos.qty),
                       });
-                      setBottomTab('positions'); // keep panel focused
+                      setBottomTab('positions');
                     }}
                     className="p-1 rounded hover:bg-fw-hover text-fw-text-secondary hover:text-green transition-colors"
                     title="Add to position (pre-fills order panel)"
@@ -401,8 +583,10 @@ function PositionsTable({ positions, onExit, onPartialClose, onReverse }: {
                         <button
                           key={pct}
                           onClick={() => { onPartialClose(pos.id, pct); setExpandedId(null); }}
+                          disabled={inFlightKeys.current.has(pos.id)}
                           className={cn(
                             'px-1.5 py-0.5 text-[11px] font-bold rounded transition-colors',
+                            inFlightKeys.current.has(pos.id) && 'opacity-40 cursor-not-allowed',
                             pct === 100
                               ? 'bg-red-900/30 text-red-400 border border-red-800/40 hover:bg-red-900/50'
                               : 'bg-fw-bg border border-fw-border text-fw-text-secondary hover:text-fw-text hover:border-fw-accent'
@@ -418,16 +602,42 @@ function PositionsTable({ positions, onExit, onPartialClose, onReverse }: {
                   {/* SL Input */}
                   {slInput?.id === pos.id && (
                     <div className="flex items-center gap-1 ml-1 pl-1.5 border-l border-red-800/40">
-                      <input type="number" placeholder="SL Price" value={slInput.price} onChange={e => setSlInput({ ...slInput, price: e.target.value })} className="w-20 h-5 bg-fw-bg border border-red-800/40 rounded text-[12px] font-mono text-fw-text px-1.5 outline-none focus:border-red" autoFocus />
-                      <button onClick={() => handleSL(pos.id, slInput.price)} className="px-1.5 py-0.5 text-[11px] font-bold bg-red-900/30 text-red-400 border border-red-800/40 rounded">Set</button>
+                      <input
+                        type="number"
+                        placeholder="SL Price"
+                        value={slInput.price}
+                        onChange={e => setSlInput({ ...slInput, price: e.target.value })}
+                        className="w-20 h-5 bg-fw-bg border border-red-800/40 rounded text-[12px] font-mono text-fw-text px-1.5 outline-none focus:border-red"
+                        autoFocus
+                      />
+                      <button
+                        onClick={() => handleSL(pos.id, slInput.price)}
+                        disabled={inFlightKeys.current.has(pos.id + ':sl')}
+                        className="px-1.5 py-0.5 text-[11px] font-bold bg-red-900/30 text-red-400 border border-red-800/40 rounded disabled:opacity-40"
+                      >
+                        Set
+                      </button>
                     </div>
                   )}
 
                   {/* TP Input */}
                   {tpInput?.id === pos.id && (
                     <div className="flex items-center gap-1 ml-1 pl-1.5 border-l border-green-800/40">
-                      <input type="number" placeholder="TP Price" value={tpInput.price} onChange={e => setTpInput({ ...tpInput, price: e.target.value })} className="w-20 h-5 bg-fw-bg border border-green-800/40 rounded text-[12px] font-mono text-fw-text px-1.5 outline-none focus:border-green" autoFocus />
-                      <button onClick={() => handleTP(pos.id, tpInput.price)} className="px-1.5 py-0.5 text-[11px] font-bold bg-green-900/30 text-green-400 border border-green-800/40 rounded">Set</button>
+                      <input
+                        type="number"
+                        placeholder="TP Price"
+                        value={tpInput.price}
+                        onChange={e => setTpInput({ ...tpInput, price: e.target.value })}
+                        className="w-20 h-5 bg-fw-bg border border-green-800/40 rounded text-[12px] font-mono text-fw-text px-1.5 outline-none focus:border-green"
+                        autoFocus
+                      />
+                      <button
+                        onClick={() => handleTP(pos.id, tpInput.price)}
+                        disabled={inFlightKeys.current.has(pos.id + ':tp')}
+                        className="px-1.5 py-0.5 text-[11px] font-bold bg-green-900/30 text-green-400 border border-green-800/40 rounded disabled:opacity-40"
+                      >
+                        Set
+                      </button>
                     </div>
                   )}
                 </div>
@@ -480,7 +690,6 @@ function OrdersTable({ orders, onCancel }: { orders: Order[]; onCancel: (id: str
       </thead>
       <tbody>
         {orders.map((order) => {
-          // Compute indicative P&L for filled orders: (avgFill - limit) * filledQty
           const hasFill = order.status === 'FILLED' && order.avgPrice > 0 && order.filledQty > 0;
           const orderPnl = hasFill && order.price > 0
             ? (order.side === 'SELL' ? order.avgPrice - order.price : order.price - order.avgPrice) * order.filledQty
@@ -488,28 +697,20 @@ function OrdersTable({ orders, onCancel }: { orders: Order[]; onCancel: (id: str
 
           return (
             <tr key={order.id}>
-              {/* Timestamp — L5 */}
               <td className="text-fw-text-muted font-mono text-[11px] tabular-nums">{new Date(order.timestamp).toLocaleTimeString()}</td>
-              {/* Symbol — L3 */}
               <td className="font-semibold text-fw-text text-[13px] tracking-wide">{order.symbol}</td>
-              {/* Side badge */}
               <td>
                 <span className={cn('text-[11px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider', order.side === 'BUY' ? 'text-green bg-green-dim' : 'text-red bg-red-dim')}>
                   {order.side}
                 </span>
               </td>
-              {/* Type / Product — L5 */}
               <td className="tv-support text-fw-text-secondary">{order.orderType}</td>
               <td className="tv-support text-fw-text-secondary">{order.productType}</td>
-              {/* Qty — L2 */}
               <td className="font-mono tabular-nums text-[13px] text-fw-text-secondary">{order.filledQty}/{order.qty}</td>
-              {/* Price — L2 */}
               <td className="font-mono tabular-nums text-[13px] font-semibold text-fw-text">{order.avgPrice > 0 ? `₹${formatPrice(order.avgPrice)}` : order.price ? `₹${formatPrice(order.price)}` : 'MKT'}</td>
-              {/* P&L — L1 treatment */}
               <td className={cn('font-mono font-bold tabular-nums text-[14px]', orderPnl === null ? 'text-fw-text-muted' : orderPnl >= 0 ? 'text-green' : 'text-red')}>
                 {orderPnl !== null ? formatPnl(orderPnl) : '—'}
               </td>
-              {/* Status pill */}
               <td>
                 <span className={cn(
                   'px-2 py-0.5 text-[11px] rounded font-bold uppercase tracking-wide',
@@ -590,7 +791,7 @@ function TradesTable({ trades }: { trades: Trade[] }) {
   );
 }
 
-// ─── Empty State — Minimal, no illustrations ─────────────────────────────────
+// ─── Empty State ──────────────────────────────────────────────────────────────
 
 function EmptyState({ message, icon }: { message: string; icon?: React.ReactNode }) {
   return (

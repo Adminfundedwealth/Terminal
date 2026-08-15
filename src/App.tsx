@@ -18,7 +18,8 @@ import { RiskMonitor } from '@/components/RiskMonitor';
 import { TerminalReadiness } from '@/components/TerminalReadiness';
 import { ToastProvider } from '@/components/ToastProvider';
 import { MobileLayout } from '@/components/MobileLayout';
-import { HomeWorkspace } from '@/components/HomeWorkspace';
+import { HomeDashboard } from '@/components/HomeDashboard';
+import { CalendarAnalytics } from '@/components/CalendarAnalytics';
 import { useHotkeys } from '@/hooks/useHotkeys';
 import { useAuth } from '@/hooks/useAuth';
 import { useWatchlistSync } from '@/hooks/useWatchlistSync';
@@ -27,7 +28,6 @@ import { useThemeStore } from '@/store/themeStore';
 import { initLayoutObserver } from '@/store/layoutStore';
 import { wsService } from '@/services/websocket';
 import { startSync, stopSync, startPersistence, stopPersistence } from '@/features/chart-trading';
-
 // Vertical drag divider for resizing panels horizontally
 function VDivider({ onDrag }: { onDrag: (dx: number) => void }) {
   const isDragging = useRef(false);
@@ -233,6 +233,13 @@ export default function App() {
   }
 
   const showOC = showOptionChain || activeWorkspace === 'options';
+  const isHome     = activeWorkspace === 'home';
+  const isChartWs  = ['index', 'stocks', 'futures', 'options', 'mcx', 'cds'].includes(activeWorkspace);
+  const isOrd      = activeWorkspace === 'ord';
+  const isWl       = activeWorkspace === 'wl';
+  const isDom      = activeWorkspace === 'dom';
+  const isBtm      = activeWorkspace === 'btm';
+  const isCalendar = activeWorkspace === 'calendar';
 
   // Mobile layout
   if (isMobile) {
@@ -246,6 +253,62 @@ export default function App() {
     );
   }
 
+  // ── Right panel JSX — reused across chart workspaces + DOM ─────────────────
+  const rightPanel = panels.orderPanel ? (
+    <>
+      <VDivider onDrag={handleOrderPanelResize} />
+      <div
+        style={{ width: orderPanelWidth, minWidth: 240 }}
+        className="border-l border-fw-border flex flex-col overflow-hidden flex-shrink-0"
+      >
+        <ErrorBoundary fallbackTitle="Risk Widget Error">
+          <TerminalReadiness />
+          <RiskWidget />
+        </ErrorBoundary>
+        <div className="flex-1 overflow-y-auto min-h-0">
+          <ErrorBoundary fallbackTitle="Order Panel Error">
+            <OrderPanel />
+          </ErrorBoundary>
+        </div>
+        {panels.marketDepth && (
+          <>
+            <HDivider onDrag={handleDepthResize} />
+            <div style={{ height: depthPanelHeight, minHeight: 200, maxHeight: 600 }} className="flex-shrink-0 overflow-hidden">
+              <ErrorBoundary fallbackTitle="Market Depth Error">
+                <MarketDepthPanel />
+              </ErrorBoundary>
+            </div>
+          </>
+        )}
+      </div>
+    </>
+  ) : null;
+
+  // ── Watchlist sidebar JSX ──────────────────────────────────────────────────
+  const watchlistPanel = panels.watchlist ? (
+    <>
+      <div
+        style={{ width: watchlistWidth, minWidth: 180 }}
+        className="border-r border-fw-border flex flex-col overflow-hidden flex-shrink-0"
+      >
+        <ErrorBoundary fallbackTitle="Watchlist Error">
+          <Watchlist />
+        </ErrorBoundary>
+      </div>
+      <VDivider onDrag={handleWatchlistResize} />
+    </>
+  ) : null;
+
+  // ── Bottom dock JSX ────────────────────────────────────────────────────────
+  const bottomDock = panels.bottomPanel ? (
+    <>
+      <HDivider onDrag={handleBottomResize} />
+      <div style={{ height: bottomPanelHeight, minHeight: 140 }} className="border-t border-fw-border overflow-hidden flex-shrink-0">
+        <ErrorBoundary fallbackTitle="Panel Error"><BottomPanel /></ErrorBoundary>
+      </div>
+    </>
+  ) : null;
+
   return (
     <ToastProvider>
     <div className="h-screen w-screen flex bg-fw-bg overflow-hidden text-[14px]">
@@ -254,119 +317,141 @@ export default function App() {
 
       {/* Main Terminal Area */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-        {/* Holiday Banner */}
         <HolidayBanner />
-
-        {/* Top Bar */}
         <TopBar />
 
-        {/* Main Content */}
-        <div className="flex flex-1 overflow-hidden">
-          {/* Left - Watchlist */}
-          {panels.watchlist && (
+        {/* ── MAIN WORKSPACE AREA ── */}
+        <div className="flex flex-1 overflow-hidden min-h-0">
+
+          {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+              HOME — Dashboard, no chart
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+          {isHome && (
             <>
-              <div
-                style={{ width: watchlistWidth, minWidth: 180 }}
-                className="border-r border-fw-border flex flex-col overflow-hidden flex-shrink-0"
-              >
-                <ErrorBoundary fallbackTitle="Watchlist Error">
-                  <Watchlist />
-                </ErrorBoundary>
+              {watchlistPanel}
+              <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+                <div className="flex-1 overflow-hidden min-h-0">
+                  <ErrorBoundary fallbackTitle="Home Dashboard Error">
+                    <HomeDashboard />
+                  </ErrorBoundary>
+                </div>
+                {bottomDock}
               </div>
-              <VDivider onDrag={handleWatchlistResize} />
+              {rightPanel}
             </>
           )}
 
-          {/* Center - Chart + OC + Bottom */}
-          <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-            {activeWorkspace === 'home' ? (
-              <div className="flex-1 overflow-hidden">
-                <HomeWorkspace />
-              </div>
-            ) : (
-              <>
-                {/* Chart + Option Chain side by side for options workspace */}
+          {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+              CHART WORKSPACES: index/stocks/futures/options/mcx/cds
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+          {isChartWs && (
+            <>
+              {watchlistPanel}
+              <div className="flex-1 flex flex-col overflow-hidden min-w-0">
                 <div className="flex flex-1 overflow-hidden">
                   <div className={showOC ? 'w-[55%] min-w-[300px] flex-shrink-0' : 'flex-1'}>
-                    <ErrorBoundary fallbackTitle="Chart Error">
-                      <ChartPanel />
-                    </ErrorBoundary>
+                    <ErrorBoundary fallbackTitle="Chart Error"><ChartPanel /></ErrorBoundary>
                   </div>
                   {showOC && (
                     <>
                       <VDivider onDrag={() => {}} />
                       <div className="flex-1 overflow-hidden min-w-0">
-                        <ErrorBoundary fallbackTitle="Option Chain Error">
-                          <OptionChainModal />
-                        </ErrorBoundary>
+                        <ErrorBoundary fallbackTitle="Option Chain Error"><OptionChainModal /></ErrorBoundary>
                       </div>
                     </>
                   )}
                 </div>
-              </>
-            )}
+                {bottomDock}
+              </div>
+              {rightPanel}
+            </>
+          )}
 
-            {/* Bottom Panel */}
-            {panels.bottomPanel && (
-              <>
-                <HDivider onDrag={handleBottomResize} />
-                <div
-                  style={{ height: bottomPanelHeight, minHeight: 140 }}
-                  className="border-t border-fw-border overflow-hidden flex-shrink-0"
-                >
-                  <ErrorBoundary fallbackTitle="Panel Error">
-                    <BottomPanel />
-                  </ErrorBoundary>
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Right - Order + DOM + Risk */}
-          {panels.orderPanel && (
+          {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+              ORD — Orders workspace
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+          {isOrd && (
             <>
+              <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+                <ErrorBoundary fallbackTitle="Orders Error">
+                  <OrdWorkspace />
+                </ErrorBoundary>
+              </div>
               <VDivider onDrag={handleOrderPanelResize} />
-              <div
-                style={{ width: orderPanelWidth, minWidth: 240 }}
-                className="border-l border-fw-border flex flex-col overflow-hidden flex-shrink-0"
-              >
+              <div style={{ width: orderPanelWidth, minWidth: 240 }} className="border-l border-fw-border flex flex-col overflow-hidden flex-shrink-0">
                 <ErrorBoundary fallbackTitle="Risk Widget Error">
                   <TerminalReadiness />
                   <RiskWidget />
                 </ErrorBoundary>
-                <div className="flex-1 overflow-y-auto min-h-0">
-                  <ErrorBoundary fallbackTitle="Order Panel Error">
-                    <OrderPanel />
-                  </ErrorBoundary>
-                </div>
-                {panels.marketDepth && (
-                  <>
-                    <HDivider onDrag={handleDepthResize} />
-                    <div style={{ height: depthPanelHeight, minHeight: 200, maxHeight: 600 }} className="flex-shrink-0 overflow-hidden">
-                      <ErrorBoundary fallbackTitle="Market Depth Error">
-                        <MarketDepthPanel />
-                      </ErrorBoundary>
-                    </div>
-                  </>
-                )}
               </div>
             </>
           )}
+
+          {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+              WL — Watchlist workspace (full width)
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+          {isWl && (
+            <div className="flex-1 overflow-hidden">
+              <ErrorBoundary fallbackTitle="Watchlist Error"><Watchlist /></ErrorBoundary>
+            </div>
+          )}
+
+          {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+              DOM — Market Depth as primary workspace
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+          {isDom && (
+            <>
+              <div className="flex-1 overflow-hidden min-h-0">
+                <ErrorBoundary fallbackTitle="Market Depth Error"><MarketDepthPanel /></ErrorBoundary>
+              </div>
+              {rightPanel}
+            </>
+          )}
+
+          {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+              BTM — Bottom dock as primary workspace
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+          {isBtm && (
+            <div className="flex-1 overflow-hidden min-h-0">
+              <ErrorBoundary fallbackTitle="Bottom Panel Error"><BottomPanel /></ErrorBoundary>
+            </div>
+          )}
+
+          {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+              CALENDAR — Calendar analytics
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+          {isCalendar && (
+            <div className="flex-1 overflow-hidden min-h-0">
+              <ErrorBoundary fallbackTitle="Calendar Error"><CalendarAnalytics /></ErrorBoundary>
+            </div>
+          )}
+
         </div>
 
-        {/* Status Bar */}
         <StatusBar />
       </div>
 
-      {/* Search Modal */}
       <SearchModal />
-
-      {/* Risk Overlay (locked/breached) */}
       <RiskOverlay />
-
-      {/* Risk Monitor (invisible — fires toasts) */}
       <RiskMonitor />
     </div>
     </ToastProvider>
+  );
+}
+
+// ── ORD workspace — full-screen orders view ───────────────────────────────────
+function OrdWorkspace() {
+  const { setBottomTab } = useAppStore();
+  useEffect(() => { setBottomTab('orders'); }, [setBottomTab]);
+  return (
+    <div className="h-full w-full flex flex-col overflow-hidden">
+      <div className="px-4 py-2 border-b border-fw-border bg-[#0a0c12] flex items-center gap-2 flex-shrink-0">
+        <span className="text-[11px] font-bold uppercase tracking-widest text-fw-accent">Orders</span>
+        <span className="text-[11px] text-fw-text-muted">— All open, filled, cancelled, rejected orders</span>
+      </div>
+      <div className="flex-1 overflow-hidden min-h-0">
+        <BottomPanel />
+      </div>
+    </div>
   );
 }

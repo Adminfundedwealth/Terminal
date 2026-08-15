@@ -42,6 +42,10 @@ export class OrderExecutionService {
     this._paperOrderMonitor = null;
     // Track pending paper SL/LIMIT orders: orderId → { accountId, orderParams, triggerPrice, limitPrice }
     this._pendingPaperOrders = new Map();
+    // Concurrency guard for exitPosition: positionId → Promise
+    // Prevents two simultaneous exit calls for the same position from both
+    // reading the position as "open" and sending two broker exit orders.
+    this._exitInFlight = new Map();
     this._startPaperOrderMonitor();
   }
 
@@ -584,12 +588,44 @@ export class OrderExecutionService {
 
   /**
    * Exit a position — place market order in opposite direction.
+   *
+   * CONCURRENCY GUARD: Uses _exitInFlight map to prevent two simultaneous
+   * calls for the same positionId from both passing the "already closed"
+   * check and sending duplicate broker exit orders.
+   *
+   * If a call for positionId is already in progress, the second caller
+   * awaits the same promise and receives the same result — no second
+   * broker order is created.
+   *
    * @param {string} accountId
    * @param {string} positionId
    * @param {number} [qty] - Partial close qty. If omitted, closes full position.
    * @returns {{ orderId: string, status: string }}
    */
   async exitPosition(accountId, positionId, qty = null) {
+    // ── Concurrency guard ────────────────────────────────────────────────────
+    // If an exit for this exact positionId is already in flight, return the
+    // same promise — do NOT create a second broker order.
+    if (this._exitInFlight.has(positionId)) {
+      console.warn(`[OrderExecution] exitPosition: duplicate call for ${positionId} — returning in-flight promise`);
+      return this._exitInFlight.get(positionId);
+    }
+
+    const exitPromise = this._doExitPosition(accountId, positionId, qty);
+    this._exitInFlight.set(positionId, exitPromise);
+    try {
+      return await exitPromise;
+    } finally {
+      // Always clean up the guard, whether success or failure
+      this._exitInFlight.delete(positionId);
+    }
+  }
+
+  /**
+   * Internal exit implementation — only called once per positionId at a time.
+   * @private
+   */
+  async _doExitPosition(accountId, positionId, qty = null) {
     // Find the position
     const position = await this._findPosition(positionId);
     if (!position) {

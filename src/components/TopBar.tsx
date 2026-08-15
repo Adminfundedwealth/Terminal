@@ -1,227 +1,68 @@
-﻿import { Search, Moon, Palette, Shield, Zap, TrendingUp, TrendingDown, Activity, Target, AlertTriangle, Bell } from 'lucide-react';
-import { useAppStore } from '@/store/appStore';
-import { useTradingStore } from '@/store/tradingStore';
+﻿import { Search, Bell, Home, BarChart3, TrendingUp, Activity, LineChart, Diamond, DollarSign } from 'lucide-react';
+import { useAppStore, type Workspace } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
-import { cn, formatPrice, getChallengeRulePct, formatChallengePhase } from '@/utils/helpers';
+import { cn } from '@/utils/helpers';
 import { AccountSelector } from './AccountSelector';
-import { useState, useEffect } from 'react';
-import { getMarginInfo, getRiskState, type RiskState } from '@/services/api';
 import type { Theme } from '@/types';
 
-function formatCompact(val: number): string {
-  const abs = Math.abs(val);
-  if (abs >= 10000000) return `${(val / 10000000).toFixed(2)}Cr`;
-  if (abs >= 100000) return `${(val / 100000).toFixed(2)}L`;
-  if (abs >= 1000) return `${(val / 1000).toFixed(1)}K`;
-  return val.toFixed(0);
-}
-
-const PULSE_TOKENS = [
-  { token: '99926000', symbol: 'NIFTY' },
-  { token: '99926009', symbol: 'BANKNIFTY' },
-  { token: '99926037', symbol: 'FINNIFTY' },
-  { token: '99919000', symbol: 'SENSEX' },
-];
-
 export function TopBar() {
-  const { theme, setTheme, setSearchOpen, showOptionChain, setShowOptionChain, panels, togglePanel, setBottomTab, activeWorkspace, setActiveWorkspace } = useAppStore();
-  const account = useTradingStore((s) => s.account);
-  const positions = useTradingStore((s) => s.positions);
+  const { theme, setTheme, setSearchOpen, setBottomTab } = useAppStore();
   const marketStatus = useMarketStore((s) => s.marketStatus);
-  const quotes = useMarketStore((s) => s.quotes);
-  const [marginInfo, setMarginInfo] = useState<{ usedMargin: number; availableMargin: number } | null>(null);
-  const [riskState, setRiskState] = useState<RiskState | null>(null);
-
-  useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 10000);
-    return () => clearInterval(interval);
-  }, [account?.id]);
-
-  // Re-fetch immediately when the user switches accounts
-  useEffect(() => {
-    function onAccountSwitched() { fetchData(); }
-    window.addEventListener('fw:account-switched', onAccountSwitched);
-    return () => window.removeEventListener('fw:account-switched', onAccountSwitched);
-  }, []);
-
-  async function fetchData() {
-    try { const info = await getMarginInfo(); setMarginInfo(info); } catch {}
-    try { const rs = await getRiskState(); setRiskState(rs); } catch {}
-  }
-
-  const balance = riskState?.balance ?? account?.balance ?? 0;
-  const challengePlan = account?.challenge?.plan;
-  const dailyLossLimitPct = getChallengeRulePct(account?.challenge?.dailyLossLimitPct, challengePlan, 'dailyLossLimitPct');
-  const maxDDPct = getChallengeRulePct(account?.challenge?.maxDrawdownPct, challengePlan, 'maxDrawdownPct');
-  const profitTargetPct = getChallengeRulePct(account?.challenge?.profitTargetPct, challengePlan, 'profitTargetPct');
-  const totalMTM = positions.reduce((sum, p) => sum + (p.pnl || p.mtm || 0), 0);
-  const equity = riskState?.currentEquity ?? (balance + totalMTM);
-
-  // initialBalance must be > 0; never fall back to 0 or it produces divide-by-zero / bogus limits
-  const rawInitial = riskState?.initialBalance ?? account?.challenge?.initialBalance ?? (balance > 0 ? balance : null);
-  const initialBalance = rawInitial && rawInitial > 0 ? rawInitial : null;
-
-  const dailyLossLimit = riskState?.dailyLossLimit ?? (initialBalance ? initialBalance * (dailyLossLimitPct / 100) : 0);
-  const maxDDLimit     = riskState?.maxDrawdownLimit ?? (initialBalance ? initialBalance * (maxDDPct / 100) : 0);
-  const profitTarget   = riskState?.profitTargetAmount ?? (initialBalance ? initialBalance * (profitTargetPct / 100) : 0);
-  const dailyLoss      = riskState?.dailyLoss ?? (totalMTM < 0 ? Math.abs(totalMTM) : 0);
-  const dailyLossRemaining = riskState?.dailyLossRemaining ?? (dailyLossLimit > 0 ? Math.max(0, dailyLossLimit - dailyLoss) : 0);
-  const ddRemaining    = riskState?.maxDrawdownRemaining ?? (maxDDLimit > 0 ? Math.max(0, maxDDLimit - Math.max(0, (account?.peakBalance ?? balance) - equity)) : 0);
-  const targetPct      = riskState?.targetProgressPct ?? (profitTarget > 0 && initialBalance ? Math.min(100, (Math.max(0, equity - initialBalance) / profitTarget) * 100) : 0);
-  const pnlValue = riskState?.totalDailyPnl ?? account?.totalPnl ?? totalMTM;
-  const phase = formatChallengePhase(account?.challenge?.plan, account?.challenge?.type || riskState?.challengeType);
-
-  const riskLevel = dailyLoss > dailyLossLimit * 0.7 ? 'HIGH' : dailyLoss > dailyLossLimit * 0.4 ? 'CAUTION' : 'SAFE';
-  const riskColor = riskLevel === 'HIGH' ? 'text-red' : riskLevel === 'CAUTION' ? 'text-orange-400' : 'text-emerald-400';
-  const riskBg = riskLevel === 'HIGH' ? 'bg-red-900/15 border-red-800/30' : riskLevel === 'CAUTION' ? 'bg-orange-900/15 border-orange-800/30' : 'bg-emerald-900/15 border-emerald-800/30';
 
   return (
-    <header className="min-h-[64px] bg-gradient-to-b from-[#0e1018] to-[#0c0e14] border-b border-fw-border flex flex-col select-none overflow-hidden">
-      {/* Row 1: Main Command Bar */}
-      <div className="flex items-center px-3 h-[38px]">
+    <header className="bg-gradient-to-b from-[#0e1018] to-[#0c0e14] border-b border-fw-border flex flex-col select-none overflow-hidden">
+      <div className="flex items-center px-3 h-[40px] gap-2">
+
         {/* Brand */}
-        <div data-brand className="flex items-center gap-2 mr-3 flex-shrink-0">
-          <div className="w-8 h-8 rounded-lg overflow-hidden bg-white flex items-center justify-center flex-shrink-0" style={{ boxShadow: '0 0 10px rgba(139,92,246,0.4)' }}>
-            <img
-              src="/logo.png"
-              alt="FW"
-              className="w-7 h-7 object-contain"
-            />
+        <div data-brand className="flex items-center gap-2 mr-2 flex-shrink-0">
+          <div className="w-7 h-7 rounded-md overflow-hidden bg-white flex items-center justify-center flex-shrink-0" style={{ boxShadow: '0 0 8px rgba(139,92,246,0.4)' }}>
+            <img src="/logo.png" alt="FW" className="w-6 h-6 object-contain" />
           </div>
-          <div className="flex flex-col leading-none items-center">
-            <span className="text-[13px] font-extrabold tracking-wide bg-gradient-to-r from-[#00D4FF] via-[#4F46E5] to-[#7C3AED] bg-clip-text text-transparent">FUNDEDWEALTH</span>
-            <span className="text-[13px] font-bold tracking-[0.2em] text-fw-accent/80 drop-shadow-[0_0_6px_rgba(59,130,246,0.5)]">TERMINAL</span>
+          <div className="flex flex-col leading-none">
+            <span className="text-[11px] font-extrabold tracking-wide bg-gradient-to-r from-[#00D4FF] via-[#4F46E5] to-[#7C3AED] bg-clip-text text-transparent">FUNDEDWEALTH</span>
+            <span className="text-[9px] font-bold tracking-[0.25em] text-fw-accent/70">TERMINAL</span>
           </div>
         </div>
 
-        {/* Market + Feed Status */}
-        <div className="flex items-center gap-1.5 mr-3 flex-shrink-0">
-          <div className={cn('fw-badge', marketStatus === 'OPEN' ? 'fw-badge-green' : 'fw-badge-red')}>
-            <div className={cn('w-1.5 h-1.5 rounded-full', marketStatus === 'OPEN' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500')} />
-            {marketStatus === 'OPEN' ? 'LIVE' : 'CLOSED'}
-          </div>
+        {/* Market status dot */}
+        <div className={cn('fw-badge flex-shrink-0', marketStatus === 'OPEN' ? 'fw-badge-green' : 'fw-badge-red')}>
+          <div className={cn('w-1.5 h-1.5 rounded-full', marketStatus === 'OPEN' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500')} />
+          {marketStatus === 'OPEN' ? 'LIVE' : 'CLOSED'}
         </div>
 
-        {/* Challenge Phase Badge */}
-        <div className="flex items-center gap-1.5 mr-3 pr-3 border-r border-fw-border/30 flex-shrink-0">
-          <div className="fw-badge fw-badge-blue">
-            <Zap size={11} className="text-fw-accent" />
-            {phase}
-          </div>
-          <div className={cn('fw-badge', riskLevel === 'HIGH' ? 'fw-badge-red' : riskLevel === 'CAUTION' ? 'fw-badge-orange' : 'fw-badge-green')}>
-            <Shield size={9} className={riskColor} />
-            <span className={riskColor}>{riskLevel}</span>
-          </div>
-        </div>
+        <div className="w-px h-4 bg-fw-border/40 mx-1 flex-shrink-0" />
 
-        {/* Index Pulse Strip */}
-        <div className="flex items-center gap-4 mr-3 pr-3 border-r border-fw-border/30 flex-shrink-0 overflow-hidden">
-          {PULSE_TOKENS.map(({ token, symbol }) => {
-            const q = quotes[token];
-            const up = (q?.changePercent || 0) >= 0;
-            return (
-              <div key={token} className="flex items-center gap-1.5">
-                <span className="pulse-symbol">{symbol}</span>
-                {q ? (
-                  <>
-                    <span className={cn('pulse-price tv-smooth-value', up ? 'text-green' : 'text-red')}>
-                      {formatPrice(q.ltp)}
-                    </span>
-                    <span className={cn('tv-change-pill', up ? 'tv-change-pill-up' : 'tv-change-pill-down')}>
-                      {up ? '+' : ''}{(q.changePercent || 0).toFixed(2)}%
-                    </span>
-                  </>
-                ) : (
-                  <span className="text-[12px] text-fw-text-muted/50 font-mono">—</span>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Workspace Navigation */}
-        <div className="flex items-center gap-1 mr-3 flex-shrink-0 overflow-x-auto scrollbar-none">
-          {[
-            { id: 'home', label: 'HOME' },
-            { id: 'index', label: 'INDEX' },
-            { id: 'stocks', label: 'STOCKS' },
-            { id: 'options', label: 'OPTION' },
-            { id: 'futures', label: 'FUTURES' },
-            { id: 'mcx', label: 'MCX' },
-            { id: 'cds', label: 'CDS' },
-            { id: 'orders', label: 'ORD' },
-            { id: 'watchlist', label: 'WL' },
-            { id: 'dom', label: 'DOM' },
-            { id: 'bottom', label: 'BTM' },
-            { id: 'calendar', label: 'CALENDAR' },
-          ].map((item) => {
-            const isActive = item.id === 'home'
-              ? activeWorkspace === 'home'
-              : item.id === 'index' ? activeWorkspace === 'index'
-              : item.id === 'stocks' ? activeWorkspace === 'stocks'
-              : item.id === 'options' ? activeWorkspace === 'options'
-              : item.id === 'futures' ? activeWorkspace === 'futures'
-              : item.id === 'mcx' ? activeWorkspace === 'mcx'
-              : item.id === 'cds' ? activeWorkspace === 'cds'
-              : false;
-
-            const onNavClick = () => {
-              if (item.id === 'orders') {
-                setBottomTab('orders');
-                return;
-              }
-              if (item.id === 'watchlist') {
-                togglePanel('watchlist');
-                return;
-              }
-              if (item.id === 'dom') {
-                togglePanel('marketDepth');
-                return;
-              }
-              if (item.id === 'bottom') {
-                togglePanel('bottomPanel');
-                return;
-              }
-              if (item.id === 'calendar') {
-                setBottomTab('activity');
-                return;
-              }
-              if (item.id === 'home') {
-                setActiveWorkspace('home');
-                return;
-              }
-              if (item.id === 'index') setActiveWorkspace('index');
-              if (item.id === 'stocks') setActiveWorkspace('stocks');
-              if (item.id === 'options') setActiveWorkspace('options');
-              if (item.id === 'futures') setActiveWorkspace('futures');
-              if (item.id === 'mcx') setActiveWorkspace('mcx');
-              if (item.id === 'cds') setActiveWorkspace('cds');
-            };
-
-            return (
-              <button
-                key={item.id}
-                onClick={onNavClick}
-                className={cn(
-                  'px-2 py-1 rounded-md text-[11px] font-bold tracking-[0.14em] transition-colors whitespace-nowrap',
-                  isActive ? 'bg-fw-accent/15 text-fw-accent border border-fw-accent/35' : 'text-fw-text-secondary hover:text-fw-text hover:bg-fw-hover/50'
-                )}
-              >
-                {item.label}
-              </button>
-            );
-          })}
-        </div>
+        {/* ── PRIMARY NAVIGATION ── */}
+        <nav className="flex items-center gap-0.5 flex-shrink-0">
+          <NavLink ws="home"     label="HOME"     icon={<Home size={11} />} />
+          <NavLink ws="index"    label="INDEX"    icon={<BarChart3 size={11} />} />
+          <NavLink ws="stocks"   label="STOCKS"   icon={<TrendingUp size={11} />} />
+          <NavLink ws="options"  label="OPTION"   icon={<Activity size={11} />} />
+          <NavLink ws="futures"  label="FUTURES"  icon={<LineChart size={11} />} />
+          <NavLink ws="mcx"      label="MCX"      icon={<Diamond size={11} />} />
+          <NavLink ws="cds"      label="CDS"      icon={<DollarSign size={11} />} />
+          <div className="w-px h-4 bg-fw-border/30 mx-1" />
+          <NavLink ws="ord"      label="ORD" />
+          <NavLink ws="wl"       label="WL" />
+          <NavLink ws="dom"      label="DOM" />
+          <NavLink ws="btm"      label="BTM" />
+          <NavLink ws="calendar" label="CAL" />
+        </nav>
 
         <div className="flex-1" />
 
-        {/* Account + Theme + Search */}
+        {/* Right controls */}
         <div className="flex items-center gap-2 flex-shrink-0">
           <AccountSelector />
           <div className="flex items-center bg-fw-bg rounded border border-fw-border p-0.5">
             {([{ value: 'dark' as Theme, label: 'D' }, { value: 'fw-blue' as Theme, label: 'B' }]).map((t) => (
-              <button key={t.value} onClick={() => setTheme(t.value)} className={cn('px-1.5 py-0.5 rounded text-[13px] font-bold', theme === t.value ? 'bg-fw-accent text-white' : 'text-fw-text-muted hover:text-fw-text')}>{t.label}</button>
+              <button
+                key={t.value}
+                onClick={() => setTheme(t.value)}
+                className={cn('px-1.5 py-0.5 rounded text-[11px] font-bold', theme === t.value ? 'bg-fw-accent text-white' : 'text-fw-text-muted hover:text-fw-text')}
+              >
+                {t.label}
+              </button>
             ))}
           </div>
           <button onClick={() => setBottomTab('alerts')} className="p-1 rounded hover:bg-fw-hover text-fw-text-secondary hover:text-fw-text transition-colors" title="Alerts">
@@ -232,65 +73,24 @@ export function TopBar() {
           </button>
         </div>
       </div>
-
-      {/* Row 2: Account Metrics + Challenge Context Strip */}
-      <div className="flex items-center px-3 h-[28px] border-t border-fw-border/20 bg-[#090b10]">
-        {/* Account Metrics — stacked label/value pairs */}
-        <div className="flex items-center gap-5 mr-4 pr-4 border-r border-fw-border/20">
-          <MetricInline label="Balance" value={`₹${formatCompact(balance)}`} />
-          <MetricInline label="Equity" value={`₹${formatCompact(equity)}`} className={equity >= balance ? 'text-emerald-400' : 'text-red-400'} />
-          <MetricInline label="Margin" value={`₹${formatCompact(marginInfo?.usedMargin || 0)}`} className="text-orange-400" />
-          <div className="flex items-center gap-1.5">
-            {pnlValue >= 0 ? <TrendingUp size={10} className="text-green" /> : <TrendingDown size={10} className="text-red" />}
-            <span className="topbar-metric-label">P&amp;L</span>
-            <span className={cn('topbar-metric-value tv-smooth-value', pnlValue >= 0 ? 'text-green' : 'text-red')}>
-              {pnlValue >= 0 ? '+' : ''}₹{formatCompact(Math.abs(pnlValue))}
-            </span>
-          </div>
-        </div>
-
-        {/* Challenge Risk Context */}
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1.5">
-            <AlertTriangle size={9} className="text-red-400/70" />
-            <span className="topbar-metric-label">Daily Left</span>
-            <span className="topbar-metric-value text-red-400 tabular-nums">₹{formatCompact(dailyLossRemaining)}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Activity size={9} className="text-orange-400/70" />
-            <span className="topbar-metric-label">DD Left</span>
-            <span className="topbar-metric-value text-orange-400 tabular-nums">₹{formatCompact(ddRemaining)}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Target size={9} className="text-emerald-400/70" />
-            <span className="topbar-metric-label">Target</span>
-            <span className="topbar-metric-value text-emerald-400 tabular-nums">{targetPct.toFixed(0)}%</span>
-            <div className="w-16 h-[3px] rounded-full bg-fw-border/30 overflow-hidden">
-              <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${targetPct}%` }} />
-            </div>
-          </div>
-        </div>
-
-        <div className="flex-1" />
-        <span className="tv-support text-fw-text-muted/50 font-mono">{new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
-      </div>
     </header>
   );
 }
 
-function MetricInline({ label, value, className }: { label: string; value: string; className?: string }) {
+function NavLink({ ws, label, icon }: { ws: Workspace; label: string; icon?: React.ReactNode }) {
+  const { activeWorkspace, setActiveWorkspace } = useAppStore();
+  const active = activeWorkspace === ws;
   return (
-    <div className="flex items-center gap-1.5">
-      <span className="topbar-metric-label">{label}</span>
-      <span className={cn('topbar-metric-value tabular-nums text-fw-text', className)}>{value}</span>
-    </div>
-  );
-}
-
-function PanelBtn({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
-  return (
-    <button onClick={onClick}
-      className={cn('fw-badge transition-all cursor-pointer', active ? 'fw-badge-blue' : 'fw-badge-muted hover:opacity-80')}>
+    <button
+      onClick={() => setActiveWorkspace(ws)}
+      className={cn(
+        'flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider transition-all',
+        active
+          ? 'bg-fw-accent/15 text-fw-accent border border-fw-accent/30'
+          : 'text-fw-text-muted hover:text-fw-text hover:bg-fw-hover/40 border border-transparent'
+      )}
+    >
+      {icon}
       {label}
     </button>
   );
