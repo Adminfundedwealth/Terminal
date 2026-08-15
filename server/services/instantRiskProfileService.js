@@ -37,15 +37,15 @@ const HARDCODED_DEFAULT = Object.freeze({
   max_position_size_pct:    70.0,
   allowed_segments:         ['NSE', 'NFO', 'BFO', 'MCX', 'CDS'],
   trading_hours_start:      '09:15',
-  trading_hours_end:        '15:15',
-  overnight_allowed:        false,
-  overnight_cutoff:         '15:15',
-  weekend_allowed:          false,
+  trading_hours_end:        '15:30',
+  overnight_allowed:        true,
+  overnight_cutoff:         '15:30',
+  weekend_allowed:          true,
   holiday_restriction:      true,
   profit_target_pct:        0.0,
-  profit_split_initial_pct: 70.0,
-  profit_split_scaled_pct:  80.0,
-  profit_split_scale_days:  30,
+  profit_split_pct:         80.0,
+  daily_profit_cap_cooldown_hours: 8.0,
+  
   payout_threshold_pct:     5.0,
   min_trading_days:         7,
   consistency_rule_pct:     15.0,
@@ -131,7 +131,7 @@ export class InstantRiskProfileService {
       'overnight_allowed', 'overnight_cutoff',
       'weekend_allowed', 'holiday_restriction',
       'profit_target_pct',
-      'profit_split_initial_pct', 'profit_split_scaled_pct', 'profit_split_scale_days',
+      'profit_split_pct',
       'payout_threshold_pct', 'min_trading_days',
       'consistency_rule_pct', 'daily_profit_cap_pct',
       'risk_per_idea_pct', 'risk_per_idea_window_min',
@@ -223,20 +223,9 @@ export class InstantRiskProfileService {
    * Compute the effective profit split % for an Instant account based on
    * how many trading days have elapsed since challenge start.
    *
-   * Progression: starts at profit_split_initial_pct (70%),
-   * scales to profit_split_scaled_pct (80%) after profit_split_scale_days (30 days).
-   *
-   * @param {object} profile - loaded Instant risk profile
-   * @param {string|null} startedAt - challenge_accounts.started_at ISO string
-   * @returns {number} effective split percentage (e.g. 70 or 80)
+   * Final rule: 80% from day 1 (flat). Admin can change profit_split_pct.
    */
-  static getEffectiveSplitPct(profile, startedAt) {
-    if (!startedAt) return profile.profit_split_initial_pct;
-    const daysElapsed = Math.floor(
-      (Date.now() - new Date(startedAt).getTime()) / (24 * 60 * 60 * 1000)
-    );
-    return daysElapsed >= (profile.profit_split_scale_days || 30)
-      ? profile.profit_split_scaled_pct
-      : profile.profit_split_initial_pct;
+  static getEffectiveSplitPct(profile, _startedAt = null) {
+    return profile?.profit_split_pct ?? 80;
   }
 }

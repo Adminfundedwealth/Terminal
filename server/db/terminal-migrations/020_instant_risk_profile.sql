@@ -26,23 +26,22 @@ CREATE TABLE IF NOT EXISTS instant_risk_profile (
 
     -- Session rules
     trading_hours_start     TEXT          NOT NULL DEFAULT '09:15',
-    trading_hours_end       TEXT          NOT NULL DEFAULT '15:15',
-    overnight_allowed       BOOLEAN       NOT NULL DEFAULT FALSE,
-    overnight_cutoff        TEXT          NOT NULL DEFAULT '15:15',
-    weekend_allowed         BOOLEAN       NOT NULL DEFAULT FALSE,
+    trading_hours_end       TEXT          NOT NULL DEFAULT '15:30',
+    overnight_allowed                BOOLEAN       NOT NULL DEFAULT TRUE,
+    overnight_cutoff        TEXT          NOT NULL DEFAULT '15:30',
+    weekend_allowed                  BOOLEAN       NOT NULL DEFAULT TRUE,
     holiday_restriction     BOOLEAN       NOT NULL DEFAULT TRUE,
 
     -- Targets / payouts
     profit_target_pct       NUMERIC(5,2)  NOT NULL DEFAULT 0.0,
-    profit_split_initial_pct NUMERIC(5,2) NOT NULL DEFAULT 70.0,
-    profit_split_scaled_pct  NUMERIC(5,2) NOT NULL DEFAULT 80.0,
-    profit_split_scale_days  INTEGER      NOT NULL DEFAULT 30,
+    profit_split_pct                 NUMERIC(5,2)  NOT NULL DEFAULT 80.0,
     payout_threshold_pct    NUMERIC(5,2)  NOT NULL DEFAULT 5.0,
     min_trading_days        INTEGER       NOT NULL DEFAULT 7,
     consistency_rule_pct    NUMERIC(5,2)  NOT NULL DEFAULT 15.0,
 
     -- Kill-switch
     daily_profit_cap_pct    NUMERIC(5,2)  NOT NULL DEFAULT 4.0,
+    daily_profit_cap_cooldown_hours  NUMERIC(5,2)  NOT NULL DEFAULT 8.0,
 
     -- Risk per trade idea
     risk_per_idea_pct       NUMERIC(5,2)  NOT NULL DEFAULT 1.0,
@@ -73,3 +72,8 @@ CREATE TABLE IF NOT EXISTS instant_risk_profile_audit (
 
 CREATE INDEX IF NOT EXISTS idx_instant_audit_rule ON instant_risk_profile_audit(rule_name);
 CREATE INDEX IF NOT EXISTS idx_instant_audit_time ON instant_risk_profile_audit(changed_at DESC);
+
+
+-- Persists the 8-hour profit cap cooldown expiry.
+ALTER TABLE trading_accounts
+    ADD COLUMN IF NOT EXISTS daily_profit_cap_until TIMESTAMPTZ DEFAULT NULL;

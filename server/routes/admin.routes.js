@@ -576,6 +576,7 @@ export function createAdminRouter() {
         .from('trading_accounts')
         .select(`
           id, account_code, balance, status, locked_reason, created_at,
+          daily_profit_cap_until,
           challenge_accounts!challenge_id (
             id, plan, type, status, initial_balance, peak_balance,
             min_trading_days, started_at, expires_at
@@ -595,15 +596,19 @@ export function createAdminRouter() {
         })
         .map(row => {
           const ch = row.challenge_accounts;
-          const effectiveSplit = InstantRiskProfileService.getEffectiveSplitPct(profile, ch?.started_at);
+          const effectiveSplit = InstantRiskProfileService.getEffectiveSplitPct(profile, null);
+          const capUntil = row.daily_profit_cap_until ? new Date(row.daily_profit_cap_until).getTime() : null;
+          const capActive = capUntil ? Date.now() < capUntil : false;
           return {
-            id:              row.id,
-            accountCode:     row.account_code,
-            balance:         row.balance,
-            status:          row.status,
-            lockedReason:    row.locked_reason,
-            createdAt:       row.created_at,
-            trader:          row.terminal_traders,
+            id:                   row.id,
+            accountCode:          row.account_code,
+            balance:              row.balance,
+            status:               row.status,
+            lockedReason:         row.locked_reason,
+            createdAt:            row.created_at,
+            dailyProfitCapUntil:  row.daily_profit_cap_until,
+            dailyProfitCapActive: capActive,
+            trader:               row.terminal_traders,
             challenge: {
               id:             ch?.id,
               status:         ch?.status,

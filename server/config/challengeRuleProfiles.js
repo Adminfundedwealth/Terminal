@@ -251,9 +251,10 @@ export function getInstantFundingRuleProfile(balance) {
 
       // ── Session rules ────────────────────────────────────────────────────
       allowed_segments:   { segments: ['NSE', 'NFO', 'BFO', 'CDS', 'MCX'] },
-      trading_hours:      { start: '09:15', end: '15:15' },
-      no_overnight:       { cutoffTime: '15:15', allowedProducts: ['MIS'], blockWeekends: true },
-      news_blackout:      { windows: [], blockAll: false },        // enabled but no fixed windows
+      trading_hours:      { start: '09:15', end: '15:30' },      // 15:30 IST
+      no_overnight:       { allowed: true },                      // overnight ALLOWED
+      weekend_allowed:    { allowed: true },                      // weekend ALLOWED
+      news_blackout:      { windows: [], blockAll: false },
 
       // ── Scaling ──────────────────────────────────────────────────────────
       scaling: {
@@ -383,23 +384,36 @@ export function get1StepRuleProfile(balance) {
     phase: 'phase_1',
     initialBalance: balance,
     rules: {
-      daily_loss_limit:   { percent: 3, amount: balance * 0.03 },
-      max_drawdown:       { percent: 6, amount: balance * 0.06, type: 'static' },
-      profit_target:      { percent: 10, amount: balance * 0.10 },
+      // ── Core risk limits ─────────────────────────────────────────────────
+      daily_loss_limit:   { percent: 3,   amount: balance * 0.03 },
+      max_drawdown:       { percent: 6,   amount: balance * 0.06,  type: 'static' },
+      profit_target:      { percent: 10,  amount: balance * 0.10 },
       min_trading_days:   { count: 5 },
       max_positions:      { count: 20 },
-      max_position_size:  { percent: 70, amount: balance * 0.70 },
-      daily_profit_cap:   { percent: 4, amount: balance * 0.04 },
+      max_position_size:  { percent: 70,  amount: balance * 0.70 },
+      daily_profit_cap:   { percent: 4,   amount: balance * 0.04, cooldown_hours: 8 },
       max_risk_per_trade: { percent: 1.5, amount: balance * 0.015 },
+
+      // ── Session rules ─────────────────────────────────────────────────────
+      // Trading hours 09:15–15:30 IST (spec requirement).
+      // NOTE: enforcement is done by OneStepRiskEngine reading onestep_risk_profile table.
+      // These risk_rules rows are kept for audit/provisioning history only.
       allowed_segments:   { segments: ['NSE', 'NFO', 'BFO', 'CDS', 'MCX'] },
-      trading_hours:      { start: '09:15', end: '15:15' },
-      no_overnight:       { cutoffTime: '15:15', allowedProducts: ['MIS'], blockWeekends: true },
-      news_blackout:      { windows: [], blockAll: false },
+      trading_hours:      { start: '09:15', end: '15:30' },
+
+      // Overnight ALLOWED for 1-Step (spec requirement).
+      no_overnight:       { allowed: true },
+
+      // ── Consistency (enabled in both eval and funded) ─────────────────────
+      consistency_rule:   { maxDayProfitPercent: 40 },
+
+      // ── Payout / split ────────────────────────────────────────────────────
       profit_split:       { percent: 80 },
+      payout_threshold:   { percent: 3,   amount: balance * 0.03 },
+
+      // ── Position / leverage ───────────────────────────────────────────────
       leverage_limit:     { maxMultiplier: 30 },
       drawdown_type:      { type: 'static' },
-      inactivity_close:   { days: 60 },
-      scaling:            { triggerPct: 10, rewardPct: 25, capPct: 100, cycleDays: 90 },
     },
   };
 }
@@ -418,10 +432,13 @@ export function get1StepFundedRuleProfile(balance) {
     phase: 'funded',
     rules: {
       ...eval1.rules,
-      profit_target:    { percent: 0, amount: 0 },
-      payout_threshold: { percent: 5, amount: balance * 0.05 },
+      // Funded: no profit target, 3 min trading days, 3% payout threshold
+      profit_target:    { percent: 0,  amount: 0 },
+      payout_threshold: { percent: 3,  amount: balance * 0.03 },
       min_trading_days: { count: 3 },
       consistency_rule: { maxDayProfitPercent: 40 },
+      // Profit split: 80% initially → 90% after 3% payout threshold is satisfied once
+      profit_split:     { percent: 80, scaled_percent: 90, threshold_pct: 3 },
     },
   };
 }

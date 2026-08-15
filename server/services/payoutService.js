@@ -81,8 +81,13 @@ export class PayoutService {
       noPendingPayout: false,
     };
 
-    // Check 1: Must be funded account
-    checks.isFunded = challenge.type === 'funded';
+    // Check 1: Must be eligible account type.
+    // Instant and Flash are funded-from-day-1 — they use plan='instant'/'flash' and are
+    // created as 'evaluation_phase1' in the type column. Accept them by plan, not type.
+    const normalizedPlan = (challenge.plan || '').toLowerCase().replace(/[-_\s]/g, '');
+    const isInstantPlan  = normalizedPlan === 'instant';
+    const isFlashPlan    = normalizedPlan === 'flash';
+    checks.isFunded = isInstantPlan || isFlashPlan || challenge.type === 'funded';
     if (!checks.isFunded) {
       return { eligible: false, reason: 'Only funded accounts can request payouts', checks };
     }

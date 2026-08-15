@@ -686,26 +686,44 @@ export class RiskEngine {
     const account = await accountRepo.findById(accountId);
     if (!account) return { allowed: true };
 
+    // ── Cooldown check: if daily_profit_cap_until is set and still active, block ──
+    if (account.daily_profit_cap_until) {
+      const capUntil = new Date(account.daily_profit_cap_until).getTime();
+      if (Date.now() < capUntil) {
+        const remainingMins = Math.ceil((capUntil - Date.now()) / 60000);
+        return { allowed: false, reason: `Daily profit cap cooldown active — trading resumes in ${remainingMins} minute(s).` };
+      }
+      // Cooldown expired — clear it
+      try { await accountRepo.update(accountId, { daily_profit_cap_until: null }); } catch {}
+    }
+
     const balance = parseFloat(account.balance) || 0;
     const capAmount = cap.amount || (cap.percent / 100) * balance;
 
     const todayRealizedPnl = await this.calculateTodayRealizedPnl(accountId);
 
     if (todayRealizedPnl >= capAmount) {
-      // Publish kill-switch event so UI can reflect it immediately
-      eventBus.publish('risk.alert', {
-        type: 'kill_switch',
-        ruleType: 'daily_profit_cap',
-        message: `Daily profit cap reached (₹${todayRealizedPnl.toFixed(0)} ≥ ₹${capAmount.toFixed(0)}). No new trades until tomorrow.`,
-        currentValue: todayRealizedPnl,
-        limitValue: capAmount,
-        percentUsed: 100,
-      }, { accountId });
+      // Determine cooldown from Instant profile flag (8 hours) or none for others
+      const cooldownHours = rules._instant_profit_cap_cooldown_hours || 0;
 
-      return {
-        allowed: false,
-        reason: `Daily profit cap hit (${cap.percent}%). Kill-switch active — no new trades until next session. Current profit: ₹${todayRealizedPnl.toFixed(0)}`,
-      };
+      if (cooldownHours > 0) {
+        const capUntil = new Date(Date.now() + cooldownHours * 3600 * 1000).toISOString();
+        try { await accountRepo.update(accountId, { daily_profit_cap_until: capUntil }); } catch {}
+        eventBus.publish('risk.alert', {
+          type: 'kill_switch', ruleType: 'daily_profit_cap',
+          message: `Daily profit cap reached. Trading paused for ${cooldownHours}h.`,
+          currentValue: todayRealizedPnl, limitValue: capAmount, percentUsed: 100,
+        }, { accountId });
+        return { allowed: false, reason: `Daily profit cap hit (${cap.percent}%). Trading paused for ${cooldownHours} hours.` };
+      }
+
+      // Non-Instant: original kill-switch (no timed cooldown)
+      eventBus.publish('risk.alert', {
+        type: 'kill_switch', ruleType: 'daily_profit_cap',
+        message: `Daily profit cap reached (₹${todayRealizedPnl.toFixed(0)} ≥ ₹${capAmount.toFixed(0)}). No new trades until tomorrow.`,
+        currentValue: todayRealizedPnl, limitValue: capAmount, percentUsed: 100,
+      }, { accountId });
+      return { allowed: false, reason: `Daily profit cap hit (${cap.percent}%). Kill-switch active — no new trades until next session. Current profit: ₹${todayRealizedPnl.toFixed(0)}` };
     }
 
     return { allowed: true };
