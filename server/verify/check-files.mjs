@@ -1,0 +1,13 @@
+import { readFileSync } from 'fs';
+const ips = readFileSync('services/instantRiskProfileService.js', 'utf8');
+const mig = readFileSync('db/terminal-migrations/020_instant_risk_profile.sql', 'utf8');
+console.log('IPS has 15:30:', ips.includes("'15:30'"));
+console.log('IPS has 80.0:', ips.includes('80.0'));
+console.log('IPS has cooldown 8.0:', ips.includes('8.0'));
+console.log('IPS has profit_split_pct ?? 80:', ips.includes('profit_split_pct ?? 80'));
+console.log('MIG has 15:30:', mig.includes("'15:30'"));
+console.log('MIG has profit_split_pct:', mig.includes('profit_split_pct'));
+console.log('MIG has 80.0:', mig.includes('80.0'));
+console.log('MIG has cooldown_hours:', mig.includes('cooldown_hours'));
+console.log('MIG has daily_profit_cap_until:', mig.includes('daily_profit_cap_until'));
+process.exit(0);

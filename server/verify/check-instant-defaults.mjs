@@ -1,0 +1,10 @@
+import { InstantRiskProfileService } from '../services/instantRiskProfileService.js';
+InstantRiskProfileService.invalidateCache();
+const p = await InstantRiskProfileService.getProfile();
+console.log('trading_hours_end:              ', p.trading_hours_end);
+console.log('overnight_allowed:              ', p.overnight_allowed);
+console.log('weekend_allowed:                ', p.weekend_allowed);
+console.log('profit_split_pct:               ', p.profit_split_pct);
+console.log('daily_profit_cap_cooldown_hours:', p.daily_profit_cap_cooldown_hours);
+console.log('profit_target_pct:              ', p.profit_target_pct);
+process.exit(0);
