@@ -70,10 +70,10 @@ export function TopBar() {
               </button>
             ))}
           </div>
-          <button onClick={() => setBottomTab('alerts')} className="p-1.5 rounded hover:bg-fw-hover text-slate-400 hover:text-fw-text transition-colors" title="Alerts">
+          <button onClick={() => setBottomTab('alerts')} className="p-1.5 rounded hover:bg-fw-hover text-slate-300 hover:text-white transition-colors" title="Alerts">
             <Bell size={15} />
           </button>
-          <button onClick={() => setSearchOpen(true)} className="p-1.5 rounded hover:bg-fw-hover text-slate-400 hover:text-fw-text transition-colors" title="Search (Ctrl+K)">
+          <button onClick={() => setSearchOpen(true)} className="p-1.5 rounded hover:bg-fw-hover text-slate-300 hover:text-white transition-colors" title="Search (Ctrl+K)">
             <Search size={15} />
           </button>
         </div>
@@ -92,7 +92,7 @@ function NavLink({ ws, label, icon }: { ws: Workspace; label: string; icon?: Rea
         'flex items-center gap-1.5 px-2.5 py-1 rounded text-[12px] font-semibold uppercase tracking-wide transition-all',
         active
           ? 'bg-fw-accent/15 text-fw-accent border border-fw-accent/40'
-          : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] border border-transparent'
+          : 'text-slate-300 hover:text-white hover:bg-white/[0.04] border border-transparent'
       )}
     >
       {icon}

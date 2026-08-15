@@ -36,7 +36,7 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-2 mb-2">
       <div className="w-[3px] h-4 rounded-full bg-fw-accent" />
-      <span className="text-[12px] font-bold tracking-widest uppercase text-fw-text-muted">{children}</span>
+      <span className="text-[12px] font-bold tracking-widest uppercase text-fw-text-secondary">{children}</span>
     </div>
   );
 }
