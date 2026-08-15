@@ -814,7 +814,7 @@ function InstrumentBrowser({ onOpenNews, currentWlId, activeSymbol, pinnedTokens
             value={query}
             onChange={e => setQuery(e.target.value)}
             placeholder="Search instruments..."
-            className="w-full bg-[#141720] border border-fw-border/50 rounded text-[12px] text-fw-text pl-6 pr-6 py-1 outline-none focus:border-fw-accent/60 placeholder:text-fw-text-muted/60"
+            className="w-full bg-[#141720] border border-fw-border/50 rounded text-[12px] text-fw-text pl-6 pr-6 py-1 outline-none focus:border-fw-accent/60 placeholder:text-fw-text-muted"
           />
           {query && (
             <button onClick={() => setQuery('')} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-fw-text-muted hover:text-fw-text">
@@ -857,8 +857,8 @@ function InstrumentBrowser({ onOpenNews, currentWlId, activeSymbol, pinnedTokens
 
       {/* Column headers */}
       <div className="grid grid-cols-[1fr_68px] px-3 py-[3px] border-b border-fw-border/30 flex-shrink-0 bg-[#090b10]">
-        <span className="text-[10px] text-fw-text-muted uppercase tracking-widest">Instrument</span>
-        <span className="text-[10px] text-fw-text-muted uppercase tracking-widest text-right">LTP</span>
+        <span className="text-[10px] text-fw-text-secondary uppercase tracking-widest">Instrument</span>
+        <span className="text-[10px] text-fw-text-secondary uppercase tracking-widest text-right">LTP</span>
       </div>
 
       {/* Results */}

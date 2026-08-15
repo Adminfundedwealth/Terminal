@@ -55,7 +55,7 @@ const DARK_PRO: ThemeConfig = {
   isSystem: true,
   colors: {
     bg: '#0f1118', surface: '#181b25', surface2: '#1e2230', border: '#262a36', borderLight: '#2f3444',
-    text: '#e1e4eb', textSecondary: '#6b7280', textMuted: '#4b5060',
+    text: '#f1f5f9', textSecondary: '#cbd5e1', textMuted: '#94a3b8',
     accent: '#3b82f6', accentHover: '#2563eb',
     green: '#22c55e', greenDim: 'rgba(34,197,94,0.12)', red: '#ef4444', redDim: 'rgba(239,68,68,0.12)',
     panel: '#181b25', hover: '#1f2332', selected: '#252a3a',
@@ -69,7 +69,7 @@ const MIDNIGHT_BLUE: ThemeConfig = {
   isSystem: true,
   colors: {
     bg: '#131722', surface: '#1e222d', surface2: '#252a37', border: '#2a2e39', borderLight: '#363a45',
-    text: '#d1d4dc', textSecondary: '#787b86', textMuted: '#5d606b',
+    text: '#f1f5f9', textSecondary: '#cbd5e1', textMuted: '#94a3b8',
     accent: '#2962ff', accentHover: '#1e50e6',
     green: '#26a69a', greenDim: 'rgba(38,166,154,0.12)', red: '#ef5350', redDim: 'rgba(239,83,80,0.12)',
     panel: '#1e222d', hover: '#2a2e39', selected: '#323741',

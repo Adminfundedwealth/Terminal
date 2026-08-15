@@ -47,7 +47,7 @@ function StatCard({
 }: { label: string; value: string; sub?: string; color?: string; icon?: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-0.5 bg-[#0d0f18] border border-fw-border/40 rounded px-3 py-2 min-w-0">
-      <div className="flex items-center gap-1 text-fw-text-muted text-[11px] font-medium uppercase tracking-wider truncate">
+      <div className="flex items-center gap-1 text-fw-text-secondary text-[11px] font-medium uppercase tracking-wider truncate">
         {icon && <span className="opacity-70">{icon}</span>}
         {label}
       </div>
@@ -66,7 +66,7 @@ function IndexTile({ token, symbol, onClick }: { token: string; symbol: string; 
       onClick={onClick}
       className="flex flex-col gap-0.5 bg-[#0d0f18] border border-fw-border/40 hover:border-fw-accent/40 rounded px-3 py-2 text-left transition-colors min-w-0 group"
     >
-      <span className="text-[11px] text-fw-text-muted font-medium uppercase tracking-wider">{symbol}</span>
+      <span className="text-[11px] text-fw-text-secondary font-medium uppercase tracking-wider">{symbol}</span>
       {q ? (
         <>
           <span className={cn('text-[15px] font-bold tabular-nums', up ? 'text-emerald-400' : 'text-red-400')}>
@@ -89,7 +89,7 @@ function SegmentBtn({ ws, label, color }: { ws: Workspace; label: string; color:
   return (
     <button
       onClick={() => setActiveWorkspace(ws)}
-      className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-fw-border/40 hover:border-fw-accent/50 bg-[#0d0f18] hover:bg-fw-hover/40 text-[12px] font-bold text-fw-text-muted hover:text-fw-text transition-all uppercase tracking-wider"
+      className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-fw-border/40 hover:border-fw-accent/50 bg-[#0d0f18] hover:bg-fw-hover/40 text-[12px] font-bold text-fw-text-secondary hover:text-fw-text transition-all uppercase tracking-wider"
       style={{ borderLeftColor: color, borderLeftWidth: 2 }}
     >
       {label}
