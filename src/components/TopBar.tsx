@@ -18,9 +18,9 @@ export function TopBar() {
           <div className="w-8 h-8 rounded-lg overflow-hidden bg-white flex items-center justify-center flex-shrink-0" style={{ boxShadow: '0 0 10px rgba(139,92,246,0.4)' }}>
             <img src="/logo.png" alt="FW" className="w-7 h-7 object-contain" />
           </div>
-          <div className="flex flex-col leading-tight">
+          <div className="flex flex-col leading-tight items-center">
             <span className="text-[14px] font-extrabold tracking-wide bg-gradient-to-r from-[#00D4FF] via-[#4F46E5] to-[#7C3AED] bg-clip-text text-transparent">FUNDEDWEALTH</span>
-            <span className="text-[10px] font-bold tracking-[0.3em] text-slate-400">TERMINAL</span>
+            <span className="text-[10px] font-bold tracking-[0.3em] text-slate-400 text-center">TERMINAL</span>
           </div>
         </div>
 

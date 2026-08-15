@@ -590,14 +590,14 @@ button, [role="button"] {
 
 /* Bottom tab — inactive reduced contrast */
 .fw-tab-inactive {
-  opacity: 0.55;
+  opacity: 0.7;
   color: var(--fw-text-muted) !important;
 }
 
 /* Bottom tab — active full contrast + weight */
 .fw-tab-active {
   opacity: 1 !important;
-  font-weight: 600 !important;
+  font-weight: 700 !important;
   color: var(--fw-accent) !important;
 }
 
@@ -1082,12 +1082,12 @@ button, [role="button"] {
 
 /* ── Tab labels — consistent weight ────────────────────────────────── */
 .fw-tab-inactive {
-  font-size: 12px !important;
+  font-size: 13px !important;
   font-weight: 500 !important;
 }
 
 .fw-tab-active {
-  font-size: 12px !important;
+  font-size: 13px !important;
   font-weight: 700 !important;
 }
 

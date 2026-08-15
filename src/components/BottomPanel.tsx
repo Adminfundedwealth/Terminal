@@ -244,13 +244,13 @@ export function BottomPanel() {
 
       <div className="h-full flex flex-col bg-gradient-to-b from-[#0d0f15] to-[#0b0d12]">
         {/* Tabs — Professional Console Strip */}
-        <div className="flex items-center border-b border-fw-border px-1 bg-[#0a0c12] flex-shrink-0">
+        <div className="flex items-center border-b border-fw-border px-2 bg-[#0a0c12] flex-shrink-0">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setBottomTab(tab.id)}
               className={cn(
-                'px-3 py-2 border-b-2 transition-all relative',
+                'px-3.5 py-2.5 border-b-2 transition-all relative',
                 bottomTab === tab.id
                   ? 'fw-tab-active border-fw-accent bg-fw-accent/[0.04]'
                   : 'fw-tab-inactive border-transparent hover:opacity-80 hover:bg-fw-hover/20'
@@ -259,7 +259,7 @@ export function BottomPanel() {
               {tab.label}
               {tab.count > 0 && (
                 <span className={cn(
-                  'ml-1.5 px-1.5 min-w-[16px] text-center text-[8px] rounded-full font-mono inline-block',
+                  'ml-1.5 px-1.5 min-w-[16px] text-center text-[9px] rounded-full font-mono inline-block',
                   bottomTab === tab.id ? 'bg-fw-accent/20 text-fw-accent' : 'bg-fw-border text-fw-text-muted'
                 )}>
                   {tab.count}
