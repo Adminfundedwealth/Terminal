@@ -28,6 +28,7 @@ import { useThemeStore } from '@/store/themeStore';
 import { initLayoutObserver } from '@/store/layoutStore';
 import { wsService } from '@/services/websocket';
 import { startSync, stopSync, startPersistence, stopPersistence } from '@/features/chart-trading';
+import { cn } from '@/utils/helpers';
 // Vertical drag divider for resizing panels horizontally
 function VDivider({ onDrag }: { onDrag: (dx: number) => void }) {
   const isDragging = useRef(false);
@@ -265,7 +266,7 @@ export default function App() {
           <TerminalReadiness />
           <RiskWidget />
         </ErrorBoundary>
-        <div className="flex-1 overflow-y-auto min-h-0">
+        <div className={cn('overflow-y-auto min-h-0', isDom ? 'h-[80px] flex-shrink-0' : 'flex-1')}>
           <ErrorBoundary fallbackTitle="Order Panel Error">
             <OrderPanel />
           </ErrorBoundary>
@@ -273,7 +274,7 @@ export default function App() {
         {panels.marketDepth && (
           <>
             <HDivider onDrag={handleDepthResize} />
-            <div style={{ height: depthPanelHeight, minHeight: 200, maxHeight: 600 }} className="flex-shrink-0 overflow-hidden">
+            <div style={{ height: isDom ? undefined : depthPanelHeight, minHeight: 200, maxHeight: isDom ? undefined : 600 }} className={cn('overflow-hidden', isDom ? 'flex-1' : 'flex-shrink-0')}>
               <ErrorBoundary fallbackTitle="Market Depth Error">
                 <MarketDepthPanel />
               </ErrorBoundary>
@@ -397,12 +398,17 @@ export default function App() {
           )}
 
           {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-              DOM — Market Depth as primary workspace
+              DOM — Right panel DOM only (no center duplicate)
           ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
           {isDom && (
             <>
-              <div className="flex-1 overflow-hidden min-h-0">
-                <ErrorBoundary fallbackTitle="Market Depth Error"><MarketDepthPanel /></ErrorBoundary>
+              {watchlistPanel}
+              <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+                {/* Empty center — DOM lives in the right panel */}
+                <div className="flex-1 flex items-center justify-center text-fw-text-muted text-[13px]">
+                  Market Depth is displayed in the right panel →
+                </div>
+                {bottomDock}
               </div>
               {rightPanel}
             </>
