@@ -213,9 +213,49 @@ body,
   .bg-red-900\/10, [class*="bg-red-900/10"]         { background-color: rgba(239,68,68,0.08) !important; }
 
   /* Keep status badges readable */
-  .fw-badge-green { background-color: rgba(16,185,129,0.12) !important; border-color: rgba(16,185,129,0.3) !important; }
-  .fw-badge-red   { background-color: rgba(239,68,68,0.12) !important; border-color: rgba(239,68,68,0.3) !important; }
-  .fw-badge-blue  { background-color: rgba(37,99,235,0.12) !important; border-color: rgba(37,99,235,0.3) !important; }
+  .fw-badge-green { background-color: rgba(16,185,129,0.12) !important; border-color: rgba(16,185,129,0.3) !important; color: #059669 !important; }
+  .fw-badge-red   { background-color: rgba(239,68,68,0.12) !important; border-color: rgba(239,68,68,0.3) !important; color: #dc2626 !important; }
+  .fw-badge-blue  { background-color: rgba(37,99,235,0.12) !important; border-color: rgba(37,99,235,0.3) !important; color: #2563eb !important; }
+  .fw-badge-muted { background-color: rgba(0,0,0,0.06) !important; border-color: rgba(0,0,0,0.15) !important; color: #374151 !important; }
+  .fw-badge-orange { background-color: rgba(217,119,6,0.12) !important; border-color: rgba(217,119,6,0.3) !important; color: #b45309 !important; }
+  .fw-badge-yellow { background-color: rgba(217,119,6,0.10) !important; border-color: rgba(217,119,6,0.25) !important; color: #92400e !important; }
+  .fw-badge-cyan  { background-color: rgba(3,105,161,0.10) !important; border-color: rgba(3,105,161,0.25) !important; color: #0369a1 !important; }
+
+  /* fw-badge base text */
+  .fw-badge { color: #374151 !important; }
+
+  /* Bottom dock tabs */
+  .fw-tab-inactive { color: #4b5563 !important; opacity: 1 !important; }
+  .fw-tab-active   { color: #2563eb !important; }
+
+  /* Table headers */
+  .fw-table th { color: #374151 !important; }
+  .fw-table td { color: #111827 !important; }
+
+  /* Sidebar icons — active uses text-white which becomes invisible */
+  .text-white { color: #111827 !important; }
+
+  /* Slate text classes used in nav */
+  [class*="text-slate-3"], [class*="text-slate-4"] { color: #374151 !important; }
+
+  /* Top toolbar gradient in Watchlist */
+  [class*="from-[#10121a]"], [class*="to-[#0e1018]"] { background-color: #f3f5f8 !important; background-image: none !important; }
+
+  /* TerminalReadiness and RiskWidget panels */
+  [class*="from-[#0a0c12]"], [class*="to-[#0c0e16]"] { background-color: #ffffff !important; background-image: none !important; }
+
+  /* risk-label should be dark in light mode */
+  .risk-label { color: #4b5563 !important; }
+
+  /* Option Chain table */
+  [class*="bg-[#0b0d14]"] { background-color: #ffffff !important; }
+  [class*="bg-[#0c0e16]"] { background-color: #f3f5f8 !important; }
+
+  /* Category card hover/active tints need to remain clean in light */
+  [class*="bg-fw-accent/1"], [class*="bg-fw-accent/0"] { background-color: rgba(37,99,235,0.08) !important; }
+
+  /* Bottom panel gradient */
+  [class*="from-[#0d0f15]"], [class*="to-[#0b0d12]"] { background-color: #f3f5f8 !important; background-image: none !important; }
 
   /* Scrollbar */
   ::-webkit-scrollbar-track { background: #f0f2f5; }

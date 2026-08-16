@@ -53,7 +53,7 @@ export function Sidebar() {
             className={cn(
               'w-9 h-8 flex items-center justify-center rounded-md transition-all relative group',
               activeWorkspace === ws.id
-                ? 'bg-fw-hover/80 text-white'
+                ? 'bg-fw-hover/80 text-fw-text'
                 : 'text-fw-text-secondary hover:text-fw-text hover:bg-fw-hover/40'
             )}
           >
@@ -117,7 +117,7 @@ function SidebarBtn({ icon, label, active, onClick }: { icon: React.ReactNode; l
       title={label}
       className={cn(
         'w-9 h-8 flex items-center justify-center rounded-md transition-all relative group',
-        active ? 'bg-fw-hover/80 text-white' : 'text-fw-text-secondary hover:text-fw-text hover:bg-fw-hover/40'
+        active ? 'bg-fw-hover/80 text-fw-text' : 'text-fw-text-secondary hover:text-fw-text hover:bg-fw-hover/40'
       )}
     >
       {icon}
