@@ -99,6 +99,129 @@ body,
   line-height: 1.4;
 }
 
+/* ── LIGHT MODE GLOBAL OVERRIDES ────────────────────────────────────────────
+   These rules override hardcoded dark hex backgrounds that bypass CSS vars.
+   Applied via [data-theme='light'] on <html> so they cascade everywhere.
+   Specificity uses !important selectively to win over inline Tailwind classes.
+── */
+[data-theme='light'] {
+  /* Base page */
+  background-color: #f0f2f5 !important;
+  color: #111827 !important;
+
+  /* Any element with a hardcoded dark surface gets the light panel color */
+  [class*="bg-[#0"],
+  [class*="bg-[#1"],
+  [class*="from-[#0"],
+  [class*="to-[#0"],
+  [class*="from-[#1"],
+  [class*="to-[#1"] {
+    background-color: #ffffff !important;
+    background-image: none !important;
+  }
+
+  /* Page-level containers */
+  .h-screen, #root, body {
+    background-color: #f0f2f5 !important;
+  }
+
+  /* Panels: watchlist, right panel, bottom dock, any flex container */
+  .bg-fw-surface    { background-color: #ffffff !important; }
+  .bg-fw-bg         { background-color: #f0f2f5 !important; }
+  .bg-fw-panel      { background-color: #ffffff !important; }
+  .bg-fw-hover      { background-color: #f1f5f9 !important; }
+  .bg-fw-selected   { background-color: #e8f0fe !important; }
+
+  /* Borders */
+  .border-fw-border { border-color: #d9dee7 !important; }
+
+  /* Text */
+  .text-fw-text            { color: #111827 !important; }
+  .text-fw-text-secondary  { color: #374151 !important; }
+  .text-fw-text-muted      { color: #6b7280 !important; }
+
+  /* Header */
+  header { background: #ffffff !important; background-image: none !important; border-bottom-color: #d9dee7 !important; }
+
+  /* Sidebar / left nav */
+  [class*="w-[48px]"] { background-color: #f3f5f8 !important; border-right-color: #d9dee7 !important; }
+
+  /* Top toolbar gradients in Watchlist */
+  .bg-gradient-to-b, .bg-gradient-to-r {
+    background-color: #ffffff !important;
+    background-image: none !important;
+  }
+
+  /* Inputs and search boxes */
+  input[class*="bg-[#"], textarea[class*="bg-[#"] {
+    background-color: #ffffff !important;
+    color: #111827 !important;
+    border-color: #c7ced9 !important;
+  }
+
+  /* Dropdowns / menus */
+  [class*="bg-[#12151f]"],
+  [class*="bg-[#0d0f16]"],
+  [class*="bg-[#141720]"] {
+    background-color: #ffffff !important;
+  }
+
+  /* Bottom panel/dock tab bar */
+  [class*="bg-[#0a0c12]"],
+  [class*="bg-[#090b10]"],
+  [class*="bg-[#0c0e16]"],
+  [class*="bg-[#0e1018]"],
+  [class*="bg-[#0d0f15]"],
+  [class*="bg-[#0b0d12]"] {
+    background-color: #f3f5f8 !important;
+    background-image: none !important;
+  }
+
+  /* Option chain table */
+  [class*="bg-[#0b0d14]"],
+  [class*="bg-[#14161f]"],
+  [class*="bg-[#0c0e16]"] {
+    background-color: #ffffff !important;
+    background-image: none !important;
+  }
+
+  /* Market mover cards, stat cards, category cards */
+  [class*="bg-[#0d0f18]"] {
+    background-color: #ffffff !important;
+    background-image: none !important;
+    border-color: #d9dee7 !important;
+  }
+
+  /* Order panel */
+  [class*="bg-[#0a0c12]"],
+  [class*="bg-[#0f1118]"],
+  [class*="bg-[#12141c]"],
+  [class*="bg-[#12141e]"] {
+    background-color: #f3f5f8 !important;
+    background-image: none !important;
+  }
+
+  /* Keep semantic colors visible on light backgrounds */
+  .text-emerald-400 { color: #059669 !important; }
+  .text-red-400     { color: #dc2626 !important; }
+  .text-emerald-300 { color: #10b981 !important; }
+  .text-red-300     { color: #ef4444 !important; }
+  .text-fw-accent   { color: #2563eb !important; }
+
+  /* Keep green/red tints visible on light bg */
+  .bg-emerald-900\/10, [class*="bg-emerald-900/10"] { background-color: rgba(16,185,129,0.08) !important; }
+  .bg-red-900\/10, [class*="bg-red-900/10"]         { background-color: rgba(239,68,68,0.08) !important; }
+
+  /* Keep status badges readable */
+  .fw-badge-green { background-color: rgba(16,185,129,0.12) !important; border-color: rgba(16,185,129,0.3) !important; }
+  .fw-badge-red   { background-color: rgba(239,68,68,0.12) !important; border-color: rgba(239,68,68,0.3) !important; }
+  .fw-badge-blue  { background-color: rgba(37,99,235,0.12) !important; border-color: rgba(37,99,235,0.3) !important; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar-track { background: #f0f2f5; }
+  ::-webkit-scrollbar-thumb { background: #c7ced9; }
+}
+
 /* Monospace for all financial data */
 .font-mono {
   font-family: 'Roboto Mono', 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', ui-monospace, SFMono-Regular, monospace;
