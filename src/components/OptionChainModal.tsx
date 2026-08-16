@@ -458,44 +458,120 @@ export function OptionChainModal() {
     ? ` (${status.attempt}/${MAX_AUTO_RETRIES})`
     : '';
 
+  // View mode: CE only, PE only, or both
+  const [viewMode, setViewMode] = useState<'both' | 'ce' | 'pe'>('both');
+
+  // OI max for proportional bars
+  const maxOi = useMemo(() => {
+    let max = 0;
+    for (const e of filteredChain) {
+      if (e.callOi > max) max = e.callOi;
+      if (e.putOi > max) max = e.putOi;
+    }
+    return max || 1;
+  }, [filteredChain]);
+
+  // ATM strike value
+  const atmStrike = useMemo(() => {
+    if (filteredChain.length === 0 || spotPrice === 0) return 0;
+    let closest = filteredChain[0]?.strike || 0;
+    let minDiff = Infinity;
+    for (const e of filteredChain) {
+      const d = Math.abs(e.strike - spotPrice);
+      if (d < minDiff) { minDiff = d; closest = e.strike; }
+    }
+    return closest;
+  }, [filteredChain, spotPrice]);
+
+  // Format expiry date for display
+  const formatExpiry = (exp: string) => {
+    try {
+      const d = new Date(exp);
+      return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }).toUpperCase();
+    } catch { return exp; }
+  };
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col h-full bg-fw-surface overflow-hidden">
+    <div className="flex flex-col h-full bg-[#0b0d14] overflow-hidden">
 
       {/* ── Header ── */}
-      <div className="flex items-center gap-2 px-2 py-1.5 border-b border-fw-border flex-wrap flex-shrink-0">
-        <span className="text-[13px] font-bold text-fw-text">OPTION CHAIN</span>
-
-        {/* Current underlying — dynamic, no hardcoded symbol list */}
+      <div className="flex items-center gap-3 px-3 py-2 border-b border-fw-border flex-shrink-0 bg-[#0e1018]">
+        <span className="text-[14px] font-bold text-fw-text tracking-wide">OPTION CHAIN</span>
         {underlying && (
-          <span className="text-[13px] font-semibold text-fw-accent tabular-nums">
-            {underlying}
-          </span>
+          <span className="text-[14px] font-bold text-fw-accent">{underlying}</span>
         )}
-
-        {/* Expiry dropdown — only when data is available or loading */}
         {expiries.length > 0 && (
           <select
             value={selectedExpiry}
             onChange={(e) => handleExpiryChange(e.target.value)}
-            className="bg-fw-bg text-fw-text text-[12px] border border-fw-border rounded px-1.5 py-0.5 font-mono"
+            className="bg-fw-bg text-fw-text text-[12px] border border-fw-border rounded px-2 py-1 font-mono cursor-pointer hover:border-fw-accent/50 transition-colors"
           >
             {expiries.map((e) => <option key={e} value={e}>{e}</option>)}
           </select>
         )}
-
-        {/* Spot price */}
+        <div className="flex-1" />
         {spotPrice > 0 && (
-          <span className="ml-auto text-[12px] font-mono font-bold text-fw-accent tabular-nums">
+          <span className="text-[13px] font-mono font-bold text-emerald-400 tabular-nums">
             Spot: {formatPrice(spotPrice)}
           </span>
         )}
       </div>
 
-      {/* ── Body ── */}
-      <div className="flex-1 overflow-auto text-[12px]">
+      {/* ── Expiry tabs ── */}
+      {expiries.length > 1 && (
+        <div className="flex items-center gap-1 px-3 py-1.5 border-b border-fw-border/50 overflow-x-auto scrollbar-none flex-shrink-0 bg-[#0c0e16]">
+          {expiries.map((exp) => (
+            <button
+              key={exp}
+              onClick={() => handleExpiryChange(exp)}
+              className={cn(
+                'px-2.5 py-1 rounded text-[11px] font-bold whitespace-nowrap transition-all',
+                selectedExpiry === exp
+                  ? 'bg-fw-accent text-white'
+                  : 'text-fw-text-muted hover:text-fw-text hover:bg-fw-hover/40'
+              )}
+            >
+              {formatExpiry(exp)}
+            </button>
+          ))}
+        </div>
+      )}
 
-        {/* ── No active symbol ── */}
+      {/* ── Controls ── */}
+      {status.type === 'ready' && (
+        <div className="flex items-center gap-2 px-3 py-1.5 border-b border-fw-border/30 flex-shrink-0">
+          <div className="flex items-center rounded overflow-hidden border border-fw-border/50">
+            {(['both', 'ce', 'pe'] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => setViewMode(m)}
+                className={cn(
+                  'px-3 py-0.5 text-[11px] font-bold uppercase transition-colors',
+                  viewMode === m
+                    ? 'bg-fw-accent text-white'
+                    : 'text-fw-text-muted hover:text-fw-text hover:bg-fw-hover/30'
+                )}
+              >
+                {m === 'both' ? 'BOTH' : m.toUpperCase()}
+              </button>
+            ))}
+          </div>
+          <span className="text-[11px] text-fw-text-muted ml-2">
+            {filteredChain.length} strikes
+          </span>
+          {atmStrike > 0 && (
+            <span className="text-[11px] text-fw-accent font-mono ml-auto">
+              ATM: {atmStrike}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* ── Body ── */}
+      <div className="flex-1 overflow-auto">
+
+        {/* No active symbol */}
         {!activeSymbol ? (
           <div className="flex flex-col items-center justify-center h-full gap-2 text-fw-text-muted">
             <span className="text-[22px]">📊</span>
@@ -503,16 +579,13 @@ export function OptionChainModal() {
             <p className="text-[11px] text-fw-text-muted/60">Click any instrument in the watchlist</p>
           </div>
 
-        /* ── Unsupported segment or provider-unavailable ── */
         ) : status.type === 'unsupported' ? (
           <div className="flex flex-col items-center justify-center h-full gap-3 px-4 text-center">
             <span className="text-[28px]">🔒</span>
-            <p className="text-[13px] text-fw-text-secondary font-semibold">
-              Option Chain Not Available
-            </p>
+            <p className="text-[13px] text-fw-text-secondary font-semibold">Option Chain Not Available</p>
             <p className="text-[12px] text-fw-text-muted max-w-[240px]">
               {PROVIDER_UNAVAILABLE_UNDERLYINGS.has(status.instrument)
-                ? `${status.instrument} option contracts are not available via this data provider (Angel One SmartConnect does not expose SENSEX options on NFO/BFO).`
+                ? `${status.instrument} option contracts are not available via this data provider.`
                 : activeSymbol?.segment === 'MCX'
                   ? 'MCX commodity option chains are not currently supported.'
                   : activeSymbol?.segment === 'CDS'
@@ -521,88 +594,180 @@ export function OptionChainModal() {
             </p>
           </div>
 
-        /* ── Loading — bounded by 15s wall-clock budget ── */
         ) : isLoading ? (
           <div className="flex flex-col items-center justify-center h-full gap-3">
             <div className="w-5 h-5 border-2 border-fw-accent border-t-transparent rounded-full animate-spin" />
             <p className="text-fw-text-secondary font-medium text-[13px]">
-              {status.type === 'loading' && status.label
-                ? `Loading ${status.label}`
-                : `Loading ${underlying}…`}
+              {status.type === 'loading' && status.label ? `Loading ${status.label}` : `Loading ${underlying}…`}
             </p>
             {status.type === 'loading' && status.attempt > 0 && (
               <p className="text-fw-text-muted text-[11px]">Retrying{attemptLabel}</p>
             )}
           </div>
 
-        /* ── Error / no contracts found ── */
         ) : errorMessage ? (
           <div className="flex flex-col items-center justify-center h-full gap-3 px-4 text-center">
             <span className="text-[28px]">⛓</span>
             <p className="text-[13px] text-fw-text-secondary font-semibold">Option Chain Unavailable</p>
             <p className="text-[12px] text-fw-text-muted max-w-[260px]">{errorMessage}</p>
-            <button
-              onClick={handleManualRetry}
-              className="px-4 py-1.5 text-[12px] font-semibold bg-fw-accent text-white rounded hover:brightness-110 transition-all"
-            >
-              Retry Now
-            </button>
+            <button onClick={handleManualRetry} className="px-4 py-1.5 text-[12px] font-semibold bg-fw-accent text-white rounded hover:brightness-110 transition-all">Retry Now</button>
           </div>
 
-        /* ── Data table ── */
         ) : (
-          <table className="w-full border-collapse">
-            <thead className="sticky top-0 bg-fw-surface z-10">
-              <tr className="border-b border-fw-border text-[11px] text-fw-text-secondary uppercase">
-                <th className="px-1 py-1 text-center">B/S</th>
-                <th className="px-1 py-1 text-right">OI</th>
-                <th className="px-1 py-1 text-right">Vol</th>
-                <th className="px-1 py-1 text-right">LTP</th>
-                <th className="px-1.5 py-1 text-center bg-fw-bg font-bold text-fw-text border-x border-fw-border">STRIKE</th>
-                <th className="px-1 py-1 text-left">LTP</th>
-                <th className="px-1 py-1 text-left">Vol</th>
-                <th className="px-1 py-1 text-left">OI</th>
-                <th className="px-1 py-1 text-center">B/S</th>
+          /* ── Professional Option Chain Table ── */
+          <table className="w-full border-collapse text-[12px]">
+            <thead className="sticky top-0 z-10">
+              <tr className="bg-[#0e1018]">
+                {viewMode !== 'pe' && (
+                  <>
+                    <th colSpan={5} className="py-1.5 text-center text-[11px] font-bold text-emerald-400 uppercase tracking-wider border-b border-fw-border bg-emerald-500/[0.03]">
+                      CALLS
+                    </th>
+                  </>
+                )}
+                <th className="py-1.5 text-center text-[11px] font-bold text-fw-text uppercase tracking-wider border-b border-fw-border bg-[#12141e]">
+                  STRIKE
+                </th>
+                {viewMode !== 'ce' && (
+                  <>
+                    <th colSpan={5} className="py-1.5 text-center text-[11px] font-bold text-red-400 uppercase tracking-wider border-b border-fw-border bg-red-500/[0.03]">
+                      PUTS
+                    </th>
+                  </>
+                )}
+              </tr>
+              <tr className="bg-[#0c0e16] border-b border-fw-border text-[10px] text-fw-text-secondary uppercase font-semibold">
+                {viewMode !== 'pe' && (
+                  <>
+                    <th className="px-1.5 py-1 text-center w-[28px]">B/S</th>
+                    <th className="px-1.5 py-1 text-right">OI</th>
+                    <th className="px-1.5 py-1 text-right">OI Chg</th>
+                    <th className="px-1.5 py-1 text-right">Volume</th>
+                    <th className="px-1.5 py-1 text-right">LTP</th>
+                  </>
+                )}
+                <th className="px-2 py-1 text-center bg-[#12141e] border-x border-fw-border/50">Strike ▲</th>
+                {viewMode !== 'ce' && (
+                  <>
+                    <th className="px-1.5 py-1 text-left">LTP</th>
+                    <th className="px-1.5 py-1 text-left">Volume</th>
+                    <th className="px-1.5 py-1 text-left">OI Chg</th>
+                    <th className="px-1.5 py-1 text-left">OI</th>
+                    <th className="px-1.5 py-1 text-center w-[28px]">B/S</th>
+                  </>
+                )}
               </tr>
             </thead>
             <tbody>
               {filteredChain.map((e) => {
-                const isAtm = spotPrice > 0 && Math.abs(e.strike - spotPrice) <= 50;
+                const isAtm = e.strike === atmStrike;
+                const isItmCall = spotPrice > 0 && e.strike < spotPrice;
+                const isItmPut  = spotPrice > 0 && e.strike > spotPrice;
                 const isSelCE = selectedContract?.strike === e.strike && selectedContract?.optionType === 'CE';
                 const isSelPE = selectedContract?.strike === e.strike && selectedContract?.optionType === 'PE';
+
+                const callOiPct = maxOi > 0 ? (e.callOi / maxOi) * 100 : 0;
+                const putOiPct  = maxOi > 0 ? (e.putOi / maxOi) * 100 : 0;
+
                 return (
                   <tr
                     key={e.strike}
                     className={cn(
-                      'border-b border-fw-border/20 hover:bg-fw-hover/40',
-                      isAtm && 'bg-fw-accent/[0.04]',
-                      (isSelCE || isSelPE) && 'bg-fw-accent/[0.10] border-l-2 border-l-fw-accent',
+                      'border-b border-fw-border/10 transition-colors group',
+                      isAtm && 'bg-fw-accent/[0.06] border-y border-fw-accent/30',
+                      !isAtm && 'hover:bg-fw-hover/20',
                     )}
                   >
-                    {/* CALL side */}
-                    <td className="px-0.5 py-[3px] text-center">
-                      <button onClick={() => { handleStrikeClick(e.strike, 'CE', e.callLtp); setOrderForm({ side: 'BUY' }); }} className="text-[9px] text-green-400 font-bold hover:bg-green-900/30 px-1 rounded">B</button>
-                      <button onClick={() => { handleStrikeClick(e.strike, 'CE', e.callLtp); setOrderForm({ side: 'SELL' }); }} className="text-[9px] text-red-400 font-bold hover:bg-red-900/30 px-1 rounded">S</button>
+                    {/* ── CALL SIDE ── */}
+                    {viewMode !== 'pe' && (
+                      <>
+                        {/* B/S */}
+                        <td className="px-0.5 py-[5px] text-center">
+                          <div className="flex gap-px justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onClick={() => { handleStrikeClick(e.strike, 'CE', e.callLtp); setOrderForm({ side: 'BUY' }); }} className="text-[9px] text-emerald-400 font-bold hover:bg-emerald-900/40 px-1.5 py-0.5 rounded transition-colors">B</button>
+                            <button onClick={() => { handleStrikeClick(e.strike, 'CE', e.callLtp); setOrderForm({ side: 'SELL' }); }} className="text-[9px] text-red-400 font-bold hover:bg-red-900/40 px-1.5 py-0.5 rounded transition-colors">S</button>
+                          </div>
+                        </td>
+                        {/* OI with bar */}
+                        <td className={cn('px-1.5 py-[5px] text-right font-mono tabular-nums relative', isItmCall && 'bg-emerald-500/[0.03]')}>
+                          <div className="absolute inset-y-0 right-0 bg-emerald-500/[0.08] rounded-l" style={{ width: `${callOiPct}%` }} />
+                          <span className="relative z-10 text-fw-text-secondary">{formatNumber(e.callOi || 0)}</span>
+                        </td>
+                        {/* OI Change */}
+                        <td className={cn('px-1.5 py-[5px] text-right font-mono tabular-nums', isItmCall && 'bg-emerald-500/[0.03]')}>
+                          <span className={cn(
+                            (e.callOiChange || 0) > 0 ? 'text-emerald-400' : (e.callOiChange || 0) < 0 ? 'text-red-400' : 'text-fw-text-muted'
+                          )}>
+                            {(e.callOiChange || 0) > 0 ? '+' : ''}{((e.callOiChange || 0)).toFixed(2)}%
+                          </span>
+                        </td>
+                        {/* Volume */}
+                        <td className={cn('px-1.5 py-[5px] text-right font-mono tabular-nums text-fw-text-secondary', isItmCall && 'bg-emerald-500/[0.03]')}>
+                          {formatNumber(e.callVolume || 0)}
+                        </td>
+                        {/* LTP */}
+                        <td
+                          className={cn(
+                            'px-1.5 py-[5px] text-right font-mono tabular-nums font-semibold cursor-pointer hover:underline',
+                            isItmCall ? 'bg-emerald-500/[0.03]' : '',
+                            isSelCE ? 'text-fw-accent' : 'text-fw-text',
+                          )}
+                          onClick={() => handleStrikeClick(e.strike, 'CE', e.callLtp)}
+                        >
+                          {e.callLtp > 0 ? formatPrice(e.callLtp) : '—'}
+                        </td>
+                      </>
+                    )}
+
+                    {/* ── STRIKE CENTER ── */}
+                    <td className={cn(
+                      'px-2 py-[5px] text-center font-mono font-bold tabular-nums border-x border-fw-border/30',
+                      isAtm ? 'text-fw-accent bg-fw-accent/[0.08] text-[13px]' : 'text-fw-text bg-[#12141e] text-[12px]',
+                    )}>
+                      {isAtm && <span className="text-[8px] text-fw-accent/70 block leading-none mb-px">ATM</span>}
+                      {formatPrice(e.strike)}
                     </td>
-                    <td className="px-1 py-[3px] text-right font-mono tabular-nums text-fw-text-secondary">{formatNumber(e.callOi || 0)}</td>
-                    <td className="px-1 py-[3px] text-right font-mono tabular-nums text-fw-text-secondary">{formatNumber(e.callVolume || 0)}</td>
-                    <td className="px-1 py-[3px] text-right font-mono tabular-nums text-green-400 cursor-pointer hover:underline" onClick={() => handleStrikeClick(e.strike, 'CE', e.callLtp)}>
-                      {e.callLtp > 0 ? formatPrice(e.callLtp) : '—'}
-                    </td>
-                    {/* Strike column */}
-                    <td className={cn('px-1.5 py-[3px] text-center font-mono font-bold bg-fw-bg border-x border-fw-border tabular-nums text-[11px]', isAtm ? 'text-fw-accent' : 'text-fw-text')}>
-                      {e.strike}
-                    </td>
-                    {/* PUT side */}
-                    <td className="px-1 py-[3px] text-left font-mono tabular-nums text-red-400 cursor-pointer hover:underline" onClick={() => handleStrikeClick(e.strike, 'PE', e.putLtp)}>
-                      {e.putLtp > 0 ? formatPrice(e.putLtp) : '—'}
-                    </td>
-                    <td className="px-1 py-[3px] text-left font-mono tabular-nums text-fw-text-secondary">{formatNumber(e.putVolume || 0)}</td>
-                    <td className="px-1 py-[3px] text-left font-mono tabular-nums text-fw-text-secondary">{formatNumber(e.putOi || 0)}</td>
-                    <td className="px-0.5 py-[3px] text-center">
-                      <button onClick={() => { handleStrikeClick(e.strike, 'PE', e.putLtp); setOrderForm({ side: 'BUY' }); }} className="text-[9px] text-green-400 font-bold hover:bg-green-900/30 px-1 rounded">B</button>
-                      <button onClick={() => { handleStrikeClick(e.strike, 'PE', e.putLtp); setOrderForm({ side: 'SELL' }); }} className="text-[9px] text-red-400 font-bold hover:bg-red-900/30 px-1 rounded">S</button>
-                    </td>
+
+                    {/* ── PUT SIDE ── */}
+                    {viewMode !== 'ce' && (
+                      <>
+                        {/* LTP */}
+                        <td
+                          className={cn(
+                            'px-1.5 py-[5px] text-left font-mono tabular-nums font-semibold cursor-pointer hover:underline',
+                            isItmPut ? 'bg-red-500/[0.03]' : '',
+                            isSelPE ? 'text-fw-accent' : 'text-fw-text',
+                          )}
+                          onClick={() => handleStrikeClick(e.strike, 'PE', e.putLtp)}
+                        >
+                          {e.putLtp > 0 ? formatPrice(e.putLtp) : '—'}
+                        </td>
+                        {/* Volume */}
+                        <td className={cn('px-1.5 py-[5px] text-left font-mono tabular-nums text-fw-text-secondary', isItmPut && 'bg-red-500/[0.03]')}>
+                          {formatNumber(e.putVolume || 0)}
+                        </td>
+                        {/* OI Change */}
+                        <td className={cn('px-1.5 py-[5px] text-left font-mono tabular-nums', isItmPut && 'bg-red-500/[0.03]')}>
+                          <span className={cn(
+                            (e.putOiChange || 0) > 0 ? 'text-emerald-400' : (e.putOiChange || 0) < 0 ? 'text-red-400' : 'text-fw-text-muted'
+                          )}>
+                            {(e.putOiChange || 0) > 0 ? '+' : ''}{((e.putOiChange || 0)).toFixed(2)}%
+                          </span>
+                        </td>
+                        {/* OI with bar */}
+                        <td className={cn('px-1.5 py-[5px] text-left font-mono tabular-nums relative', isItmPut && 'bg-red-500/[0.03]')}>
+                          <div className="absolute inset-y-0 left-0 bg-red-500/[0.08] rounded-r" style={{ width: `${putOiPct}%` }} />
+                          <span className="relative z-10 text-fw-text-secondary">{formatNumber(e.putOi || 0)}</span>
+                        </td>
+                        {/* B/S */}
+                        <td className="px-0.5 py-[5px] text-center">
+                          <div className="flex gap-px justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onClick={() => { handleStrikeClick(e.strike, 'PE', e.putLtp); setOrderForm({ side: 'BUY' }); }} className="text-[9px] text-emerald-400 font-bold hover:bg-emerald-900/40 px-1.5 py-0.5 rounded transition-colors">B</button>
+                            <button onClick={() => { handleStrikeClick(e.strike, 'PE', e.putLtp); setOrderForm({ side: 'SELL' }); }} className="text-[9px] text-red-400 font-bold hover:bg-red-900/40 px-1.5 py-0.5 rounded transition-colors">S</button>
+                          </div>
+                        </td>
+                      </>
+                    )}
                   </tr>
                 );
               })}
