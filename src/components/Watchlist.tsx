@@ -1075,7 +1075,7 @@ export function Watchlist() {
   const inlineInputRef = useRef<HTMLInputElement>(null);
 
   const currentWlId = activeWatchlistTab || activeWorkspace;
-  const activeWatchlist = watchlists.find(wl => wl.id === currentWlId);
+  const activeWatchlist = watchlists.find(wl => wl.id === currentWlId || wl.name.toLowerCase() === currentWlId);
 
   // Close seg-filter dropdown on outside click
   useEffect(() => {
@@ -1272,28 +1272,32 @@ export function Watchlist() {
       {/* -- WATCHLIST TABS � preserved exactly, shown only in watchlist mode -- */}
       {(panelMode === 'watchlist') && (
         <div className="flex items-center border-b border-fw-border overflow-x-auto flex-shrink-0 scrollbar-none bg-[#090b10] px-1">
-          {watchlists.map(wl => (
+          {watchlists.map(wl => {
+            const wlKey = wl.name.toLowerCase();
+            const isActive = currentWlId === wl.id || currentWlId === wlKey;
+            return (
             <button
               key={wl.id}
               onClick={() => {
-                setActiveWatchlistTab(wl.id);
+                setActiveWatchlistTab(wlKey);
                 // Sync workspace if this tab matches a chart workspace
                 const chartWorkspaces = ['index', 'stocks', 'futures', 'options', 'mcx', 'cds'];
-                if (chartWorkspaces.includes(wl.id) && activeWorkspace !== wl.id) {
-                  useAppStore.getState().setActiveWorkspace(wl.id as any);
+                if (chartWorkspaces.includes(wlKey) && activeWorkspace !== wlKey) {
+                  useAppStore.getState().setActiveWorkspace(wlKey as any);
                 }
               }}
               className={cn(
                 'px-2.5 py-1.5 text-[10px] font-bold whitespace-nowrap border-b-2 transition-all flex-shrink-0 uppercase tracking-widest',
-                currentWlId === wl.id
+                isActive
                   ? 'text-fw-text border-current bg-white/[0.02]'
                   : 'text-fw-text-muted border-transparent hover:text-fw-text-secondary hover:bg-fw-hover/20',
               )}
-              style={currentWlId === wl.id ? { color: wl.color, borderColor: wl.color } : undefined}
+              style={isActive ? { color: wl.color, borderColor: wl.color } : undefined}
             >
               {wl.name}
             </button>
-          ))}
+            );
+          })}
           {/* Import + Add buttons */}
           <div className="ml-auto flex items-center gap-0.5 flex-shrink-0 pr-1">
             <button
