@@ -6,7 +6,7 @@
 import { useMemo } from 'react';
 import {
   TrendingUp, TrendingDown, Activity, Target, AlertTriangle,
-  BarChart3, DollarSign, Layers, Zap, ArrowUpRight, ArrowDownRight,
+  BarChart3, DollarSign, Layers, Zap,
 } from 'lucide-react';
 import { useAppStore, type Workspace } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
@@ -83,18 +83,127 @@ function IndexTile({ token, symbol, onClick }: { token: string; symbol: string; 
   );
 }
 
-// ── Market segment button ─────────────────────────────────────────────────────
-function SegmentBtn({ ws, label, color }: { ws: Workspace; label: string; color: string }) {
-  const setActiveWorkspace = useAppStore((s) => s.setActiveWorkspace);
+// ── Market category card with colorful SVG icon ──────────────────────────────
+function CategoryCard({ ws, label, icon, accentColor }: { ws: Workspace; label: string; icon: React.ReactNode; accentColor: string }) {
+  const { activeWorkspace, setActiveWorkspace } = useAppStore();
+  const active = activeWorkspace === ws;
   return (
     <button
       onClick={() => setActiveWorkspace(ws)}
-      className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-fw-border/40 hover:border-fw-accent/50 bg-[#0d0f18] hover:bg-fw-hover/40 text-[13px] font-bold text-fw-text-secondary hover:text-fw-text transition-all uppercase tracking-wider"
-      style={{ borderLeftColor: color, borderLeftWidth: 2 }}
+      className={cn(
+        'flex-1 flex items-center gap-3 px-3 py-2 rounded-md border transition-all duration-150',
+        'h-[58px] min-h-[58px] max-h-[58px]',
+        active
+          ? 'border-opacity-60 bg-opacity-10'
+          : 'border-[rgba(120,140,170,0.28)] bg-[rgba(15,20,32,0.90)] hover:bg-[rgba(25,30,45,0.95)] hover:-translate-y-[1px] hover:border-[rgba(120,140,170,0.45)]'
+      )}
+      style={active ? { borderColor: accentColor, backgroundColor: `${accentColor}10` } : undefined}
     >
-      {label}
-      <ArrowUpRight size={11} className="text-fw-accent/60" />
+      <div className="flex-shrink-0 w-[28px] h-[28px]">{icon}</div>
+      <div className="flex flex-col items-start leading-tight">
+        <span className={cn('text-[13px] font-semibold', active ? 'text-white' : 'text-[#F1F5F9]')}>{label}</span>
+        <span className="text-[10px] font-medium text-[#94A3B8]">Explore ↗</span>
+      </div>
     </button>
+  );
+}
+
+// ── SVG Icons for categories ──────────────────────────────────────────────────
+function IndexIcon() {
+  return (
+    <svg viewBox="0 0 32 32" width="28" height="28" fill="none" strokeLinecap="round" strokeLinejoin="round">
+      <defs>
+        <linearGradient id="idxG1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#22D3EE" /><stop offset="100%" stopColor="#3B82F6" /></linearGradient>
+        <linearGradient id="idxG2" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stopColor="#10B981" /><stop offset="100%" stopColor="#34D399" /></linearGradient>
+      </defs>
+      <circle cx="16" cy="16" r="13" fill="url(#idxG1)" opacity="0.15" />
+      <rect x="6" y="20" width="4" height="6" rx="1" fill="url(#idxG1)" />
+      <rect x="12" y="15" width="4" height="11" rx="1" fill="url(#idxG1)" />
+      <rect x="18" y="11" width="4" height="15" rx="1" fill="url(#idxG2)" />
+      <rect x="24" y="7" width="4" height="19" rx="1" fill="url(#idxG2)" />
+      <path d="M6 14 L12 10 L18 6 L26 4" stroke="#34D399" strokeWidth="1.5" fill="none" opacity="0.9" />
+      <circle cx="26" cy="4" r="1.5" fill="#34D399" />
+    </svg>
+  );
+}
+
+function StocksIcon() {
+  return (
+    <svg viewBox="0 0 32 32" width="28" height="28" fill="none" strokeLinecap="round" strokeLinejoin="round">
+      <defs>
+        <linearGradient id="stkG1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#14B8A6" /><stop offset="100%" stopColor="#06B6D4" /></linearGradient>
+        <linearGradient id="stkG2" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stopColor="#10B981" /><stop offset="100%" stopColor="#6EE7B7" /></linearGradient>
+      </defs>
+      <rect x="5" y="10" width="10" height="16" rx="2" fill="url(#stkG1)" opacity="0.85" />
+      <rect x="17" y="6" width="10" height="20" rx="2" fill="url(#stkG1)" opacity="0.6" />
+      <path d="M8 16 L12 12 L16 14 L20 8 L24 10" stroke="url(#stkG2)" strokeWidth="2" fill="none" />
+      <polygon points="24,6 28,10 24,10" fill="#6EE7B7" />
+    </svg>
+  );
+}
+
+function OptionsIcon() {
+  return (
+    <svg viewBox="0 0 32 32" width="28" height="28" fill="none" strokeLinecap="round" strokeLinejoin="round">
+      <defs>
+        <linearGradient id="optG1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#A78BFA" /><stop offset="100%" stopColor="#7C3AED" /></linearGradient>
+        <linearGradient id="optG2" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#C084FC" /><stop offset="100%" stopColor="#22D3EE" /></linearGradient>
+      </defs>
+      <rect x="4" y="12" width="16" height="12" rx="2" fill="url(#optG1)" opacity="0.5" />
+      <rect x="8" y="8" width="16" height="12" rx="2" fill="url(#optG1)" opacity="0.7" />
+      <rect x="12" y="4" width="16" height="12" rx="2" fill="url(#optG2)" opacity="0.9" />
+      <path d="M16 8 L20 6 L24 9" stroke="#E9D5FF" strokeWidth="1.5" opacity="0.8" />
+      <circle cx="22" cy="10" r="2" fill="#C084FC" opacity="0.9" />
+    </svg>
+  );
+}
+
+function FuturesIcon() {
+  return (
+    <svg viewBox="0 0 32 32" width="28" height="28" fill="none" strokeLinecap="round" strokeLinejoin="round">
+      <defs>
+        <linearGradient id="futG1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#F97316" /><stop offset="100%" stopColor="#FBBF24" /></linearGradient>
+        <linearGradient id="futG2" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#3B82F6" /><stop offset="100%" stopColor="#60A5FA" /></linearGradient>
+      </defs>
+      <circle cx="16" cy="16" r="12" fill="url(#futG2)" opacity="0.12" />
+      <path d="M6 22 L12 18 L16 20 L22 12 L28 8" stroke="url(#futG1)" strokeWidth="2.5" fill="none" />
+      <polygon points="28,5 28,11 22,11" fill="url(#futG1)" opacity="0.8" />
+      <circle cx="12" cy="18" r="2" fill="#FBBF24" opacity="0.7" />
+      <circle cx="22" cy="12" r="2" fill="#F97316" opacity="0.9" />
+    </svg>
+  );
+}
+
+function McxIcon() {
+  return (
+    <svg viewBox="0 0 32 32" width="28" height="28" fill="none" strokeLinecap="round" strokeLinejoin="round">
+      <defs>
+        <linearGradient id="mcxG1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#F59E0B" /><stop offset="100%" stopColor="#D97706" /></linearGradient>
+        <linearGradient id="mcxG2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#FDE68A" /><stop offset="100%" stopColor="#F59E0B" /></linearGradient>
+      </defs>
+      <circle cx="16" cy="16" r="12" fill="url(#mcxG1)" opacity="0.2" />
+      <circle cx="16" cy="16" r="8" fill="url(#mcxG2)" opacity="0.7" />
+      <circle cx="16" cy="16" r="4" fill="#FDE68A" opacity="0.9" />
+      <path d="M10 26 L13 20 M22 26 L19 20" stroke="#D97706" strokeWidth="1.5" opacity="0.6" />
+      <path d="M16 4 L16 8" stroke="#FDE68A" strokeWidth="1.5" opacity="0.5" />
+    </svg>
+  );
+}
+
+function CdsIcon() {
+  return (
+    <svg viewBox="0 0 32 32" width="28" height="28" fill="none" strokeLinecap="round" strokeLinejoin="round">
+      <defs>
+        <linearGradient id="cdsG1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#06B6D4" /><stop offset="100%" stopColor="#14B8A6" /></linearGradient>
+        <linearGradient id="cdsG2" x1="1" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#22D3EE" /><stop offset="100%" stopColor="#10B981" /></linearGradient>
+      </defs>
+      <circle cx="12" cy="16" r="8" fill="url(#cdsG1)" opacity="0.3" />
+      <circle cx="20" cy="16" r="8" fill="url(#cdsG2)" opacity="0.3" />
+      <text x="10" y="18" fontSize="8" fontWeight="bold" fill="#22D3EE" opacity="0.9">$</text>
+      <text x="19" y="18" fontSize="8" fontWeight="bold" fill="#10B981" opacity="0.9">₹</text>
+      <path d="M14 10 L18 10 M14 22 L18 22" stroke="#06B6D4" strokeWidth="1.2" opacity="0.5" />
+      <path d="M16 7 L16 9 M16 23 L16 25" stroke="#14B8A6" strokeWidth="1.2" opacity="0.4" />
+    </svg>
   );
 }
 
@@ -237,14 +346,14 @@ export function HomeDashboard() {
               />
             ))}
           </div>
-          {/* Segment buttons */}
-          <div className="flex flex-wrap gap-2 mt-1">
-            <SegmentBtn ws="index"   label="INDEX"   color="#2962ff" />
-            <SegmentBtn ws="stocks"  label="STOCKS"  color="#26a69a" />
-            <SegmentBtn ws="options" label="OPTIONS" color="#ab47bc" />
-            <SegmentBtn ws="futures" label="FUTURES" color="#ff9800" />
-            <SegmentBtn ws="mcx"    label="MCX"     color="#f59e0b" />
-            <SegmentBtn ws="cds"    label="CDS"     color="#06b6d4" />
+          {/* Category cards */}
+          <div className="flex gap-2 mt-2">
+            <CategoryCard ws="index"   label="INDEX"   accentColor="#3B82F6" icon={<IndexIcon />} />
+            <CategoryCard ws="stocks"  label="STOCKS"  accentColor="#14B8A6" icon={<StocksIcon />} />
+            <CategoryCard ws="options" label="OPTIONS" accentColor="#7C3AED" icon={<OptionsIcon />} />
+            <CategoryCard ws="futures" label="FUTURES" accentColor="#F97316" icon={<FuturesIcon />} />
+            <CategoryCard ws="mcx"     label="MCX"     accentColor="#F59E0B" icon={<McxIcon />} />
+            <CategoryCard ws="cds"     label="CDS"     accentColor="#06B6D4" icon={<CdsIcon />} />
           </div>
         </div>
       </section>
