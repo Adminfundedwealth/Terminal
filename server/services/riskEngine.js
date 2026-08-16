@@ -772,7 +772,7 @@ export class RiskEngine {
       return { allowed: false, reason: `Leverage limit exceeded: ${currentLeverage.toFixed(1)}x > max ${maxMultiplier}x` };
     }
     return { allowed: true };
-  }}
+  }
 
   // === Daily Profit Cap (Kill-Switch) ===
 
