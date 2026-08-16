@@ -274,11 +274,11 @@ export function HomeDashboard() {
   );
 
   const gainers = useMemo(
-    () => [...quoted].sort((a, b) => (quotes[b.token]?.changePercent ?? 0) - (quotes[a.token]?.changePercent ?? 0)).slice(0, 8),
+    () => [...quoted].sort((a, b) => (quotes[b.token]?.changePercent ?? 0) - (quotes[a.token]?.changePercent ?? 0)).slice(0, 10),
     [quoted, quotes]
   );
   const losers = useMemo(
-    () => [...quoted].sort((a, b) => (quotes[a.token]?.changePercent ?? 0) - (quotes[b.token]?.changePercent ?? 0)).slice(0, 8),
+    () => [...quoted].sort((a, b) => (quotes[a.token]?.changePercent ?? 0) - (quotes[b.token]?.changePercent ?? 0)).slice(0, 10),
     [quoted, quotes]
   );
 
@@ -359,75 +359,57 @@ export function HomeDashboard() {
       </section>
 
       {/* ── MARKET MOVERS + TRENDING / INSIGHTS ────────────────────────── */}
-      <div className="flex gap-3">
+      <section>
+        <SectionTitle>Market Movers</SectionTitle>
+        <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
 
-        {/* Market Movers */}
-        <section className="flex-1 min-w-0">
-          <SectionTitle>Market Movers</SectionTitle>
-          <div className="flex gap-3">
-            {/* Gainers */}
-            <div className="flex-1 bg-[#0d0f18] border border-fw-border/40 rounded overflow-hidden">
-              <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-fw-border/30 bg-emerald-900/10">
-                <TrendingUp size={11} className="text-emerald-400" />
-                <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">Top Gainers</span>
-              </div>
-              <div>
-                {gainers.length === 0 ? (
-                  <p className="px-3 py-4 text-[12px] text-fw-text-muted/50">Waiting for live data…</p>
-                ) : (
-                  gainers.map((item, i) => (
-                    <MoverRow key={item.token} token={item.token} symbol={item.symbol} rank={i + 1} />
-                  ))
-                )}
-              </div>
+          {/* Top Gainers */}
+          <div className="bg-[#0d0f18] border border-fw-border/40 rounded overflow-hidden">
+            <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-fw-border/30 bg-emerald-900/10">
+              <TrendingUp size={11} className="text-emerald-400" />
+              <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">Top Gainers</span>
             </div>
-            {/* Losers */}
-            <div className="flex-1 bg-[#0d0f18] border border-fw-border/40 rounded overflow-hidden">
-              <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-fw-border/30 bg-red-900/10">
-                <TrendingDown size={11} className="text-red-400" />
-                <span className="text-[11px] font-bold uppercase tracking-wider text-red-400">Top Losers</span>
-              </div>
-              <div>
-                {losers.length === 0 ? (
-                  <p className="px-3 py-4 text-[12px] text-fw-text-muted/50">Waiting for live data…</p>
-                ) : (
-                  losers.map((item, i) => (
-                    <MoverRow key={item.token} token={item.token} symbol={item.symbol} rank={i + 1} />
-                  ))
-                )}
-              </div>
-            </div>
+            {gainers.length === 0 ? (
+              <p className="px-3 py-4 text-[12px] text-fw-text-muted/50">Waiting for live data…</p>
+            ) : (
+              gainers.map((item, i) => (
+                <MoverRow key={item.token} token={item.token} symbol={item.symbol} rank={i + 1} />
+              ))
+            )}
           </div>
-        </section>
 
-        {/* Trending / Insights */}
-        <section className="w-[280px] flex-shrink-0">
-          <SectionTitle>Trending / Insights</SectionTitle>
-          <div className="bg-[#0d0f18] border border-fw-border/40 rounded overflow-hidden flex flex-col">
-            {/* Most Traded */}
+          {/* Top Losers */}
+          <div className="bg-[#0d0f18] border border-fw-border/40 rounded overflow-hidden">
+            <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-fw-border/30 bg-red-900/10">
+              <TrendingDown size={11} className="text-red-400" />
+              <span className="text-[11px] font-bold uppercase tracking-wider text-red-400">Top Losers</span>
+            </div>
+            {losers.length === 0 ? (
+              <p className="px-3 py-4 text-[12px] text-fw-text-muted/50">Waiting for live data…</p>
+            ) : (
+              losers.map((item, i) => (
+                <MoverRow key={item.token} token={item.token} symbol={item.symbol} rank={i + 1} />
+              ))
+            )}
+          </div>
+
+          {/* Most Traded */}
+          <div className="bg-[#0d0f18] border border-fw-border/40 rounded overflow-hidden">
             <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-fw-border/30 bg-fw-accent/5">
               <BarChart3 size={11} className="text-fw-accent" />
               <span className="text-[11px] font-bold uppercase tracking-wider text-fw-accent/80">Most Traded</span>
             </div>
-            <div>
-              {quoted.slice(0, 10).map((item, i) => (
+            {quoted.length === 0 ? (
+              <p className="px-3 py-4 text-[12px] text-fw-text-muted/50">Waiting for live data…</p>
+            ) : (
+              quoted.slice(0, 10).map((item, i) => (
                 <MoverRow key={item.token} token={item.token} symbol={item.symbol} rank={i + 1} />
-              ))}
-              {quoted.length === 0 && (
-                <p className="px-3 py-4 text-[12px] text-fw-text-muted/50">Waiting for live data…</p>
-              )}
-            </div>
-            {/* Open positions quick view */}
-            {openCount > 0 && (
-              <>
-                <div className="flex items-center gap-1.5 px-2 py-1.5 border-t border-fw-border/30 bg-fw-hover/20">
-                  <Zap size={11} className="text-yellow-400" />
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-yellow-400">Open Positions</span>
-                </div>
-                <div className="overflow-y-auto max-h-[120px]">
-                  {positions.filter(p => p.qty !== 0).slice(0, 5).map((p) => {
-                    const pnl = p.pnl || p.mtm || 0;
-                    return (
+              ))
+            )}
+          </div>
+
+        </div>
+      </section>
                       <div key={p.positionId || p.symbol} className="flex items-center gap-2 px-2 py-1.5 hover:bg-fw-hover/20 rounded mx-1 transition-colors">
                         <span className={cn('text-[10px] font-bold px-1 rounded', p.side === 'BUY' ? 'bg-emerald-900/40 text-emerald-400' : 'bg-red-900/40 text-red-400')}>
                           {p.side === 'BUY' ? 'L' : 'S'}
@@ -440,11 +422,6 @@ export function HomeDashboard() {
                     );
                   })}
                 </div>
-              </>
-            )}
-          </div>
-        </section>
-      </div>
     </div>
   );
 }
