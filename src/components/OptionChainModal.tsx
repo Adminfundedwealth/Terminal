@@ -615,45 +615,41 @@ export function OptionChainModal() {
 
         ) : (
           /* ── Professional Option Chain Table ── */
-          <table className="w-full border-collapse text-[12px]">
+          <table className="w-full border-collapse" style={{ fontSize: '13px' }}>
             <thead className="sticky top-0 z-10">
               <tr className="bg-[#0e1018]">
                 {viewMode !== 'pe' && (
-                  <>
-                    <th colSpan={5} className="py-1.5 text-center text-[11px] font-bold text-emerald-400 uppercase tracking-wider border-b border-fw-border bg-emerald-500/[0.03]">
-                      CALLS
-                    </th>
-                  </>
+                  <th colSpan={5} className="py-2 text-center text-[11px] font-bold text-emerald-400 uppercase tracking-widest border-b border-emerald-500/20 bg-emerald-500/[0.04]">
+                    CALLS
+                  </th>
                 )}
-                <th className="py-1.5 text-center text-[11px] font-bold text-fw-text uppercase tracking-wider border-b border-fw-border bg-[#12141e]">
+                <th className="py-2 text-center text-[12px] font-bold text-fw-text uppercase tracking-widest border-b border-fw-border bg-[#14161f] border-x border-fw-border/60">
                   STRIKE
                 </th>
                 {viewMode !== 'ce' && (
-                  <>
-                    <th colSpan={5} className="py-1.5 text-center text-[11px] font-bold text-red-400 uppercase tracking-wider border-b border-fw-border bg-red-500/[0.03]">
-                      PUTS
-                    </th>
-                  </>
+                  <th colSpan={5} className="py-2 text-center text-[11px] font-bold text-red-400 uppercase tracking-widest border-b border-red-500/20 bg-red-500/[0.04]">
+                    PUTS
+                  </th>
                 )}
               </tr>
-              <tr className="bg-[#0c0e16] border-b border-fw-border text-[10px] text-fw-text-secondary uppercase font-semibold">
+              <tr className="bg-[#0c0e16] border-b-2 border-fw-border text-[11px] text-fw-text-secondary uppercase font-semibold">
                 {viewMode !== 'pe' && (
                   <>
-                    <th className="px-1.5 py-1 text-center w-[28px]">B/S</th>
-                    <th className="px-1.5 py-1 text-right">OI</th>
-                    <th className="px-1.5 py-1 text-right">OI Chg</th>
-                    <th className="px-1.5 py-1 text-right">Volume</th>
-                    <th className="px-1.5 py-1 text-right">LTP</th>
+                    <th className="px-2 py-1.5 text-center w-[36px]">B/S</th>
+                    <th className="px-3 py-1.5 text-right min-w-[72px]">OI</th>
+                    <th className="px-3 py-1.5 text-right min-w-[64px]">OI Chg</th>
+                    <th className="px-3 py-1.5 text-right min-w-[68px]">Volume</th>
+                    <th className="px-3 py-1.5 text-right min-w-[72px]">LTP</th>
                   </>
                 )}
-                <th className="px-2 py-1 text-center bg-[#12141e] border-x border-fw-border/50">Strike ▲</th>
+                <th className="px-4 py-1.5 text-center min-w-[80px] bg-[#14161f] border-x border-fw-border/60 text-fw-text">Strike</th>
                 {viewMode !== 'ce' && (
                   <>
-                    <th className="px-1.5 py-1 text-left">LTP</th>
-                    <th className="px-1.5 py-1 text-left">Volume</th>
-                    <th className="px-1.5 py-1 text-left">OI Chg</th>
-                    <th className="px-1.5 py-1 text-left">OI</th>
-                    <th className="px-1.5 py-1 text-center w-[28px]">B/S</th>
+                    <th className="px-3 py-1.5 text-left min-w-[72px]">LTP</th>
+                    <th className="px-3 py-1.5 text-left min-w-[68px]">Volume</th>
+                    <th className="px-3 py-1.5 text-left min-w-[64px]">OI Chg</th>
+                    <th className="px-3 py-1.5 text-left min-w-[72px]">OI</th>
+                    <th className="px-2 py-1.5 text-center w-[36px]">B/S</th>
                   </>
                 )}
               </tr>
@@ -669,48 +665,59 @@ export function OptionChainModal() {
                 const callOiPct = maxOi > 0 ? (e.callOi / maxOi) * 100 : 0;
                 const putOiPct  = maxOi > 0 ? (e.putOi / maxOi) * 100 : 0;
 
+                const callOiChg = e.callOiChange || 0;
+                const putOiChg  = e.putOiChange  || 0;
+
                 return (
                   <tr
                     key={e.strike}
                     className={cn(
-                      'border-b border-fw-border/10 transition-colors group',
-                      isAtm && 'bg-fw-accent/[0.06] border-y border-fw-accent/30',
-                      !isAtm && 'hover:bg-fw-hover/20',
+                      'border-b border-fw-border/20 transition-colors group',
+                      isAtm
+                        ? 'bg-fw-accent/[0.07] border-y-2 border-fw-accent/50'
+                        : isItmCall && viewMode !== 'pe'
+                          ? 'bg-emerald-500/[0.025] hover:bg-emerald-500/[0.05]'
+                          : isItmPut && viewMode !== 'ce'
+                            ? 'bg-red-500/[0.025] hover:bg-red-500/[0.05]'
+                            : 'hover:bg-fw-hover/30',
                     )}
                   >
                     {/* ── CALL SIDE ── */}
                     {viewMode !== 'pe' && (
                       <>
                         {/* B/S */}
-                        <td className="px-0.5 py-[5px] text-center">
-                          <div className="flex gap-px justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => { handleStrikeClick(e.strike, 'CE', e.callLtp); setOrderForm({ side: 'BUY' }); }} className="text-[9px] text-emerald-400 font-bold hover:bg-emerald-900/40 px-1.5 py-0.5 rounded transition-colors">B</button>
-                            <button onClick={() => { handleStrikeClick(e.strike, 'CE', e.callLtp); setOrderForm({ side: 'SELL' }); }} className="text-[9px] text-red-400 font-bold hover:bg-red-900/40 px-1.5 py-0.5 rounded transition-colors">S</button>
+                        <td className="px-1 py-[7px] text-center">
+                          <div className="flex gap-1 justify-center">
+                            <button
+                              onClick={() => { handleStrikeClick(e.strike, 'CE', e.callLtp); setOrderForm({ side: 'BUY' }); }}
+                              className="text-[10px] text-emerald-400 font-bold bg-emerald-900/20 hover:bg-emerald-900/50 px-1.5 py-0.5 rounded transition-colors leading-none"
+                            >B</button>
+                            <button
+                              onClick={() => { handleStrikeClick(e.strike, 'CE', e.callLtp); setOrderForm({ side: 'SELL' }); }}
+                              className="text-[10px] text-red-400 font-bold bg-red-900/20 hover:bg-red-900/50 px-1.5 py-0.5 rounded transition-colors leading-none"
+                            >S</button>
                           </div>
                         </td>
                         {/* OI with bar */}
-                        <td className={cn('px-1.5 py-[5px] text-right font-mono tabular-nums relative', isItmCall && 'bg-emerald-500/[0.03]')}>
-                          <div className="absolute inset-y-0 right-0 bg-emerald-500/[0.08] rounded-l" style={{ width: `${callOiPct}%` }} />
-                          <span className="relative z-10 text-fw-text-secondary">{formatNumber(e.callOi || 0)}</span>
+                        <td className="px-3 py-[7px] text-right font-mono tabular-nums relative overflow-hidden">
+                          <div className="absolute inset-y-0 right-0 bg-emerald-500/[0.12]" style={{ width: `${callOiPct}%` }} />
+                          <span className={cn('relative z-10', isSelCE ? 'text-fw-accent' : 'text-fw-text')}>{formatNumber(e.callOi || 0)}</span>
                         </td>
                         {/* OI Change */}
-                        <td className={cn('px-1.5 py-[5px] text-right font-mono tabular-nums', isItmCall && 'bg-emerald-500/[0.03]')}>
-                          <span className={cn(
-                            (e.callOiChange || 0) > 0 ? 'text-emerald-400' : (e.callOiChange || 0) < 0 ? 'text-red-400' : 'text-fw-text-muted'
-                          )}>
-                            {(e.callOiChange || 0) > 0 ? '+' : ''}{((e.callOiChange || 0)).toFixed(2)}%
+                        <td className="px-3 py-[7px] text-right font-mono tabular-nums">
+                          <span className={cn('font-medium', callOiChg > 0 ? 'text-emerald-400' : callOiChg < 0 ? 'text-red-400' : 'text-fw-text-muted')}>
+                            {callOiChg > 0 ? '+' : ''}{callOiChg.toFixed(2)}%
                           </span>
                         </td>
                         {/* Volume */}
-                        <td className={cn('px-1.5 py-[5px] text-right font-mono tabular-nums text-fw-text-secondary', isItmCall && 'bg-emerald-500/[0.03]')}>
+                        <td className="px-3 py-[7px] text-right font-mono tabular-nums text-fw-text-secondary">
                           {formatNumber(e.callVolume || 0)}
                         </td>
                         {/* LTP */}
                         <td
                           className={cn(
-                            'px-1.5 py-[5px] text-right font-mono tabular-nums font-semibold cursor-pointer hover:underline',
-                            isItmCall ? 'bg-emerald-500/[0.03]' : '',
-                            isSelCE ? 'text-fw-accent' : 'text-fw-text',
+                            'px-3 py-[7px] text-right font-mono tabular-nums font-bold cursor-pointer hover:underline text-[13px]',
+                            isSelCE ? 'text-fw-accent' : e.callLtp > 0 ? 'text-fw-text' : 'text-fw-text-muted',
                           )}
                           onClick={() => handleStrikeClick(e.strike, 'CE', e.callLtp)}
                         >
@@ -721,10 +728,12 @@ export function OptionChainModal() {
 
                     {/* ── STRIKE CENTER ── */}
                     <td className={cn(
-                      'px-2 py-[5px] text-center font-mono font-bold tabular-nums border-x border-fw-border/30',
-                      isAtm ? 'text-fw-accent bg-fw-accent/[0.08] text-[13px]' : 'text-fw-text bg-[#12141e] text-[12px]',
+                      'px-4 py-[7px] text-center font-mono font-bold tabular-nums border-x border-fw-border/40 bg-[#14161f] whitespace-nowrap',
+                      isAtm ? 'text-fw-accent text-[14px]' : 'text-fw-text text-[13px]',
                     )}>
-                      {isAtm && <span className="text-[8px] text-fw-accent/70 block leading-none mb-px">ATM</span>}
+                      {isAtm && (
+                        <div className="text-[9px] font-extrabold tracking-widest text-fw-accent/80 uppercase leading-none mb-[3px]">ATM</div>
+                      )}
                       {formatPrice(e.strike)}
                     </td>
 
@@ -734,36 +743,39 @@ export function OptionChainModal() {
                         {/* LTP */}
                         <td
                           className={cn(
-                            'px-1.5 py-[5px] text-left font-mono tabular-nums font-semibold cursor-pointer hover:underline',
-                            isItmPut ? 'bg-red-500/[0.03]' : '',
-                            isSelPE ? 'text-fw-accent' : 'text-fw-text',
+                            'px-3 py-[7px] text-left font-mono tabular-nums font-bold cursor-pointer hover:underline text-[13px]',
+                            isSelPE ? 'text-fw-accent' : e.putLtp > 0 ? 'text-fw-text' : 'text-fw-text-muted',
                           )}
                           onClick={() => handleStrikeClick(e.strike, 'PE', e.putLtp)}
                         >
                           {e.putLtp > 0 ? formatPrice(e.putLtp) : '—'}
                         </td>
                         {/* Volume */}
-                        <td className={cn('px-1.5 py-[5px] text-left font-mono tabular-nums text-fw-text-secondary', isItmPut && 'bg-red-500/[0.03]')}>
+                        <td className="px-3 py-[7px] text-left font-mono tabular-nums text-fw-text-secondary">
                           {formatNumber(e.putVolume || 0)}
                         </td>
                         {/* OI Change */}
-                        <td className={cn('px-1.5 py-[5px] text-left font-mono tabular-nums', isItmPut && 'bg-red-500/[0.03]')}>
-                          <span className={cn(
-                            (e.putOiChange || 0) > 0 ? 'text-emerald-400' : (e.putOiChange || 0) < 0 ? 'text-red-400' : 'text-fw-text-muted'
-                          )}>
-                            {(e.putOiChange || 0) > 0 ? '+' : ''}{((e.putOiChange || 0)).toFixed(2)}%
+                        <td className="px-3 py-[7px] text-left font-mono tabular-nums">
+                          <span className={cn('font-medium', putOiChg > 0 ? 'text-emerald-400' : putOiChg < 0 ? 'text-red-400' : 'text-fw-text-muted')}>
+                            {putOiChg > 0 ? '+' : ''}{putOiChg.toFixed(2)}%
                           </span>
                         </td>
                         {/* OI with bar */}
-                        <td className={cn('px-1.5 py-[5px] text-left font-mono tabular-nums relative', isItmPut && 'bg-red-500/[0.03]')}>
-                          <div className="absolute inset-y-0 left-0 bg-red-500/[0.08] rounded-r" style={{ width: `${putOiPct}%` }} />
-                          <span className="relative z-10 text-fw-text-secondary">{formatNumber(e.putOi || 0)}</span>
+                        <td className="px-3 py-[7px] text-left font-mono tabular-nums relative overflow-hidden">
+                          <div className="absolute inset-y-0 left-0 bg-red-500/[0.12]" style={{ width: `${putOiPct}%` }} />
+                          <span className={cn('relative z-10', isSelPE ? 'text-fw-accent' : 'text-fw-text')}>{formatNumber(e.putOi || 0)}</span>
                         </td>
                         {/* B/S */}
-                        <td className="px-0.5 py-[5px] text-center">
-                          <div className="flex gap-px justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => { handleStrikeClick(e.strike, 'PE', e.putLtp); setOrderForm({ side: 'BUY' }); }} className="text-[9px] text-emerald-400 font-bold hover:bg-emerald-900/40 px-1.5 py-0.5 rounded transition-colors">B</button>
-                            <button onClick={() => { handleStrikeClick(e.strike, 'PE', e.putLtp); setOrderForm({ side: 'SELL' }); }} className="text-[9px] text-red-400 font-bold hover:bg-red-900/40 px-1.5 py-0.5 rounded transition-colors">S</button>
+                        <td className="px-1 py-[7px] text-center">
+                          <div className="flex gap-1 justify-center">
+                            <button
+                              onClick={() => { handleStrikeClick(e.strike, 'PE', e.putLtp); setOrderForm({ side: 'BUY' }); }}
+                              className="text-[10px] text-emerald-400 font-bold bg-emerald-900/20 hover:bg-emerald-900/50 px-1.5 py-0.5 rounded transition-colors leading-none"
+                            >B</button>
+                            <button
+                              onClick={() => { handleStrikeClick(e.strike, 'PE', e.putLtp); setOrderForm({ side: 'SELL' }); }}
+                              className="text-[10px] text-red-400 font-bold bg-red-900/20 hover:bg-red-900/50 px-1.5 py-0.5 rounded transition-colors leading-none"
+                            >S</button>
                           </div>
                         </td>
                       </>
