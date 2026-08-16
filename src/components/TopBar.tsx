@@ -8,18 +8,13 @@ import { AccountSelector } from './AccountSelector';
 const STORAGE_KEY = 'fundedwealth-terminal-theme';
 
 function applyThemeToDOM(theme: 'dark' | 'light') {
-  if (theme === 'light') {
-    document.documentElement.setAttribute('data-theme', 'light');
-  } else {
-    document.documentElement.removeAttribute('data-theme');
-  }
-  try { localStorage.setItem(STORAGE_KEY, theme); } catch {}
-}
-
-export function initStoredTheme() {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY) as 'dark' | 'light' | null;
-    if (stored === 'light') applyThemeToDOM('light');
+    if (theme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+    }
+    localStorage.setItem(STORAGE_KEY, theme);
   } catch {}
 }
 
