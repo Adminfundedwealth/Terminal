@@ -124,6 +124,48 @@ export function requireFounder(req, res, next) {
 }
 
 /**
+ * Combined auth for service-to-service calls from Admin OS.
+ * Accepts EITHER:
+ *   1. A valid x-admin-secret header matching TERMINAL_ADMIN_SECRET env var
+ *   2. A valid founder JWT (via requireAuth + requireFounder chain)
+ *
+ * When service secret is used, req.user is set to a synthetic service identity.
+ * Must be used in place of requireAuth + requireFounder for admin routes.
+ */
+export async function requireFounderOrAdminSecret(req, res, next) {
+  const adminSecret = process.env.TERMINAL_ADMIN_SECRET;
+
+  // Path 1: service-to-service secret (Admin OS → Terminal)
+  if (adminSecret && req.headers['x-admin-secret'] === adminSecret) {
+    // Attach synthetic service user — auditLogger will record 'admin-os-service'
+    // Use x-admin-id header if provided (Admin OS passes the staff member's ID)
+    const adminId = req.headers['x-admin-id'] || 'admin-os-service';
+    req.user = {
+      userId: adminId,
+      isService: true,
+      serviceClient: 'admin-os',
+    };
+    return next();
+  }
+
+  // Path 2: normal founder JWT — requires prior requireAuth call
+  if (!req.user) {
+    return res.status(401).json({ error: 'unauthorized', message: 'Authentication required' });
+  }
+
+  const founderIds = (process.env.FOUNDER_USER_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
+  if (founderIds.length === 0) {
+    return res.status(403).json({ error: 'forbidden', message: 'Founder access not configured.' });
+  }
+  if (!founderIds.includes(req.user.userId)) {
+    AuditLogger.authzFailure({ userId: req.user.userId, permission: 'founder', path: req.path });
+    return res.status(403).json({ error: 'forbidden', message: 'Founder authorization required.' });
+  }
+
+  next();
+}
+
+/**
  * Optional auth — does not reject if no token.
  * Attaches user if present, allows anonymous if not.
  * Use for public endpoints that benefit from user context.

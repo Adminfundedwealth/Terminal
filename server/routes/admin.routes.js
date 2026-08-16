@@ -19,7 +19,7 @@
  */
 
 import { Router } from 'express';
-import { requireAuth, requireFounder } from '../middleware/auth.js';
+import { requireAuth, requireFounder, requireFounderOrAdminSecret } from '../middleware/auth.js';
 import { AccountRepository } from '../repositories/account.repository.js';
 import { AuditLogger } from '../services/auditLogger.js';
 import { supabase } from '../db/client.js';
@@ -45,8 +45,17 @@ export function createAdminRouter() {
     res.json({ isFounder });
   });
 
-  // All remaining admin routes require auth + founder
-  router.use('/admin', requireAuth, requireFounder);
+  // All remaining admin routes require auth + founder (or Admin OS service secret)
+  // requireFounderOrAdminSecret accepts: valid x-admin-secret header OR founder JWT
+  router.use('/admin', (req, res, next) => {
+    const adminSecret = process.env.TERMINAL_ADMIN_SECRET;
+    // If service secret header is present, skip JWT auth entirely
+    if (adminSecret && req.headers['x-admin-secret'] === adminSecret) {
+      return next();
+    }
+    // Otherwise require standard JWT auth first
+    requireAuth(req, res, next);
+  }, requireFounderOrAdminSecret);
 
   // ─── List / search accounts ─────────────────────────────────────────────────
 
