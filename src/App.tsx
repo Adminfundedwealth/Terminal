@@ -235,7 +235,7 @@ export default function App() {
 
   const showOC = showOptionChain || activeWorkspace === 'options';
   const isHome     = activeWorkspace === 'home';
-  const isChartWs  = ['index', 'stocks', 'futures', 'options', 'mcx', 'cds'].includes(activeWorkspace);
+  const isChartWs  = ['index', 'stocks', 'futures', 'options', 'etf', 'mcx', 'cds'].includes(activeWorkspace);
   const isOrd      = activeWorkspace === 'ord';
   const isWl       = activeWorkspace === 'wl';
   const isDom      = activeWorkspace === 'dom';

@@ -243,7 +243,7 @@ export const useAppStore = create<AppState>()(
       setActiveWatchlistTab: (activeWatchlistTab) => set({ activeWatchlistTab }),
     }),
     {
-      name: 'fw-terminal-v6',
+      name: 'fw-terminal-v7',
       partialize: (state) => ({
         theme: state.theme,
         timeframe: state.timeframe,
