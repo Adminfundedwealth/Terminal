@@ -207,6 +207,27 @@ function CdsIcon() {
   );
 }
 
+function EtfIcon() {
+  return (
+    <svg viewBox="0 0 32 32" width="28" height="28" fill="none" strokeLinecap="round" strokeLinejoin="round">
+      <defs>
+        <linearGradient id="etfG1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#10B981" /><stop offset="100%" stopColor="#059669" /></linearGradient>
+        <linearGradient id="etfG2" x1="0" y1="1" x2="1" y2="0"><stop offset="0%" stopColor="#34D399" /><stop offset="100%" stopColor="#6EE7B7" /></linearGradient>
+      </defs>
+      {/* Basket/fund circle */}
+      <circle cx="16" cy="16" r="12" fill="url(#etfG1)" opacity="0.15" />
+      {/* Pie chart segments representing diversified holdings */}
+      <path d="M16 4 A12 12 0 0 1 28 16 L16 16 Z" fill="url(#etfG1)" opacity="0.75" />
+      <path d="M28 16 A12 12 0 0 1 10 27 L16 16 Z" fill="url(#etfG2)" opacity="0.75" />
+      <path d="M10 27 A12 12 0 0 1 4 16 L16 16 Z" fill="#059669" opacity="0.55" />
+      <path d="M4 16 A12 12 0 0 1 16 4 L16 16 Z" fill="#10B981" opacity="0.40" />
+      {/* Center circle */}
+      <circle cx="16" cy="16" r="4" fill="#ffffff" opacity="0.85" />
+      <circle cx="16" cy="16" r="2.5" fill="url(#etfG1)" />
+    </svg>
+  );
+}
+
 // ── Watchlist mover row ───────────────────────────────────────────────────────
 function MoverRow({ token, symbol, rank }: { token: string; symbol: string; rank: number }) {
   const q = useMarketStore((s) => s.quotes[token]);
@@ -352,6 +373,7 @@ export function HomeDashboard() {
             <CategoryCard ws="stocks"  label="STOCKS"  accentColor="#14B8A6" icon={<StocksIcon />} />
             <CategoryCard ws="options" label="OPTIONS" accentColor="#7C3AED" icon={<OptionsIcon />} />
             <CategoryCard ws="futures" label="FUTURES" accentColor="#F97316" icon={<FuturesIcon />} />
+            <CategoryCard ws="etf"     label="ETF"     accentColor="#10B981" icon={<EtfIcon />} />
             <CategoryCard ws="mcx"     label="MCX"     accentColor="#F59E0B" icon={<McxIcon />} />
             <CategoryCard ws="cds"     label="CDS"     accentColor="#06B6D4" icon={<CdsIcon />} />
           </div>

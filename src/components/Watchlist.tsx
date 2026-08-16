@@ -1281,7 +1281,7 @@ export function Watchlist() {
               onClick={() => {
                 setActiveWatchlistTab(wlKey);
                 // Sync workspace if this tab matches a chart workspace
-                const chartWorkspaces = ['index', 'stocks', 'futures', 'options', 'mcx', 'cds'];
+                const chartWorkspaces = ['index', 'stocks', 'futures', 'options', 'etf', 'mcx', 'cds'];
                 if (chartWorkspaces.includes(wlKey) && activeWorkspace !== wlKey) {
                   useAppStore.getState().setActiveWorkspace(wlKey as any);
                 }

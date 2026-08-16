@@ -1,5 +1,5 @@
 ﻿import React from 'react';
-import { Search, Bell, Home, BarChart3, TrendingUp, Activity, LineChart, Diamond, DollarSign, Sun, Moon } from 'lucide-react';
+import { Search, Bell, Home, BarChart3, TrendingUp, Activity, LineChart, Diamond, DollarSign, Sun, Moon, PieChart } from 'lucide-react';
 import { useAppStore, type Workspace } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
 import { cn } from '@/utils/helpers';
@@ -80,6 +80,7 @@ export function TopBar() {
           <NavLink ws="stocks"   label="STOCKS"   icon={<TrendingUp size={13} />} />
           <NavLink ws="options"  label="OPTION"   icon={<Activity size={13} />} />
           <NavLink ws="futures"  label="FUTURES"  icon={<LineChart size={13} />} />
+          <NavLink ws="etf"      label="ETF"      icon={<PieChart size={13} />} />
           <NavLink ws="mcx"      label="MCX"      icon={<Diamond size={13} />} />
           <NavLink ws="cds"      label="CDS"      icon={<DollarSign size={13} />} />
           <div className="w-px h-5 bg-fw-border/40 mx-1.5" />

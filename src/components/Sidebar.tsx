@@ -2,7 +2,6 @@
   LayoutDashboard, BarChart3, TrendingUp, LineChart, Activity, Diamond, DollarSign,
   Search, Bell, ScanLine, PieChart, BookOpen, Settings, Wifi, WifiOff, Bot, Users, User, LogOut, Home
 } from 'lucide-react';
-import { useAppStore, type Workspace } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
 import { cn } from '@/utils/helpers';
 import { useState } from 'react';
@@ -18,6 +17,7 @@ const WORKSPACES: { id: Workspace; icon: React.ReactNode; label: string; color: 
   { id: 'stocks',   icon: <TrendingUp size={18} />,  label: 'Stocks',   color: '#26a69a' },
   { id: 'futures',  icon: <LineChart size={18} />,   label: 'Futures',  color: '#ff9800' },
   { id: 'options',  icon: <Activity size={18} />,    label: 'Options',  color: '#ab47bc' },
+  { id: 'etf',      icon: <PieChart size={18} />,    label: 'ETF',      color: '#10b981' },
   { id: 'mcx',     icon: <Diamond size={18} />,     label: 'MCX',     color: '#f59e0b' },
   { id: 'cds',     icon: <DollarSign size={18} />,  label: 'CDS',     color: '#06b6d4' },
 ];

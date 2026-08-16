@@ -54,6 +54,18 @@ const defaultWatchlists = [
     ],
   },
   {
+    id: 'etf', name: 'ETF', color: '#10b981',
+    items: [
+      { token: '2150',  symbol: 'NIFTYBEES',  segment: 'NSE' },
+      { token: '15068', symbol: 'BANKBEES',   segment: 'NSE' },
+      { token: '13751', symbol: 'JUNIORBEES', segment: 'NSE' },
+      { token: '1660',  symbol: 'GOLDBEES',   segment: 'NSE' },
+      { token: '22536', symbol: 'SILVERBEES', segment: 'NSE' },
+      { token: '14428', symbol: 'ITBEES',     segment: 'NSE' },
+      { token: '14423', symbol: 'PHARMABEES', segment: 'NSE' },
+    ],
+  },
+  {
     id: 'mcx', name: 'MCX', color: '#f59e0b',
     items: [
       { token: '429604', symbol: 'GOLD', segment: 'MCX' },

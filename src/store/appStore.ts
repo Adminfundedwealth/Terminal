@@ -17,7 +17,7 @@ async function syncWatchlistToBackend(watchlistId: string, watchlist: Watchlist 
   }
 }
 
-export type Workspace = 'home' | 'index' | 'stocks' | 'futures' | 'options' | 'mcx' | 'cds' | 'ord' | 'wl' | 'dom' | 'btm' | 'calendar';
+export type Workspace = 'home' | 'index' | 'stocks' | 'futures' | 'options' | 'etf' | 'mcx' | 'cds' | 'ord' | 'wl' | 'dom' | 'btm' | 'calendar';
 export type TerminalLayout = 'standard' | 'dom' | 'options' | 'commodity' | 'currency' | 'compact';
 
 interface PanelVisibility {
@@ -98,6 +98,15 @@ const defaultWatchlists: Watchlist[] = [
     { token: '99926009', symbol: 'BANKNIFTY', segment: 'NSE' },
     { token: '99926037', symbol: 'FINNIFTY', segment: 'NSE' },
   ]},
+  { id: 'etf', name: 'ETF', color: '#10b981', items: [
+    { token: '2150', symbol: 'NIFTYBEES', segment: 'NSE' },
+    { token: '15068', symbol: 'BANKBEES', segment: 'NSE' },
+    { token: '13751', symbol: 'JUNIORBEES', segment: 'NSE' },
+    { token: '1660', symbol: 'GOLDBEES', segment: 'NSE' },
+    { token: '22536', symbol: 'SILVERBEES', segment: 'NSE' },
+    { token: '14428', symbol: 'ITBEES', segment: 'NSE' },
+    { token: '14423', symbol: 'PHARMABEES', segment: 'NSE' },
+  ]},
   { id: 'mcx', name: 'MCX', color: '#f59e0b', items: [
     { token: '429604', symbol: 'GOLD', segment: 'MCX' },
     { token: '429638', symbol: 'SILVER', segment: 'MCX' },
@@ -122,6 +131,7 @@ const workspaceDefaults: Record<Workspace, Instrument | null> = {
   options:  { token: '99926000', symbol: 'NIFTY',          name: 'Nifty 50',           segment: 'NSE', instrumentType: 'EQ',  exchange: 'NSE', lotSize: 50,   tickSize: 0.05 },
   mcx:      { token: '429604',   symbol: 'GOLD',           name: 'Gold Futures',        segment: 'MCX', instrumentType: 'FUT', exchange: 'MCX', lotSize: 100,  tickSize: 1,    expiry: '2026-08-05' },
   cds:      { token: '11091',    symbol: 'USDINR',         name: 'USD/INR Futures',     segment: 'CDS', instrumentType: 'FUT', exchange: 'NSE', lotSize: 1000, tickSize: 0.0025, expiry: '2026-07-30' },
+  etf:      { token: '2150',     symbol: 'NIFTYBEES',      name: 'Nippon India ETF Nifty BeES', segment: 'NSE', instrumentType: 'EQ', exchange: 'NSE', lotSize: 1, tickSize: 0.01 },
   ord:      null,
   wl:       null,
   dom:      null,
@@ -166,7 +176,7 @@ export const useAppStore = create<AppState>()(
       })),
       setWatchlists: (watchlists) => set({ watchlists }),
       setActiveWorkspace: (ws) => set((state) => {
-        const isChartWs = ['index', 'stocks', 'futures', 'options', 'mcx', 'cds'].includes(ws);
+        const isChartWs = ['index', 'stocks', 'futures', 'options', 'etf', 'mcx', 'cds'].includes(ws);
         const showOC = ws === 'options';
         const layout: TerminalLayout = ws === 'options' ? 'options' : ws === 'mcx' ? 'commodity' : ws === 'cds' ? 'currency' : 'standard';
 
@@ -176,7 +186,7 @@ export const useAppStore = create<AppState>()(
 
         // Map workspace to watchlist tab id
         const wsToWlTab: Partial<Record<Workspace, string>> = {
-          index: 'index', stocks: 'stocks', futures: 'futures', options: 'options', mcx: 'mcx', cds: 'cds',
+          index: 'index', stocks: 'stocks', futures: 'futures', options: 'options', etf: 'etf', mcx: 'mcx', cds: 'cds',
         };
 
         return {
