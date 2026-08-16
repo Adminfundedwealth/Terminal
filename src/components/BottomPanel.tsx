@@ -13,6 +13,7 @@ import { AIPanel } from '@/components/AIPanel';
 import { AccountManager } from '@/components/AccountManager';
 import { ActivityPanel } from '@/components/ActivityPanel';
 import { ScannerPanel } from '@/components/ScannerPanel';
+import { AdminPanel } from '@/components/AdminPanel';
 import type { Position, Order, Trade } from '@/types';
 
 type OrderFilter = 'all' | 'open' | 'filled' | 'cancelled' | 'rejected';
@@ -229,6 +230,7 @@ export function BottomPanel() {
     { id: 'accounts' as const, label: 'Accounts', count: 0 },
     { id: 'activity' as const, label: 'Activity', count: 0 },
     { id: 'scanner' as const, label: 'Scanner', count: 0 },
+    { id: 'admin' as const, label: 'Admin', count: 0 },
   ];
 
   return (
@@ -360,6 +362,7 @@ export function BottomPanel() {
           {bottomTab === 'accounts' && <AccountManager />}
           {bottomTab === 'activity' && <ActivityPanel />}
           {bottomTab === 'scanner' && <ScannerPanel />}
+          {bottomTab === 'admin' && <AdminPanel />}
         </div>
       </div>
     </>

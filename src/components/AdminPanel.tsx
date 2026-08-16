@@ -16,7 +16,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Shield, ShieldOff, Search, RefreshCw, X, AlertTriangle, CheckCircle,
-  ChevronDown, ChevronUp, Crosshair, Clock, User, Activity,
+  ChevronDown, ChevronUp, Crosshair, Clock, User, Activity, Settings,
 } from 'lucide-react';
 import {
   adminListAccounts, adminFreezeAccount, adminUnfreezeAccount,
@@ -26,6 +26,7 @@ import {
 import { cn, formatPrice } from '@/utils/helpers';
 import { useToast } from '@/components/ToastProvider';
 import { useTradingStore } from '@/store/tradingStore';
+import { AdminRiskManagement } from '@/components/AdminRiskManagement';
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
 
@@ -271,9 +272,9 @@ function AccountRow({
   );
 }
 
-// ─── Main panel ───────────────────────────────────────────────────────────────
+// ─── Account Management panel (inner) ─────────────────────────────────────────
 
-export function AdminPanel() {
+function AccountManagementPanel() {
   const { showToast } = useToast();
   const account = useTradingStore(s => s.account);
 
@@ -542,6 +543,52 @@ export function AdminPanel() {
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Top-level Admin Panel with section switcher ───────────────────────────────
+
+type AdminSection = 'accounts' | 'risk';
+
+export function AdminPanel() {
+  const [section, setSection] = useState<AdminSection>('accounts');
+
+  return (
+    <div className="h-full flex flex-col">
+      {/* Section switcher */}
+      <div className="flex items-center gap-0 px-2 pt-2 pb-0 bg-[#0a0c12] border-b border-fw-border flex-shrink-0">
+        <button
+          onClick={() => setSection('accounts')}
+          className={cn(
+            'flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-bold rounded-t border-b-2 transition-colors',
+            section === 'accounts'
+              ? 'text-fw-text border-fw-accent bg-fw-hover/20'
+              : 'text-fw-text-muted border-transparent hover:text-fw-text hover:bg-fw-hover/10'
+          )}
+        >
+          <Shield size={12} />
+          Account Management
+        </button>
+        <button
+          onClick={() => setSection('risk')}
+          className={cn(
+            'flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-bold rounded-t border-b-2 transition-colors',
+            section === 'risk'
+              ? 'text-orange-400 border-orange-500 bg-fw-hover/20'
+              : 'text-fw-text-muted border-transparent hover:text-fw-text hover:bg-fw-hover/10'
+          )}
+        >
+          <Settings size={12} />
+          Risk Management
+        </button>
+      </div>
+
+      {/* Section content — fills remaining height */}
+      <div className="flex-1 min-h-0">
+        {section === 'accounts' && <AccountManagementPanel />}
+        {section === 'risk'     && <AdminRiskManagement />}
+      </div>
     </div>
   );
 }

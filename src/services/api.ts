@@ -336,3 +336,69 @@ export const adminGetPositions = (id: string) =>
 
 export const adminGetRiskEvents = (id: string) =>
   request<{ success: boolean; events: any[] }>(`/admin/accounts/${id}/risk-events`);
+
+// ─── Admin Risk Profile APIs ─────────────────────────────────────────────────
+
+// Flash
+export const adminGetFlashProfile = () =>
+  request<{ success: boolean; profile: any }>('/admin/flash/profile');
+
+export const adminUpdateFlashProfile = (updates: Record<string, any>) =>
+  request<{ success: boolean; profile: any; message: string }>('/admin/flash/profile', {
+    method: 'PUT',
+    body: JSON.stringify(updates),
+  });
+
+export const adminGetFlashAudit = (limit = 50) =>
+  request<{ success: boolean; audit: any[]; count: number }>(`/admin/flash/audit?limit=${limit}`);
+
+export const adminGetFlashAccounts = () =>
+  request<{ success: boolean; accounts: any[]; count: number }>('/admin/flash/accounts');
+
+// Instant
+export const adminGetInstantProfile = () =>
+  request<{ success: boolean; profile: any }>('/admin/instant/profile');
+
+export const adminUpdateInstantProfile = (updates: Record<string, any>) =>
+  request<{ success: boolean; profile: any; message: string }>('/admin/instant/profile', {
+    method: 'PUT',
+    body: JSON.stringify(updates),
+  });
+
+export const adminGetInstantAudit = (limit = 50) =>
+  request<{ success: boolean; audit: any[]; count: number }>(`/admin/instant/audit?limit=${limit}`);
+
+export const adminGetInstantAccounts = () =>
+  request<{ success: boolean; accounts: any[]; count: number; profile: any }>('/admin/instant/accounts');
+
+// 1-Step
+export const adminGetOneStepProfile = () =>
+  request<{ success: boolean; profile: any }>('/admin/onestep/profile');
+
+export const adminUpdateOneStepProfile = (updates: Record<string, any>) =>
+  request<{ success: boolean; profile: any; message: string }>('/admin/onestep/profile', {
+    method: 'PUT',
+    body: JSON.stringify(updates),
+  });
+
+export const adminGetOneStepAudit = (limit = 50) =>
+  request<{ success: boolean; audit: any[]; count: number }>(`/admin/onestep/audit?limit=${limit}`);
+
+export const adminGetOneStepAccounts = () =>
+  request<{ success: boolean; accounts: any[]; count: number }>('/admin/onestep/accounts');
+
+// 2-Step
+export const adminGetTwoStepProfile = () =>
+  request<{ success: boolean; profile: any }>('/admin/twostep/profile');
+
+export const adminUpdateTwoStepProfile = (updates: Record<string, any>) =>
+  request<{ success: boolean; profile: any; message: string }>('/admin/twostep/profile', {
+    method: 'PUT',
+    body: JSON.stringify(updates),
+  });
+
+export const adminGetTwoStepAudit = (limit = 50) =>
+  request<{ success: boolean; audit: any[]; count: number }>(`/admin/twostep/audit?limit=${limit}`);
+
+export const adminGetTwoStepAccounts = () =>
+  request<{ success: boolean; accounts: any[]; count: number }>('/admin/twostep/accounts');

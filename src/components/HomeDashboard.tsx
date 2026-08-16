@@ -410,18 +410,6 @@ export function HomeDashboard() {
 
         </div>
       </section>
-                      <div key={p.positionId || p.symbol} className="flex items-center gap-2 px-2 py-1.5 hover:bg-fw-hover/20 rounded mx-1 transition-colors">
-                        <span className={cn('text-[10px] font-bold px-1 rounded', p.side === 'BUY' ? 'bg-emerald-900/40 text-emerald-400' : 'bg-red-900/40 text-red-400')}>
-                          {p.side === 'BUY' ? 'L' : 'S'}
-                        </span>
-                        <span className="flex-1 text-[12px] text-fw-text truncate">{p.symbol}</span>
-                        <span className={cn('text-[11px] tabular-nums font-medium', pnl >= 0 ? 'text-emerald-400' : 'text-red-400')}>
-                          {pnl >= 0 ? '+' : ''}₹{fmt(Math.abs(pnl))}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
     </div>
   );
 }
