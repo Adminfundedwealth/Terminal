@@ -254,7 +254,7 @@ export default function App() {
     );
   }
 
-  // ── Right panel JSX — reused across chart workspaces + DOM ─────────────────
+  // ── Right panel JSX — reused across chart workspaces ──────────────────────
   const rightPanel = panels.orderPanel ? (
     <>
       <VDivider onDrag={handleOrderPanelResize} />
@@ -266,7 +266,7 @@ export default function App() {
           <TerminalReadiness />
           <RiskWidget />
         </ErrorBoundary>
-        <div className={cn('overflow-y-auto min-h-0', isDom ? 'h-[80px] flex-shrink-0' : 'flex-1')}>
+        <div className="flex-1 overflow-y-auto min-h-0">
           <ErrorBoundary fallbackTitle="Order Panel Error">
             <OrderPanel />
           </ErrorBoundary>
@@ -274,7 +274,7 @@ export default function App() {
         {panels.marketDepth && (
           <>
             <HDivider onDrag={handleDepthResize} />
-            <div style={{ height: isDom ? undefined : depthPanelHeight, minHeight: 200, maxHeight: isDom ? undefined : 600 }} className={cn('overflow-hidden', isDom ? 'flex-1' : 'flex-shrink-0')}>
+            <div style={{ height: depthPanelHeight, minHeight: 200, maxHeight: 600 }} className="flex-shrink-0 overflow-hidden">
               <ErrorBoundary fallbackTitle="Market Depth Error">
                 <MarketDepthPanel />
               </ErrorBoundary>
@@ -398,19 +398,40 @@ export default function App() {
           )}
 
           {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-              DOM — Right panel DOM only (no center duplicate)
+              DOM — Full center Market Depth + order panel right
           ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
           {isDom && (
             <>
               {watchlistPanel}
+              {/* Center: full Market Depth panel */}
               <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-                {/* Empty center — DOM lives in the right panel */}
-                <div className="flex-1 flex items-center justify-center text-fw-text-muted text-[13px]">
-                  Market Depth is displayed in the right panel →
+                <div className="flex-1 overflow-hidden min-h-0">
+                  <ErrorBoundary fallbackTitle="Market Depth Error">
+                    <MarketDepthPanel />
+                  </ErrorBoundary>
                 </div>
                 {bottomDock}
               </div>
-              {rightPanel}
+              {/* Right: order entry only (no duplicate DOM) */}
+              {panels.orderPanel && (
+                <>
+                  <VDivider onDrag={handleOrderPanelResize} />
+                  <div
+                    style={{ width: orderPanelWidth, minWidth: 240 }}
+                    className="border-l border-fw-border flex flex-col overflow-hidden flex-shrink-0"
+                  >
+                    <ErrorBoundary fallbackTitle="Risk Widget Error">
+                      <TerminalReadiness />
+                      <RiskWidget />
+                    </ErrorBoundary>
+                    <div className="flex-1 overflow-y-auto min-h-0">
+                      <ErrorBoundary fallbackTitle="Order Panel Error">
+                        <OrderPanel />
+                      </ErrorBoundary>
+                    </div>
+                  </div>
+                </>
+              )}
             </>
           )}
 
