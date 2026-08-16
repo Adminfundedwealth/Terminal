@@ -1,37 +1,73 @@
-﻿import { Search, Bell, Home, BarChart3, TrendingUp, Activity, LineChart, Diamond, DollarSign } from 'lucide-react';
+﻿import React from 'react';
+import { Search, Bell, Home, BarChart3, TrendingUp, Activity, LineChart, Diamond, DollarSign, Sun, Moon } from 'lucide-react';
 import { useAppStore, type Workspace } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
 import { cn } from '@/utils/helpers';
 import { AccountSelector } from './AccountSelector';
-import type { Theme } from '@/types';
+
+const STORAGE_KEY = 'fundedwealth-terminal-theme';
+
+function applyThemeToDOM(theme: 'dark' | 'light') {
+  if (theme === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light');
+  } else {
+    document.documentElement.removeAttribute('data-theme');
+  }
+  try { localStorage.setItem(STORAGE_KEY, theme); } catch {}
+}
+
+export function initStoredTheme() {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY) as 'dark' | 'light' | null;
+    if (stored === 'light') applyThemeToDOM('light');
+  } catch {}
+}
 
 export function TopBar() {
-  const { theme, setTheme, setSearchOpen, setBottomTab } = useAppStore();
+  const { setSearchOpen, setBottomTab } = useAppStore();
   const marketStatus = useMarketStore((s) => s.marketStatus);
 
+  const [isLight, setIsLight] = React.useState(
+    () => document.documentElement.getAttribute('data-theme') === 'light'
+  );
+
+  // Keep in sync if toggled from another source
+  React.useEffect(() => {
+    const handler = () => setIsLight(document.documentElement.getAttribute('data-theme') === 'light');
+    window.addEventListener('fw:theme-changed', handler);
+    return () => window.removeEventListener('fw:theme-changed', handler);
+  }, []);
+
+  const toggleTheme = () => {
+    const next = isLight ? 'dark' : 'light';
+    applyThemeToDOM(next);
+    setIsLight(next === 'light');
+    window.dispatchEvent(new CustomEvent('fw:theme-changed'));
+  };
+
   return (
-    <header className="bg-gradient-to-b from-[#0e1018] to-[#0c0e14] border-b border-fw-border flex select-none">
+    <header className="bg-fw-surface border-b border-fw-border flex select-none">
       <div className="flex items-center px-4 h-[48px] w-full gap-3">
 
         {/* Brand */}
         <div data-brand className="flex items-center gap-2.5 mr-4 flex-shrink-0">
-          <div className="w-8 h-8 rounded-lg overflow-hidden bg-white flex items-center justify-center flex-shrink-0" style={{ boxShadow: '0 0 10px rgba(139,92,246,0.4)' }}>
+          <div className="w-8 h-8 rounded-lg overflow-hidden bg-white flex items-center justify-center flex-shrink-0" style={{ boxShadow: '0 0 10px rgba(139,92,246,0.3)' }}>
             <img src="/logo.png" alt="FW" className="w-7 h-7 object-contain" />
           </div>
           <div className="flex flex-col leading-tight items-center">
             <span className="text-[15px] font-extrabold tracking-wide bg-gradient-to-r from-[#00D4FF] via-[#4F46E5] to-[#7C3AED] bg-clip-text text-transparent">FUNDEDWEALTH</span>
-            <span className="text-[11px] font-bold tracking-[0.3em] text-slate-400 text-center">TERMINAL</span>
+            <span className="text-[11px] font-bold tracking-[0.3em] text-fw-text-muted text-center">TERMINAL</span>
           </div>
         </div>
 
         {/* Market status */}
         <div className={cn(
-          'flex items-center gap-1.5 px-2.5 py-1 rounded text-[13px] font-semibold flex-shrink-0',
+          'flex items-center gap-1.5 px-2.5 py-1 rounded text-[13px] font-semibold flex-shrink-0 border',
           marketStatus === 'OPEN'
-            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-            : 'bg-red-500/10 text-red-400 border border-red-500/20'
+            ? 'bg-fw-green/10 text-fw-green border-fw-green/20'
+            : 'bg-fw-red/10 text-fw-red border-fw-red/20'
         )}>
-          <div className={cn('w-2 h-2 rounded-full', marketStatus === 'OPEN' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500')} />
+          <div className={cn('w-2 h-2 rounded-full', marketStatus === 'OPEN' ? 'bg-fw-green animate-pulse' : 'bg-fw-red')} />
           {marketStatus === 'OPEN' ? 'LIVE' : 'CLOSED'}
         </div>
 
@@ -57,23 +93,23 @@ export function TopBar() {
         <div className="flex-1" />
 
         {/* Right controls */}
-        <div className="flex items-center gap-2.5 flex-shrink-0">
+        <div className="flex items-center gap-2 flex-shrink-0">
           <AccountSelector />
-          <div className="flex items-center bg-fw-bg rounded border border-fw-border p-0.5">
-            {([{ value: 'dark' as Theme, label: 'D' }, { value: 'fw-blue' as Theme, label: 'B' }]).map((t) => (
-              <button
-                key={t.value}
-                onClick={() => setTheme(t.value)}
-                className={cn('px-2 py-0.5 rounded text-[12px] font-bold', theme === t.value ? 'bg-fw-accent text-white' : 'text-fw-text-muted hover:text-fw-text')}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-          <button onClick={() => setBottomTab('alerts')} className="p-1.5 rounded hover:bg-fw-hover text-slate-300 hover:text-white transition-colors" title="Alerts">
+
+          {/* Dark / Light toggle */}
+          <button
+            onClick={toggleTheme}
+            title={isLight ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded border border-fw-border bg-fw-bg hover:bg-fw-hover text-fw-text-secondary hover:text-fw-text transition-all text-[12px] font-medium"
+          >
+            {isLight ? <Moon size={14} /> : <Sun size={14} />}
+            {isLight ? 'Dark' : 'Light'}
+          </button>
+
+          <button onClick={() => setBottomTab('alerts')} className="p-1.5 rounded hover:bg-fw-hover text-fw-text-muted hover:text-fw-text transition-colors" title="Alerts">
             <Bell size={15} />
           </button>
-          <button onClick={() => setSearchOpen(true)} className="p-1.5 rounded hover:bg-fw-hover text-slate-300 hover:text-white transition-colors" title="Search (Ctrl+K)">
+          <button onClick={() => setSearchOpen(true)} className="p-1.5 rounded hover:bg-fw-hover text-fw-text-muted hover:text-fw-text transition-colors" title="Search (Ctrl+K)">
             <Search size={15} />
           </button>
         </div>
@@ -92,7 +128,7 @@ function NavLink({ ws, label, icon }: { ws: Workspace; label: string; icon?: Rea
         'flex items-center gap-1.5 px-2.5 py-1 rounded text-[13px] font-semibold uppercase tracking-wide transition-all',
         active
           ? 'bg-fw-accent/15 text-fw-accent border border-fw-accent/40'
-          : 'text-slate-300 hover:text-white hover:bg-white/[0.04] border border-transparent'
+          : 'text-fw-text-secondary hover:text-fw-text hover:bg-fw-hover border border-transparent'
       )}
     >
       {icon}

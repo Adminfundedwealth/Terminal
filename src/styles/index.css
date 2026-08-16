@@ -54,28 +54,28 @@
 }
 
 [data-theme='light'] {
-  /* Light variant replaced with deeper dark alternate — prop firm terminal stays dark */
-  --fw-bg: #0c0e16;
-  --fw-surface: #141620;
-  --fw-surface-2: #1a1c28;
-  --fw-border: #222433;
-  --fw-border-light: #2c2f40;
-  --fw-text: #f1f5f9;
-  --fw-text-secondary: #cbd5e1;
-  --fw-text-muted: #94a3b8;
-  --fw-accent: #3b82f6;
-  --fw-accent-hover: #2563eb;
-  --fw-green: #10b981;
-  --fw-green-dim: rgba(16, 185, 129, 0.10);
-  --fw-red: #ef4444;
-  --fw-red-dim: rgba(239, 68, 68, 0.10);
-  --fw-panel: #141620;
-  --fw-hover: #1c1f2c;
-  --fw-selected: #202436;
-  --fw-yellow: #f59e0b;
-  --fw-cyan: #06b6d4;
+  /* FundedWealth Light — Professional trading workspace */
+  --fw-bg: #f0f2f5;
+  --fw-surface: #ffffff;
+  --fw-surface-2: #f3f5f8;
+  --fw-border: #d9dee7;
+  --fw-border-light: #c7ced9;
+  --fw-text: #111827;
+  --fw-text-secondary: #374151;
+  --fw-text-muted: #6b7280;
+  --fw-accent: #2563eb;
+  --fw-accent-hover: #1d4ed8;
+  --fw-green: #0a9f63;
+  --fw-green-dim: rgba(10, 159, 99, 0.10);
+  --fw-red: #e53935;
+  --fw-red-dim: rgba(229, 57, 53, 0.10);
+  --fw-panel: #ffffff;
+  --fw-hover: #f1f5f9;
+  --fw-selected: #e8f0fe;
+  --fw-yellow: #c87900;
+  --fw-cyan: #0369a1;
   --fw-purple: #7c3aed;
-  --fw-orange: #ea580c;
+  --fw-orange: #c2410c;
 }
 
 * {
