@@ -461,14 +461,16 @@ export function OptionChainModal() {
   // View mode: CE only, PE only, or both
   const [viewMode, setViewMode] = useState<'both' | 'ce' | 'pe'>('both');
 
-  // OI max for proportional bars
-  const maxOi = useMemo(() => {
-    let max = 0;
+  // OI + Volume max for proportional bars
+  const { maxOi, maxVol } = useMemo(() => {
+    let maxOi = 0, maxVol = 0;
     for (const e of filteredChain) {
-      if (e.callOi > max) max = e.callOi;
-      if (e.putOi > max) max = e.putOi;
+      if (e.callOi > maxOi) maxOi = e.callOi;
+      if (e.putOi > maxOi) maxOi = e.putOi;
+      if (e.callVolume > maxVol) maxVol = e.callVolume;
+      if (e.putVolume > maxVol) maxVol = e.putVolume;
     }
-    return max || 1;
+    return { maxOi: maxOi || 1, maxVol: maxVol || 1 };
   }, [filteredChain]);
 
   // ATM strike value
@@ -686,6 +688,8 @@ export function OptionChainModal() {
 
                 const callOiPct = maxOi > 0 ? (e.callOi / maxOi) * 100 : 0;
                 const putOiPct  = maxOi > 0 ? (e.putOi / maxOi) * 100 : 0;
+                const callVolPct = maxVol > 0 ? (e.callVolume / maxVol) * 100 : 0;
+                const putVolPct  = maxVol > 0 ? (e.putVolume / maxVol) * 100 : 0;
 
                 const callOiChg = e.callOiChange || 0;
                 const putOiChg  = e.putOiChange  || 0;
@@ -720,9 +724,15 @@ export function OptionChainModal() {
                             >S</button>
                           </div>
                         </td>
-                        {/* OI with bar — green background */}
-                        <td className="px-2 py-[6px] text-right font-mono tabular-nums relative overflow-hidden">
-                          <div className="absolute inset-y-0 right-0 bg-emerald-500/[0.18]" style={{ width: `${callOiPct}%` }} />
+                        {/* OI with bar — green gradient always visible */}
+                        <td
+                          className="px-2 py-[6px] text-right font-mono tabular-nums relative overflow-hidden"
+                          style={{
+                            background: callOiPct > 0
+                              ? `linear-gradient(to right, transparent ${100 - callOiPct}%, rgba(0,220,150,0.22) ${100 - callOiPct}%)`
+                              : undefined,
+                          }}
+                        >
                           <span className={cn('relative z-10 truncate block', isSelCE ? 'text-fw-accent' : 'text-fw-text')}>{formatNumber(e.callOi || 0)}</span>
                         </td>
                         {/* OI Change */}
@@ -731,8 +741,15 @@ export function OptionChainModal() {
                             {callOiChg !== 0 ? (callOiChg > 0 ? '+' : '') + callOiChg.toFixed(2) + '%' : '—'}
                           </span>
                         </td>
-                        {/* Volume */}
-                        <td className="px-2 py-[6px] text-right font-mono tabular-nums text-fw-text-secondary truncate">
+                        {/* Volume — green bar */}
+                        <td
+                          className="px-2 py-[6px] text-right font-mono tabular-nums text-fw-text-secondary truncate"
+                          style={{
+                            background: callVolPct > 0
+                              ? `linear-gradient(to right, transparent ${100 - callVolPct}%, rgba(0,220,150,0.13) ${100 - callVolPct}%)`
+                              : undefined,
+                          }}
+                        >
                           {formatNumber(e.callVolume || 0)}
                         </td>
                         {/* CALL LTP — green */}
@@ -772,8 +789,15 @@ export function OptionChainModal() {
                         >
                           {e.putLtp > 0 ? formatPrice(e.putLtp) : '—'}
                         </td>
-                        {/* Volume */}
-                        <td className="px-2 py-[6px] text-left font-mono tabular-nums text-fw-text-secondary truncate">
+                        {/* Volume — red bar */}
+                        <td
+                          className="px-2 py-[6px] text-left font-mono tabular-nums text-fw-text-secondary truncate"
+                          style={{
+                            background: putVolPct > 0
+                              ? `linear-gradient(to left, transparent ${100 - putVolPct}%, rgba(255,70,90,0.13) ${100 - putVolPct}%)`
+                              : undefined,
+                          }}
+                        >
                           {formatNumber(e.putVolume || 0)}
                         </td>
                         {/* OI Change */}
@@ -782,9 +806,15 @@ export function OptionChainModal() {
                             {putOiChg !== 0 ? (putOiChg > 0 ? '+' : '') + putOiChg.toFixed(2) + '%' : '—'}
                           </span>
                         </td>
-                        {/* OI with bar — red background */}
-                        <td className="px-2 py-[6px] text-left font-mono tabular-nums relative overflow-hidden">
-                          <div className="absolute inset-y-0 left-0 bg-red-500/[0.18]" style={{ width: `${putOiPct}%` }} />
+                        {/* OI with bar — red gradient always visible */}
+                        <td
+                          className="px-2 py-[6px] text-left font-mono tabular-nums relative overflow-hidden"
+                          style={{
+                            background: putOiPct > 0
+                              ? `linear-gradient(to left, transparent ${100 - putOiPct}%, rgba(255,70,90,0.22) ${100 - putOiPct}%)`
+                              : undefined,
+                          }}
+                        >
                           <span className={cn('relative z-10 truncate block', isSelPE ? 'text-fw-accent' : 'text-fw-text')}>{formatNumber(e.putOi || 0)}</span>
                         </td>
                         {/* B/S */}
