@@ -174,7 +174,7 @@ export function HomeDashboard() {
   );
 
   return (
-    <div className="h-full w-full overflow-y-auto bg-fw-bg px-4 py-3 flex flex-col gap-4">
+    <div className="h-full w-full overflow-y-auto bg-fw-bg px-4 py-3 flex flex-col gap-3">
 
       {/* ── ACCOUNT OVERVIEW ────────────────────────────────────────────── */}
       <section>
@@ -250,19 +250,19 @@ export function HomeDashboard() {
       </section>
 
       {/* ── MARKET MOVERS + TRENDING / INSIGHTS ────────────────────────── */}
-      <div className="flex gap-3 flex-1 min-h-0">
+      <div className="flex gap-3">
 
         {/* Market Movers */}
         <section className="flex-1 min-w-0">
           <SectionTitle>Market Movers</SectionTitle>
-          <div className="flex gap-3 h-full">
+          <div className="flex gap-3">
             {/* Gainers */}
             <div className="flex-1 bg-[#0d0f18] border border-fw-border/40 rounded overflow-hidden">
               <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-fw-border/30 bg-emerald-900/10">
                 <TrendingUp size={11} className="text-emerald-400" />
                 <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">Top Gainers</span>
               </div>
-              <div className="overflow-y-auto">
+              <div>
                 {gainers.length === 0 ? (
                   <p className="px-3 py-4 text-[12px] text-fw-text-muted/50">Waiting for live data…</p>
                 ) : (
@@ -278,7 +278,7 @@ export function HomeDashboard() {
                 <TrendingDown size={11} className="text-red-400" />
                 <span className="text-[11px] font-bold uppercase tracking-wider text-red-400">Top Losers</span>
               </div>
-              <div className="overflow-y-auto">
+              <div>
                 {losers.length === 0 ? (
                   <p className="px-3 py-4 text-[12px] text-fw-text-muted/50">Waiting for live data…</p>
                 ) : (
@@ -294,13 +294,13 @@ export function HomeDashboard() {
         {/* Trending / Insights */}
         <section className="w-[280px] flex-shrink-0">
           <SectionTitle>Trending / Insights</SectionTitle>
-          <div className="bg-[#0d0f18] border border-fw-border/40 rounded overflow-hidden h-full flex flex-col">
+          <div className="bg-[#0d0f18] border border-fw-border/40 rounded overflow-hidden flex flex-col">
             {/* Most Traded */}
             <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-fw-border/30 bg-fw-accent/5">
               <BarChart3 size={11} className="text-fw-accent" />
               <span className="text-[11px] font-bold uppercase tracking-wider text-fw-accent/80">Most Traded</span>
             </div>
-            <div className="overflow-y-auto flex-1">
+            <div>
               {quoted.slice(0, 10).map((item, i) => (
                 <MoverRow key={item.token} token={item.token} symbol={item.symbol} rank={i + 1} />
               ))}
