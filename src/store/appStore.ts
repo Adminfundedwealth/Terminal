@@ -44,6 +44,8 @@ interface AppState {
   panels: PanelVisibility;
   pinnedTokens: string[];
   activeWatchlistTab: string | null;
+  /** Remember last selected instrument per category workspace */
+  lastInstrumentPerWorkspace: Partial<Record<Workspace, Instrument>>;
 
   setTheme: (theme: Theme) => void;
   setChartLayout: (layout: ChartLayout) => void;
@@ -145,6 +147,7 @@ export const useAppStore = create<AppState>()(
       panels: { watchlist: true, orderPanel: true, bottomPanel: true, marketDepth: true, optionChain: false },
       pinnedTokens: [],
       activeWatchlistTab: null,
+      lastInstrumentPerWorkspace: {},
 
       setTheme: (theme) => {
         if (theme === 'dark') document.documentElement.removeAttribute('data-theme');
@@ -154,18 +157,34 @@ export const useAppStore = create<AppState>()(
       setChartLayout: (chartLayout) => set({ chartLayout }),
       setTimeframe: (timeframe) => set({ timeframe }),
       setChartType: (chartType) => set({ chartType }),
-      setActiveSymbol: (activeSymbol) => set({ activeSymbol }),
+      setActiveSymbol: (activeSymbol) => set((state) => ({
+        activeSymbol,
+        lastInstrumentPerWorkspace: {
+          ...state.lastInstrumentPerWorkspace,
+          [state.activeWorkspace]: activeSymbol,
+        },
+      })),
       setWatchlists: (watchlists) => set({ watchlists }),
-      setActiveWorkspace: (ws) => {
-        const defaultSymbol = workspaceDefaults[ws];
-        const showOC = ws === 'options';
+      setActiveWorkspace: (ws) => set((state) => {
         const isChartWs = ['index', 'stocks', 'futures', 'options', 'mcx', 'cds'].includes(ws);
+        const showOC = ws === 'options';
         const layout: TerminalLayout = ws === 'options' ? 'options' : ws === 'mcx' ? 'commodity' : ws === 'cds' ? 'currency' : 'standard';
-        set({
+
+        // Restore remembered instrument, or fall back to workspace default
+        const remembered = state.lastInstrumentPerWorkspace[ws];
+        const defaultSymbol = remembered || workspaceDefaults[ws];
+
+        // Map workspace to watchlist tab id
+        const wsToWlTab: Partial<Record<Workspace, string>> = {
+          index: 'index', stocks: 'stocks', futures: 'futures', options: 'options', mcx: 'mcx', cds: 'cds',
+        };
+
+        return {
           activeWorkspace: ws,
           ...(defaultSymbol ? { activeSymbol: defaultSymbol } : {}),
           showOptionChain: showOC,
           terminalLayout: layout,
+          activeWatchlistTab: wsToWlTab[ws] || state.activeWatchlistTab,
           panels: {
             watchlist: isChartWs || ws === 'home',
             orderPanel: isChartWs || ws === 'dom',
@@ -173,8 +192,8 @@ export const useAppStore = create<AppState>()(
             marketDepth: ws === 'futures' || ws === 'mcx' || ws === 'dom',
             optionChain: showOC,
           },
-        });
-      },
+        };
+      }),
       setTerminalLayout: (terminalLayout) => set({ terminalLayout }),
       addToWatchlist: (watchlistId, item) =>
         set((state) => {
@@ -224,6 +243,7 @@ export const useAppStore = create<AppState>()(
         watchlists: state.watchlists,
         pinnedTokens: state.pinnedTokens,
         activeWatchlistTab: state.activeWatchlistTab,
+        lastInstrumentPerWorkspace: state.lastInstrumentPerWorkspace,
       }),
     }
   )

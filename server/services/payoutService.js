@@ -27,6 +27,7 @@ import { EmailService } from './emailService.js';
 import { eventBus } from '../events/index.js';
 import { FlashRiskProfileService } from './flashRiskProfileService.js';
 import { InstantRiskProfileService } from './instantRiskProfileService.js';
+import { TwoStepRiskProfileService } from './twoStepRiskProfileService.js';
 
 // Profit split configuration per plan — used for non-Flash accounts only.
 // Flash accounts read profit_split_pct from FlashRiskProfileService.
@@ -176,7 +177,11 @@ export class PayoutService {
     }
 
     // Payout threshold: net profit must be >= threshold % of initial balance
-    if ((isFlash || isInstant) && minPayoutPct > 0) {
+    if (isTwoStep) {
+      try { const tp = await TwoStepRiskProfileService.getProfile(); minPayoutPct = tp.f_payout_threshold_pct || 5; } catch {}
+    }
+
+    if ((isFlash || isInstant || isTwoStep) && minPayoutPct > 0) {
       const minPayoutAmount = (minPayoutPct / 100) * parseFloat(challenge.initial_balance);
       if (netProfit < minPayoutAmount) {
         const planLabel = isFlash ? 'Flash' : 'Instant';
@@ -337,7 +342,15 @@ export class PayoutService {
       return { success: false, error: `Failed to approve: ${updateErr.message}` };
     }
 
-    // Get trader info for email
+    
+    // 2-Step: record first approved payout for 80% to 90% split upgrade
+    // Only for 2-Step. Only sets first_payout_approved_at when NULL (idempotent).
+    if (TwoStepRiskProfileService.isTwoStepAccount({ challenge: { plan: payout.plan } })) {
+      TwoStepRiskProfileService.recordFirstPayout(payout.account_id).catch((e) => {
+        console.error('[PayoutService] recordFirstPayout failed:', e.message);
+      });
+    }
+// Get trader info for email
     const { data: trader } = await supabase
       .from('terminal_traders')
       .select('email, display_name')

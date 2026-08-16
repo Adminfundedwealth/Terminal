@@ -25,6 +25,7 @@ import { AuditLogger } from '../services/auditLogger.js';
 import { supabase } from '../db/client.js';
 import { FlashRiskProfileService } from '../services/flashRiskProfileService.js';
 import { InstantRiskProfileService } from '../services/instantRiskProfileService.js';
+import { TwoStepRiskProfileService } from '../services/twoStepRiskProfileService.js';
 
 const accountRepo = new AccountRepository();
 
@@ -629,5 +630,34 @@ export function createAdminRouter() {
     }
   });
 
+
+  // ─── 2-Step Risk Management ──────────────────────────────────────────────
+  router.get('/admin/twostep/profile', async (req, res) => {
+    try { res.json({ success: true, profile: await TwoStepRiskProfileService.getProfile() }); }
+    catch (err) { res.status(500).json({ error: err.message }); }
+  });
+  router.put('/admin/twostep/profile', async (req, res) => {
+    try {
+      if (!req.body || !Object.keys(req.body).length) return res.status(400).json({ error: 'Body required' });
+      const updated = await TwoStepRiskProfileService.updateProfile(req.body, req.user.userId);
+      res.json({ success: true, profile: updated, message: '2-Step profile updated. Live immediately.' });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+  router.get('/admin/twostep/audit', async (req, res) => {
+    try { res.json({ success: true, audit: await TwoStepRiskProfileService.getAuditLog(Math.min(200, parseInt(req.query.limit)||50)) }); }
+    catch (err) { res.status(500).json({ error: err.message }); }
+  });
+  router.get('/admin/twostep/accounts', async (req, res) => {
+    try {
+      if (!supabase) return res.status(503).json({ error: 'Database not configured' });
+      const { data, error } = await supabase.from('trading_accounts').select('id, account_code, balance, status, locked_reason, created_at, first_payout_approved_at, challenge_accounts!challenge_id (id, plan, type, phase, status, initial_balance, peak_balance, started_at), terminal_traders!trader_id (email, display_name)').order('created_at', { ascending: false });
+      if (error) throw new Error(error.message);
+      const accounts = (data||[]).filter(r=>(r.challenge_accounts?.plan||'').toLowerCase().replace(/[-_\s]/g,'')==='2step').map(r=>{
+        const ch=r.challenge_accounts; const phase=TwoStepRiskProfileService.getPhase(r);
+        return { id:r.id, accountCode:r.account_code, balance:r.balance, status:r.status, lockedReason:r.locked_reason, createdAt:r.created_at, firstPayoutApprovedAt:r.first_payout_approved_at, phase, trader:r.terminal_traders, challenge:{id:ch?.id,status:ch?.status,type:ch?.type,phase:ch?.phase,initialBalance:ch?.initial_balance,peakBalance:ch?.peak_balance,startedAt:ch?.started_at} };
+      });
+      res.json({ success: true, accounts, count: accounts.length });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
   return router;
 }

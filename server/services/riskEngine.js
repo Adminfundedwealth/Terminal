@@ -30,6 +30,7 @@ import { MarginService } from './marginService.js';
 import { HolidayService } from './holidayService.js';
 import { LifecycleCallbackClient } from '../clients/lifecycle.callback.js';
 import { InstantRiskProfileService } from './instantRiskProfileService.js';
+import { TwoStepRiskProfileService } from './twoStepRiskProfileService.js';
 
 const riskRulesRepo = new RiskRulesRepository();
 const positionRepo = new PositionRepository();
@@ -56,7 +57,7 @@ export class RiskEngine {
    */
   static async _getRulesMap(accountId, account) {
     // Detect Instant account by plan field
-    if (InstantRiskProfileService.isInstantAccount(account)) {
+    if (InstantRiskProfileService.isInstantAccount(account) || TwoStepRiskProfileService.isTwoStepAccount(account)) {
       const ip = await InstantRiskProfileService.getProfile();
       const balance = parseFloat(account?.balance) || 0;
 
@@ -121,6 +122,23 @@ export class RiskEngine {
     // The instant_risk_profile controls whether weekends and holidays block trading.
     // For all other account types, the hardcoded HolidayService checks apply.
     const isInstant = InstantRiskProfileService.isInstantAccount(account);
+
+    // ── Weekend / holiday checks for 2-Step accounts ─────────────────────────
+    const isTwoStep = TwoStepRiskProfileService.isTwoStepAccount(account);
+    if (isTwoStep) {
+      if (!rules._twostep_weekend_allowed) {
+        const day = new Date().getDay();
+        if (day === 0 || day === 6) {
+          return { allowed: false, reason: `Market is closed (${day===0?'Sunday':'Saturday'}). 2-Step does not allow weekend trading.` };
+        }
+      }
+      if (rules._twostep_holiday_restriction) {
+        const { isClosed, holidayName } = HolidayService.checkMarketClosed();
+        if (isClosed && holidayName) {
+          return { allowed: false, reason: `Market is closed today (holiday: ${holidayName})` };
+        }
+      }
+    }
     if (isInstant) {
       // Weekend check (Instant-profile-controlled)
       if (!rules._instant_weekend_allowed) {
