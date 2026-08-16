@@ -16,7 +16,7 @@
   --fw-spacing-xl: 16px;
   
   /* Font size token (overridden by themeStore) */
-  --fw-font-size-base: 14px;
+  --fw-font-size-base: 15px;
   --fw-line-height: 1.4;
 }
 

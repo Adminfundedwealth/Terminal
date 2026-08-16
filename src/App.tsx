@@ -312,7 +312,7 @@ export default function App() {
 
   return (
     <ToastProvider>
-    <div className="h-screen w-screen flex bg-fw-bg overflow-hidden text-[14px]">
+    <div className="h-screen w-screen flex bg-fw-bg overflow-hidden text-[15px]">
       {/* Left Sidebar Rail */}
       <Sidebar />
 

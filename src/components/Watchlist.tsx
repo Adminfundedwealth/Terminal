@@ -1,5 +1,5 @@
-﻿/**
- * Watchlist.tsx — FundedWealth Trading Terminal
+/**
+ * Watchlist.tsx � FundedWealth Trading Terminal
  * TradeLocker-inspired Markets / Watchlist / News panel.
  * Reuses all existing state, APIs, and Indian instrument data.
  * NO new DB tables. NO new backend routes. NO foreign instruments.
@@ -20,7 +20,7 @@ import { searchInstruments, getInstruments } from '@/services/api';
 import { SymbolLogo } from '@/components/SymbolLogo';
 import type { WatchlistItem, Instrument } from '@/types';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// --- Types --------------------------------------------------------------------
 
 /** Panel mode: watchlist, instrument browser, news feed, or favourites */
 type PanelMode = 'watchlist' | 'browser' | 'news' | 'favorites';
@@ -29,7 +29,7 @@ type PanelMode = 'watchlist' | 'browser' | 'news' | 'favorites';
 type SegmentFilter = 'ALL' | 'NSE' | 'BSE' | 'NFO' | 'MCX' | 'CDS';
 
 /**
- * NewsItem — clean interface for future news provider integration.
+ * NewsItem � clean interface for future news provider integration.
  * Replace DEV_NEWS_ITEMS with a real API call when a news provider is approved.
  */
 export interface NewsItem {
@@ -44,7 +44,7 @@ export interface NewsItem {
   url?: string;
 }
 
-// ─── Dev-only news placeholder ────────────────────────────────────────────────
+// --- Dev-only news placeholder ------------------------------------------------
 // These items are shown ONLY when no live news provider is connected.
 // They are clearly labelled as development placeholders in the UI.
 // Replace this constant with a real API call when approved.
@@ -65,7 +65,7 @@ const DEV_NEWS_ITEMS: NewsItem[] = [
   { id: 'dev-12', headline: 'INFY raises FY27 guidance; margins improve on automation', symbol: 'INFY', publishedAt: new Date(Date.now() - 185 * 60000).toISOString(), sentiment: 'Positive', source: 'Dev Placeholder' },
 ];
 
-// ─── Segment filter config ────────────────────────────────────────────────────
+// --- Segment filter config ----------------------------------------------------
 const SEGMENT_FILTERS: { value: SegmentFilter; label: string }[] = [
   { value: 'ALL',  label: 'All'      },
   { value: 'NSE',  label: 'Index / Equity' },
@@ -75,7 +75,7 @@ const SEGMENT_FILTERS: { value: SegmentFilter; label: string }[] = [
   { value: 'CDS',  label: 'Currency' },
 ];
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// --- Helpers ------------------------------------------------------------------
 
 function formatRelativeTime(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
@@ -88,7 +88,7 @@ function formatRelativeTime(iso: string): string {
 }
 
 /**
- * Resolve exchange + instrumentType from a WatchlistItem — preserves the
+ * Resolve exchange + instrumentType from a WatchlistItem � preserves the
  * exact logic from the original Watchlist.tsx handleSelectItem.
  */
 function resolveInstrumentFields(item: WatchlistItem): { exchange: string; instrumentType: 'EQ' | 'FUT' | 'CE' | 'PE' } {
@@ -106,10 +106,10 @@ function resolveInstrumentFields(item: WatchlistItem): { exchange: string; instr
   }
 }
 
-// ─── Portal floating UI helpers ───────────────────────────────────────────────
+// --- Portal floating UI helpers -----------------------------------------------
 
 /**
- * useFloatingPosition — calculates the best (x, y) for a floating element
+ * useFloatingPosition � calculates the best (x, y) for a floating element
  * that is anchored to a button. Opens below by default; flips above when
  * insufficient space below. Prevents viewport overflow on all sides.
  */
@@ -151,7 +151,7 @@ function useFloatingPosition(
   return pos;
 }
 
-// ─── InstrumentDetails popup — portal version ─────────────────────────────────
+// --- InstrumentDetails popup � portal version ---------------------------------
 
 interface InstrumentDetailsProps {
   instrument: Instrument | WatchlistItem;
@@ -160,7 +160,7 @@ interface InstrumentDetailsProps {
 }
 
 const DETAILS_WIDTH = 224;  // w-56
-const DETAILS_HEIGHT = 228; // ~9 rows × ~24px + header
+const DETAILS_HEIGHT = 228; // ~9 rows � ~24px + header
 
 function InstrumentDetails({ instrument, onClose, anchorRef }: InstrumentDetailsProps) {
   const ref = useRef<HTMLDivElement>(null);
@@ -177,12 +177,12 @@ function InstrumentDetails({ instrument, onClose, anchorRef }: InstrumentDetails
     return () => document.removeEventListener('pointerdown', onPointerDown);
   }, [onClose, anchorRef]);
 
-  const name      = (instrument as Instrument).name      || '—';
-  const exchange  = (instrument as Instrument).exchange  || instrument.segment || '—';
+  const name      = (instrument as Instrument).name      || '�';
+  const exchange  = (instrument as Instrument).exchange  || instrument.segment || '�';
   const lotSize   = (instrument as Instrument).lotSize;
   const tickSize  = (instrument as Instrument).tickSize;
-  const expiry    = (instrument as Instrument).expiry    || '—';
-  const instrType = (instrument as Instrument).instrumentType || '—';
+  const expiry    = (instrument as Instrument).expiry    || '�';
+  const instrType = (instrument as Instrument).instrumentType || '�';
 
   const rows: { label: string; value: string | number }[] = [
     { label: 'Symbol',    value: instrument.symbol },
@@ -191,8 +191,8 @@ function InstrumentDetails({ instrument, onClose, anchorRef }: InstrumentDetails
     { label: 'Segment',   value: instrument.segment },
     { label: 'Type',      value: instrType },
     { label: 'Token',     value: instrument.token },
-    { label: 'Lot Size',  value: lotSize != null ? lotSize : '—' },
-    { label: 'Tick Size', value: tickSize != null ? tickSize : '—' },
+    { label: 'Lot Size',  value: lotSize != null ? lotSize : '�' },
+    { label: 'Tick Size', value: tickSize != null ? tickSize : '�' },
     { label: 'Expiry',    value: expiry },
   ];
 
@@ -228,7 +228,7 @@ function InstrumentDetails({ instrument, onClose, anchorRef }: InstrumentDetails
   );
 }
 
-// ─── ContextMenu — portal version ─────────────────────────────────────────────
+// --- ContextMenu � portal version ---------------------------------------------
 
 interface ContextMenuProps {
   item: WatchlistItem;
@@ -298,7 +298,7 @@ function ContextMenu({
       }}
       className="bg-[#12151f] border border-fw-border rounded-lg overflow-hidden"
     >
-      {/* Header — instrument name */}
+      {/* Header � instrument name */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-fw-border/60">
         <SymbolLogo symbol={item.symbol} size={18} />
         <span className="text-[12px] font-bold text-fw-text truncate">{item.symbol}</span>
@@ -324,7 +324,7 @@ function ContextMenu({
   );
 }
 
-// ─── WatchlistRow ─────────────────────────────────────────────────────────────
+// --- WatchlistRow -------------------------------------------------------------
 
 interface WatchlistRowProps {
   item: WatchlistItem;
@@ -358,7 +358,7 @@ function WatchlistRow({ item, isSelected, isPinned, onSelect, onRemove, onPin, o
     return () => clearTimeout(t);
   }, [quote?.ltp]);
 
-  // Close menu when another row opens — handled via global open state in parent.
+  // Close menu when another row opens � handled via global open state in parent.
   // We rely on the pointer-outside listener in ContextMenu itself.
 
   const handleMenuToggle = (e: React.MouseEvent) => {
@@ -386,21 +386,21 @@ function WatchlistRow({ item, isSelected, isPinned, onSelect, onRemove, onPin, o
       <div className="flex items-center gap-1.5 flex-1 min-w-0">
         <SymbolLogo symbol={item.symbol} size={22} className="flex-shrink-0" />
         <div className="flex flex-col min-w-0 leading-none gap-[2px]">
-          <span className={cn('text-[12px] font-semibold truncate', isSelected ? 'text-fw-text' : 'text-fw-text/90')}>
+          <span className={cn('text-[13px] font-semibold truncate', isSelected ? 'text-fw-text' : 'text-fw-text/90')}>
             {item.symbol}
           </span>
-          <span className="text-[10px] text-fw-text-muted">{item.segment}</span>
+          <span className="text-[11px] text-fw-text-muted">{item.segment}</span>
         </div>
       </div>
 
       {/* LTP */}
       <span className={cn(
-        'text-[12px] font-semibold tabular-nums w-[68px] text-right flex-shrink-0',
+        'text-[13px] font-semibold tabular-nums w-[72px] text-right flex-shrink-0',
         quote ? getChangeColor(quote.changePercent) : 'text-fw-text-secondary',
         flash === 'green' && 'animate-[priceFlashGreen_0.6s_ease-out]',
         flash === 'red'   && 'animate-[priceFlashRed_0.6s_ease-out]',
       )}>
-        {quote ? formatPrice(quote.ltp) : '—'}
+        {quote ? formatPrice(quote.ltp) : '�'}
       </span>
 
       {/* Change pill */}
@@ -413,11 +413,11 @@ function WatchlistRow({ item, isSelected, isPinned, onSelect, onRemove, onPin, o
             {(quote.changePercent || 0) >= 0 ? '+' : ''}{(quote.changePercent || 0).toFixed(2)}%
           </span>
         ) : (
-          <span className="text-[10px] text-fw-text-muted/40">—</span>
+          <span className="text-[10px] text-fw-text-muted/40">�</span>
         )}
       </div>
 
-      {/* ── Always-visible star ── 32×32 hit area, 16px icon */}
+      {/* -- Always-visible star -- 32�32 hit area, 16px icon */}
       <button
         aria-label={isPinned ? 'Remove from watchlist' : 'Add to watchlist'}
         onClick={handlePin}
@@ -431,7 +431,7 @@ function WatchlistRow({ item, isSelected, isPinned, onSelect, onRemove, onPin, o
         <Star size={15} className={isPinned ? 'fill-fw-accent' : ''} />
       </button>
 
-      {/* ── ⋮ menu button ── */}
+      {/* -- ? menu button -- */}
       <div ref={menuAnchorRef} className="relative flex-shrink-0">
         <button
           aria-label="More actions"
@@ -466,7 +466,7 @@ function WatchlistRow({ item, isSelected, isPinned, onSelect, onRemove, onPin, o
   );
 }
 
-// ─── BrowserRow — used in the Instrument Browser (⇅ mode) ───────────────────
+// --- BrowserRow � used in the Instrument Browser (? mode) -------------------
 
 interface BrowserRowProps {
   instrument: Instrument;
@@ -521,8 +521,8 @@ function BrowserRow({ instrument, isSelected, isPinned, onSelect, onPin, onOpenN
       </div>
 
       {/* LTP (may be unavailable if not subscribed) */}
-      <span className={cn('text-[12px] font-semibold tabular-nums w-[68px] text-right flex-shrink-0', quote ? getChangeColor(quote.changePercent) : 'text-fw-text-secondary')}>
-        {quote ? formatPrice(quote.ltp) : '—'}
+      <span className={cn('text-[13px] font-semibold tabular-nums w-[72px] text-right flex-shrink-0', quote ? getChangeColor(quote.changePercent) : 'text-fw-text-secondary')}>
+        {quote ? formatPrice(quote.ltp) : '�'}
       </span>
 
       {/* Star */}
@@ -546,7 +546,7 @@ function BrowserRow({ instrument, isSelected, isPinned, onSelect, onPin, onOpenN
         <Plus size={12} />
       </button>
 
-      {/* ⋮ */}
+      {/* ? */}
       <div ref={menuAnchorRef} className="relative flex-shrink-0">
         <button
           aria-label="More actions"
@@ -579,7 +579,7 @@ function BrowserRow({ instrument, isSelected, isPinned, onSelect, onPin, onOpenN
   );
 }
 
-// ─── NewsPanel ────────────────────────────────────────────────────────────────
+// --- NewsPanel ----------------------------------------------------------------
 
 type NewsMode = 'all' | 'favorites' | 'instrument';
 
@@ -594,7 +594,7 @@ interface NewsPanelProps {
 function NewsPanel({ instrumentSymbol, pinnedTokens, watchlists, onBack }: NewsPanelProps) {
   const [newsMode, setNewsMode] = useState<NewsMode>(instrumentSymbol ? 'instrument' : 'all');
 
-  // When instrumentSymbol changes (e.g. opened from ⋮ menu), switch to instrument mode
+  // When instrumentSymbol changes (e.g. opened from ? menu), switch to instrument mode
   useEffect(() => {
     if (instrumentSymbol) setNewsMode('instrument');
   }, [instrumentSymbol]);
@@ -661,7 +661,7 @@ function NewsPanel({ instrumentSymbol, pinnedTokens, watchlists, onBack }: NewsP
       {!IS_NEWS_CONNECTED && (
         <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-900/20 border-b border-amber-800/30 flex-shrink-0">
           <span className="text-[10px] text-amber-400/80 leading-tight">
-            Dev mode — connect a news provider to show live data
+            Dev mode � connect a news provider to show live data
           </span>
         </div>
       )}
@@ -716,24 +716,24 @@ function NewsCard({ item }: { item: NewsItem }) {
         {item.symbol && (
           <span className="text-[10px] text-fw-text-muted font-medium">{item.symbol}</span>
         )}
-        <span className="text-[10px] text-fw-text-muted/60">·</span>
+        <span className="text-[10px] text-fw-text-muted/60">�</span>
         <span className="text-[10px] text-fw-text-muted/70">{formatRelativeTime(item.publishedAt)}</span>
         {item.sentiment && (
           <>
-            <span className="text-[10px] text-fw-text-muted/60">·</span>
+            <span className="text-[10px] text-fw-text-muted/60">�</span>
             <span className={cn('text-[10px] font-semibold', sentimentColor.split(' ')[0])}>
               {item.sentiment}
             </span>
           </>
         )}
-        <span className="text-[10px] text-fw-text-muted/60">·</span>
+        <span className="text-[10px] text-fw-text-muted/60">�</span>
         <span className="text-[10px] text-fw-text-muted/60">{item.source}</span>
       </div>
     </div>
   );
 }
 
-// ─── InstrumentBrowser — ⇅ mode ──────────────────────────────────────────────
+// --- InstrumentBrowser � ? mode ----------------------------------------------
 
 interface InstrumentBrowserProps {
   onOpenNews: (symbol: string) => void;
@@ -773,7 +773,7 @@ function InstrumentBrowser({ onOpenNews, currentWlId, activeSymbol, pinnedTokens
         if (q.trim()) {
           data = await searchInstruments(q, seg === 'ALL' ? undefined : seg);
         } else {
-          // No query — show all instruments for the selected segment
+          // No query � show all instruments for the selected segment
           data = await getInstruments(seg === 'ALL' ? 'NSE' : seg);
           // If ALL, merge a couple of segments for a good default list
           if (seg === 'ALL') {
@@ -847,7 +847,7 @@ function InstrumentBrowser({ onOpenNews, currentWlId, activeSymbol, pinnedTokens
                   )}
                 >
                   {sf.label}
-                  {segFilter === sf.value && <span className="text-fw-accent">✓</span>}
+                  {segFilter === sf.value && <span className="text-fw-accent">?</span>}
                 </button>
               ))}
             </div>
@@ -856,9 +856,9 @@ function InstrumentBrowser({ onOpenNews, currentWlId, activeSymbol, pinnedTokens
       </div>
 
       {/* Column headers */}
-      <div className="grid grid-cols-[1fr_68px] px-3 py-[3px] border-b border-fw-border/30 flex-shrink-0 bg-[#090b10]">
-        <span className="text-[10px] text-fw-text-secondary uppercase tracking-widest">Instrument</span>
-        <span className="text-[10px] text-fw-text-secondary uppercase tracking-widest text-right">LTP</span>
+      <div className="grid grid-cols-[1fr_72px] px-3 py-[3px] border-b border-fw-border/30 flex-shrink-0 bg-[#090b10]">
+        <span className="text-[11px] text-fw-text-secondary uppercase tracking-widest">Instrument</span>
+        <span className="text-[11px] text-fw-text-secondary uppercase tracking-widest text-right">LTP</span>
       </div>
 
       {/* Results */}
@@ -891,7 +891,7 @@ function InstrumentBrowser({ onOpenNews, currentWlId, activeSymbol, pinnedTokens
   );
 }
 
-// ─── FavoritesView ────────────────────────────────────────────────────────────
+// --- FavoritesView ------------------------------------------------------------
 
 interface FavoritesViewProps {
   pinnedTokens: string[];
@@ -941,7 +941,7 @@ function FavoritesView({ pinnedTokens, watchlists, activeSymbol, onSelect, onPin
             <Star size={20} className="opacity-20" />
             <p className="text-[11px]">No starred instruments</p>
             <p className="text-[10px] text-fw-text-muted/60 text-center px-4">
-              Click ☆ on any instrument to add it here
+              Click ? on any instrument to add it here
             </p>
           </div>
         ) : (
@@ -963,7 +963,7 @@ function FavoritesView({ pinnedTokens, watchlists, activeSymbol, onSelect, onPin
   );
 }
 
-// ─── ImportPanel ──────────────────────────────────────────────────────────────
+// --- ImportPanel --------------------------------------------------------------
 
 interface ImportPanelProps {
   onClose: () => void;
@@ -1016,7 +1016,7 @@ function ImportPanel({ onClose, activeWatchlist, watchlists, currentWlId, setWat
     const parts: string[] = [];
     if (added.length > 0) parts.push(`${added.length} added`);
     if (notFound.length > 0) parts.push(`${notFound.length} not found: ${notFound.join(', ')}`);
-    setImportStatus(parts.join(' · '));
+    setImportStatus(parts.join(' � '));
     setImporting(false);
     setImportText('');
   };
@@ -1041,7 +1041,7 @@ function ImportPanel({ onClose, activeWatchlist, watchlists, currentWlId, setWat
           disabled={importing || !importText.trim()}
           className="px-3 py-1 text-[11px] bg-fw-accent text-white rounded font-semibold disabled:opacity-50"
         >
-          {importing ? 'Resolving…' : 'Import'}
+          {importing ? 'Resolving�' : 'Import'}
         </button>
         <button
           onClick={onClose}
@@ -1054,7 +1054,7 @@ function ImportPanel({ onClose, activeWatchlist, watchlists, currentWlId, setWat
   );
 }
 
-// ─── Main Watchlist Component ─────────────────────────────────────────────────
+// --- Main Watchlist Component -------------------------------------------------
 
 export function Watchlist() {
   const {
@@ -1131,7 +1131,7 @@ export function Watchlist() {
     return items;
   }, [activeWatchlist, inlineQuery, segFilter, pinnedTokens]);
 
-  // Original handleSelectItem logic — unchanged
+  // Original handleSelectItem logic � unchanged
   const handleSelectItem = useCallback((item: WatchlistItem) => {
     useTradingStore.getState().setSelectedContract(null);
     const { exchange, instrumentType } = resolveInstrumentFields(item);
@@ -1161,14 +1161,14 @@ export function Watchlist() {
 
   const activeSegLabel = SEGMENT_FILTERS.find(s => s.value === segFilter)?.label ?? 'All';
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // -- Render -----------------------------------------------------------------
   return (
     <div className="flex flex-col h-full bg-gradient-to-b from-[#0d0f15] to-[#0b0d12] overflow-hidden">
 
-      {/* ── TOP TOOLBAR: [ ⇅ ] [ ▣ ] [ Search... ] [ All ▾ ] [ ☆ ] ───────── */}
+      {/* -- TOP TOOLBAR: [ ? ] [ ? ] [ Search... ] [ All ? ] [ ? ] --------- */}
       <div className="flex items-center gap-1 px-2 py-1.5 border-b border-fw-border flex-shrink-0 bg-gradient-to-r from-[#10121a] to-[#0e1018]">
 
-        {/* ⇅ Instrument Browser toggle */}
+        {/* ? Instrument Browser toggle */}
         <button
           aria-label="Instrument browser"
           title="Instrument browser"
@@ -1183,7 +1183,7 @@ export function Watchlist() {
           <ArrowUpDown size={13} />
         </button>
 
-        {/* ▣ News toggle */}
+        {/* ? News toggle */}
         <button
           aria-label="News"
           title="Market news"
@@ -1201,7 +1201,7 @@ export function Watchlist() {
           <Newspaper size={13} />
         </button>
 
-        {/* Inline search input — flex-1 */}
+        {/* Inline search input � flex-1 */}
         <div className="relative flex-1 min-w-0">
           <Search size={10} className="absolute left-2 top-1/2 -translate-y-1/2 text-fw-text-muted pointer-events-none" />
           <input
@@ -1220,7 +1220,7 @@ export function Watchlist() {
           )}
         </div>
 
-        {/* All ▾ segment filter (only shown in watchlist/browser mode) */}
+        {/* All ? segment filter (only shown in watchlist/browser mode) */}
         {panelMode !== 'news' && (
           <div ref={segFilterRef} className="relative flex-shrink-0">
             <button
@@ -1245,7 +1245,7 @@ export function Watchlist() {
                     )}
                   >
                     {sf.label}
-                    {segFilter === sf.value && <span className="text-fw-accent text-[10px]">✓</span>}
+                    {segFilter === sf.value && <span className="text-fw-accent text-[10px]">?</span>}
                   </button>
                 ))}
               </div>
@@ -1253,7 +1253,7 @@ export function Watchlist() {
           </div>
         )}
 
-        {/* ☆ Favourites toggle */}
+        {/* ? Favourites toggle */}
         <button
           aria-label="Favourites"
           title="Starred instruments"
@@ -1269,7 +1269,7 @@ export function Watchlist() {
         </button>
       </div>
 
-      {/* ── WATCHLIST TABS — preserved exactly, shown only in watchlist mode ── */}
+      {/* -- WATCHLIST TABS � preserved exactly, shown only in watchlist mode -- */}
       {(panelMode === 'watchlist') && (
         <div className="flex items-center border-b border-fw-border overflow-x-auto flex-shrink-0 scrollbar-none bg-[#090b10] px-1">
           {watchlists.map(wl => (
@@ -1298,7 +1298,7 @@ export function Watchlist() {
             </button>
             <button
               onClick={() => {
-                // Open browser mode for adding — or trigger search in browser
+                // Open browser mode for adding � or trigger search in browser
                 setPanelMode('browser');
               }}
               title="Browse instruments"
@@ -1310,7 +1310,7 @@ export function Watchlist() {
         </div>
       )}
 
-      {/* ── IMPORT PANEL ─────────────────────────────────────────────────────── */}
+      {/* -- IMPORT PANEL ------------------------------------------------------- */}
       {showImport && panelMode === 'watchlist' && (
         <ImportPanel
           onClose={() => setShowImport(false)}
@@ -1321,21 +1321,21 @@ export function Watchlist() {
         />
       )}
 
-      {/* ── COLUMN HEADERS (watchlist mode only) ─────────────────────────────── */}
+      {/* -- COLUMN HEADERS (watchlist mode only) ------------------------------- */}
       {panelMode === 'watchlist' && (
         <div className="grid grid-cols-[1fr_68px_52px_28px_22px] px-2 py-[3px] border-b border-fw-border/30 flex-shrink-0 bg-[#090b10]">
           <span className="text-[10px] text-fw-text-muted uppercase tracking-widest">Symbol</span>
           <span className="text-[10px] text-fw-text-muted uppercase tracking-widest text-right">LTP</span>
           <span className="text-[10px] text-fw-text-muted uppercase tracking-widest text-right">Chg%</span>
-          <span className="text-[10px] text-fw-text-muted text-center">★</span>
-          <span className="text-[10px] text-fw-text-muted/30 text-center">⋮</span>
+          <span className="text-[10px] text-fw-text-muted text-center">?</span>
+          <span className="text-[10px] text-fw-text-muted/30 text-center">?</span>
         </div>
       )}
 
-      {/* ── PANEL BODY ───────────────────────────────────────────────────────── */}
+      {/* -- PANEL BODY --------------------------------------------------------- */}
       <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
 
-        {/* ── NEWS MODE ──────────────────────────────────────────────────────── */}
+        {/* -- NEWS MODE -------------------------------------------------------- */}
         {panelMode === 'news' && (
           <NewsPanel
             instrumentSymbol={newsInstrumentSymbol}
@@ -1345,7 +1345,7 @@ export function Watchlist() {
           />
         )}
 
-        {/* ── INSTRUMENT BROWSER MODE ─────────────────────────────────────── */}
+        {/* -- INSTRUMENT BROWSER MODE --------------------------------------- */}
         {panelMode === 'browser' && (
           <InstrumentBrowser
             onOpenNews={openInstrumentNews}
@@ -1356,7 +1356,7 @@ export function Watchlist() {
           />
         )}
 
-        {/* ── FAVOURITES MODE ───────────────────────────────────────────────── */}
+        {/* -- FAVOURITES MODE ------------------------------------------------- */}
         {panelMode === 'favorites' && (
           <FavoritesView
             pinnedTokens={pinnedTokens}
@@ -1369,7 +1369,7 @@ export function Watchlist() {
           />
         )}
 
-        {/* ── WATCHLIST MODE ────────────────────────────────────────────────── */}
+        {/* -- WATCHLIST MODE -------------------------------------------------- */}
         {panelMode === 'watchlist' && (
           <>
             {/* Inline search results overlay */}
@@ -1433,7 +1433,7 @@ export function Watchlist() {
         )}
       </div>
 
-      {/* ── BOTTOM ADD BUTTON — watchlist mode only ───────────────────────── */}
+      {/* -- BOTTOM ADD BUTTON � watchlist mode only ------------------------- */}
       {panelMode === 'watchlist' && (
         <div className="px-2 py-1.5 border-t border-fw-border flex-shrink-0">
           <button

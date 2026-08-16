@@ -36,7 +36,7 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-2 mb-2">
       <div className="w-[3px] h-4 rounded-full bg-fw-accent" />
-      <span className="text-[12px] font-bold tracking-widest uppercase text-fw-text-secondary">{children}</span>
+      <span className="text-[13px] font-bold tracking-widest uppercase text-fw-text-secondary">{children}</span>
     </div>
   );
 }
@@ -47,12 +47,12 @@ function StatCard({
 }: { label: string; value: string; sub?: string; color?: string; icon?: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-0.5 bg-[#0d0f18] border border-fw-border/40 rounded px-3 py-2 min-w-0">
-      <div className="flex items-center gap-1 text-fw-text-secondary text-[11px] font-medium uppercase tracking-wider truncate">
+      <div className="flex items-center gap-1 text-fw-text-secondary text-[12px] font-medium uppercase tracking-wider truncate">
         {icon && <span className="opacity-70">{icon}</span>}
         {label}
       </div>
-      <span className={cn('text-[16px] font-bold tabular-nums truncate', color || 'text-fw-text')}>{value}</span>
-      {sub && <span className="text-[11px] text-fw-text-muted truncate">{sub}</span>}
+      <span className={cn('text-[17px] font-bold tabular-nums truncate', color || 'text-fw-text')}>{value}</span>
+      {sub && <span className="text-[12px] text-fw-text-muted truncate">{sub}</span>}
     </div>
   );
 }
@@ -66,7 +66,7 @@ function IndexTile({ token, symbol, onClick }: { token: string; symbol: string; 
       onClick={onClick}
       className="flex flex-col gap-0.5 bg-[#0d0f18] border border-fw-border/40 hover:border-fw-accent/40 rounded px-3 py-2 text-left transition-colors min-w-0 group"
     >
-      <span className="text-[11px] text-fw-text-secondary font-medium uppercase tracking-wider">{symbol}</span>
+      <span className="text-[12px] text-fw-text-secondary font-medium uppercase tracking-wider">{symbol}</span>
       {q ? (
         <>
           <span className={cn('text-[15px] font-bold tabular-nums', up ? 'text-emerald-400' : 'text-red-400')}>
@@ -89,7 +89,7 @@ function SegmentBtn({ ws, label, color }: { ws: Workspace; label: string; color:
   return (
     <button
       onClick={() => setActiveWorkspace(ws)}
-      className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-fw-border/40 hover:border-fw-accent/50 bg-[#0d0f18] hover:bg-fw-hover/40 text-[12px] font-bold text-fw-text-secondary hover:text-fw-text transition-all uppercase tracking-wider"
+      className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-fw-border/40 hover:border-fw-accent/50 bg-[#0d0f18] hover:bg-fw-hover/40 text-[13px] font-bold text-fw-text-secondary hover:text-fw-text transition-all uppercase tracking-wider"
       style={{ borderLeftColor: color, borderLeftWidth: 2 }}
     >
       {label}
@@ -116,7 +116,7 @@ function MoverRow({ token, symbol, rank }: { token: string; symbol: string; rank
       className="flex items-center gap-2 w-full px-2 py-1.5 rounded hover:bg-fw-hover/30 transition-colors text-left"
     >
       <span className="text-[11px] text-fw-text-muted/50 w-4 tabular-nums">{rank}</span>
-      <span className="flex-1 text-[13px] font-medium text-fw-text truncate">{symbol}</span>
+      <span className="flex-1 text-[14px] font-medium text-fw-text truncate">{symbol}</span>
       {q ? (
         <>
           <span className="text-[12px] tabular-nums text-fw-text font-mono">{formatPrice(q.ltp)}</span>

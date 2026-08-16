@@ -11,7 +11,7 @@ export function TopBar() {
 
   return (
     <header className="bg-gradient-to-b from-[#0e1018] to-[#0c0e14] border-b border-fw-border flex select-none">
-      <div className="flex items-center px-4 h-[46px] w-full gap-3">
+      <div className="flex items-center px-4 h-[48px] w-full gap-3">
 
         {/* Brand */}
         <div data-brand className="flex items-center gap-2.5 mr-4 flex-shrink-0">
@@ -19,14 +19,14 @@ export function TopBar() {
             <img src="/logo.png" alt="FW" className="w-7 h-7 object-contain" />
           </div>
           <div className="flex flex-col leading-tight items-center">
-            <span className="text-[14px] font-extrabold tracking-wide bg-gradient-to-r from-[#00D4FF] via-[#4F46E5] to-[#7C3AED] bg-clip-text text-transparent">FUNDEDWEALTH</span>
-            <span className="text-[10px] font-bold tracking-[0.3em] text-slate-400 text-center">TERMINAL</span>
+            <span className="text-[15px] font-extrabold tracking-wide bg-gradient-to-r from-[#00D4FF] via-[#4F46E5] to-[#7C3AED] bg-clip-text text-transparent">FUNDEDWEALTH</span>
+            <span className="text-[11px] font-bold tracking-[0.3em] text-slate-400 text-center">TERMINAL</span>
           </div>
         </div>
 
         {/* Market status */}
         <div className={cn(
-          'flex items-center gap-1.5 px-2.5 py-1 rounded text-[12px] font-semibold flex-shrink-0',
+          'flex items-center gap-1.5 px-2.5 py-1 rounded text-[13px] font-semibold flex-shrink-0',
           marketStatus === 'OPEN'
             ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
             : 'bg-red-500/10 text-red-400 border border-red-500/20'
@@ -89,7 +89,7 @@ function NavLink({ ws, label, icon }: { ws: Workspace; label: string; icon?: Rea
     <button
       onClick={() => setActiveWorkspace(ws)}
       className={cn(
-        'flex items-center gap-1.5 px-2.5 py-1 rounded text-[12px] font-semibold uppercase tracking-wide transition-all',
+        'flex items-center gap-1.5 px-2.5 py-1 rounded text-[13px] font-semibold uppercase tracking-wide transition-all',
         active
           ? 'bg-fw-accent/15 text-fw-accent border border-fw-accent/40'
           : 'text-slate-300 hover:text-white hover:bg-white/[0.04] border border-transparent'
