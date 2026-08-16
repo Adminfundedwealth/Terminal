@@ -89,7 +89,19 @@ export function useWatchlistSync() {
       const data = await apiService.get<any[]>('/watchlists');
       if (data && data.length > 0) {
         // Backend has data — use it as source of truth
-        setWatchlists(data);
+        // But fill any empty category watchlists with defaults
+        const merged = data.map((wl: any) => {
+          if (wl.items && wl.items.length > 0) return wl;
+          // This watchlist has no items — check if we have defaults for it
+          const matchingDefault = defaultWatchlists.find(
+            d => d.name.toLowerCase() === (wl.name || '').toLowerCase()
+          );
+          if (matchingDefault) {
+            return { ...wl, items: matchingDefault.items };
+          }
+          return wl;
+        });
+        setWatchlists(merged);
       } else {
         // Backend empty — seed all default watchlists
         await seedDefaultWatchlists();
