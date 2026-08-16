@@ -28,6 +28,7 @@ import { eventBus } from '../events/index.js';
 import { FlashRiskProfileService } from './flashRiskProfileService.js';
 import { InstantRiskProfileService } from './instantRiskProfileService.js';
 import { TwoStepRiskProfileService } from './twoStepRiskProfileService.js';
+import { OneStepRiskProfileService } from './oneStepRiskProfileService.js';
 
 // Profit split configuration per plan — used for non-Flash accounts only.
 // Flash accounts read profit_split_pct from FlashRiskProfileService.
@@ -88,7 +89,8 @@ export class PayoutService {
     const normalizedPlan = (challenge.plan || '').toLowerCase().replace(/[-_\s]/g, '');
     const isInstantPlan  = normalizedPlan === 'instant';
     const isFlashPlan    = normalizedPlan === 'flash';
-    checks.isFunded = isInstantPlan || isFlashPlan || challenge.type === 'funded';
+    const isOneStepPlan = normalizedPlan === '1step';
+    checks.isFunded = isInstantPlan || isFlashPlan || isOneStepPlan || challenge.type === 'funded';
     if (!checks.isFunded) {
       return { eligible: false, reason: 'Only funded accounts can request payouts', checks };
     }
@@ -177,11 +179,15 @@ export class PayoutService {
     }
 
     // Payout threshold: net profit must be >= threshold % of initial balance
+    if (isOneStep) {
+      try { const op = await OneStepRiskProfileService.getProfile(); minPayoutPct = op.f_payout_threshold_pct || 3; } catch {}
+    }
+
     if (isTwoStep) {
       try { const tp = await TwoStepRiskProfileService.getProfile(); minPayoutPct = tp.f_payout_threshold_pct || 5; } catch {}
     }
 
-    if ((isFlash || isInstant || isTwoStep) && minPayoutPct > 0) {
+    if ((isFlash || isInstant || isTwoStep || isOneStep) && minPayoutPct > 0) {
       const minPayoutAmount = (minPayoutPct / 100) * parseFloat(challenge.initial_balance);
       if (netProfit < minPayoutAmount) {
         const planLabel = isFlash ? 'Flash' : 'Instant';
@@ -345,6 +351,11 @@ export class PayoutService {
     
     // 2-Step: record first approved payout for 80% to 90% split upgrade
     // Only for 2-Step. Only sets first_payout_approved_at when NULL (idempotent).
+    if (OneStepRiskProfileService.isOneStepAccount({ challenge: { plan: payout.plan } })) {
+      OneStepRiskProfileService.hasMetPayoutThreshold(payout.account_id).then(has => {
+        if (!has) { const{supabase:db}=require('../db/client.js'); if(db)db.from('trading_accounts').update({first_payout_approved_at:new Date().toISOString()}).eq('id',payout.account_id).is('first_payout_approved_at',null); }
+      }).catch(()=>{});
+    }
     if (TwoStepRiskProfileService.isTwoStepAccount({ challenge: { plan: payout.plan } })) {
       TwoStepRiskProfileService.recordFirstPayout(payout.account_id).catch((e) => {
         console.error('[PayoutService] recordFirstPayout failed:', e.message);
@@ -535,6 +546,14 @@ export class PayoutService {
         : (SPLIT_CONFIGS['10K']?.traderSplit * 100 ?? 80);
       const traderSplit = splitPct / 100;
       return { traderSplit, firmSplit: Math.round((1 - traderSplit) * 100) / 100 };
+    }
+
+    if (normalized === '1step') {
+      const hasPayout = oneStepProfile?._hasMetThreshold ?? false;
+      const splitPct = OneStepRiskProfileService.getEffectiveSplitPct(
+        oneStepProfile ?? { f_profit_split_initial_pct: 80, f_profit_split_scaled_pct: 90 }, hasPayout);
+      const traderSplit = splitPct / 100;
+      return { traderSplit, firmSplit: Math.round((1-traderSplit)*100)/100 };
     }
 
     return SPLIT_CONFIGS[plan] || SPLIT_CONFIGS['10K'];

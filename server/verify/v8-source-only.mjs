@@ -91,7 +91,7 @@ mig.includes('daily_profit_cap_until')
 
 // ── 5. Payout Service ─────────────────────────────────────────────────────
 console.log('\n── 5. Payout Service ──');
-ps.includes("isInstantPlan || isFlashPlan || challenge.type === 'funded'")
+ps.includes('isInstantPlan || isFlashPlan || isOneStepPlan || challenge.type')
   ?ok("T22: payout gate accepts Instant accounts")     :er("T22: payout gate still blocks Instant");
 ps.includes("normalized === 'instant'")&&ps.includes('profit_split_pct')
   ?ok('T20: payoutService reads Instant profit_split_pct')  :er('T20: payout split wrong');

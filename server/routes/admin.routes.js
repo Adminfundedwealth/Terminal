@@ -26,6 +26,7 @@ import { supabase } from '../db/client.js';
 import { FlashRiskProfileService } from '../services/flashRiskProfileService.js';
 import { InstantRiskProfileService } from '../services/instantRiskProfileService.js';
 import { TwoStepRiskProfileService } from '../services/twoStepRiskProfileService.js';
+import { OneStepRiskProfileService } from '../services/oneStepRiskProfileService.js';
 
 const accountRepo = new AccountRepository();
 
@@ -655,6 +656,35 @@ export function createAdminRouter() {
       const accounts = (data||[]).filter(r=>(r.challenge_accounts?.plan||'').toLowerCase().replace(/[-_\s]/g,'')==='2step').map(r=>{
         const ch=r.challenge_accounts; const phase=TwoStepRiskProfileService.getPhase(r);
         return { id:r.id, accountCode:r.account_code, balance:r.balance, status:r.status, lockedReason:r.locked_reason, createdAt:r.created_at, firstPayoutApprovedAt:r.first_payout_approved_at, phase, trader:r.terminal_traders, challenge:{id:ch?.id,status:ch?.status,type:ch?.type,phase:ch?.phase,initialBalance:ch?.initial_balance,peakBalance:ch?.peak_balance,startedAt:ch?.started_at} };
+      });
+      res.json({ success: true, accounts, count: accounts.length });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // ─── 1-Step Risk Management ──────────────────────────────────────────────
+  router.get('/admin/onestep/profile', async (req, res) => {
+    try { res.json({ success: true, profile: await OneStepRiskProfileService.getProfile() }); }
+    catch (err) { res.status(500).json({ error: err.message }); }
+  });
+  router.put('/admin/onestep/profile', async (req, res) => {
+    try {
+      if (!req.body || !Object.keys(req.body).length) return res.status(400).json({ error: 'Body required' });
+      const updated = await OneStepRiskProfileService.updateProfile(req.body, req.user.userId);
+      res.json({ success: true, profile: updated, message: '1-Step profile updated. Live immediately.' });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+  router.get('/admin/onestep/audit', async (req, res) => {
+    try { res.json({ success: true, audit: await OneStepRiskProfileService.getAuditLog(Math.min(200, parseInt(req.query.limit)||50)) }); }
+    catch (err) { res.status(500).json({ error: err.message }); }
+  });
+  router.get('/admin/onestep/accounts', async (req, res) => {
+    try {
+      if (!supabase) return res.status(503).json({ error: 'Database not configured' });
+      const { data, error } = await supabase.from('trading_accounts').select('id, account_code, balance, status, locked_reason, created_at, first_payout_approved_at, challenge_accounts!challenge_id (id, plan, type, phase, status, initial_balance, peak_balance, started_at), terminal_traders!trader_id (email, display_name)').order('created_at', { ascending: false });
+      if (error) throw new Error(error.message);
+      const accounts = (data||[]).filter(r=>(r.challenge_accounts?.plan||'').toLowerCase().replace(/[-_\s]/g,'')==='1step').map(r=>{
+        const ch=r.challenge_accounts; const phase=OneStepRiskProfileService.getPhase(r);
+        return { id:r.id, accountCode:r.account_code, balance:r.balance, status:r.status, phase, firstPayoutAt:r.first_payout_approved_at, trader:r.terminal_traders, challenge:{id:ch?.id,type:ch?.type,phase:ch?.phase,status:ch?.status,initialBalance:ch?.initial_balance} };
       });
       res.json({ success: true, accounts, count: accounts.length });
     } catch (err) { res.status(500).json({ error: err.message }); }

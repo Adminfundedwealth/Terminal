@@ -31,6 +31,7 @@ import { HolidayService } from './holidayService.js';
 import { LifecycleCallbackClient } from '../clients/lifecycle.callback.js';
 import { InstantRiskProfileService } from './instantRiskProfileService.js';
 import { TwoStepRiskProfileService } from './twoStepRiskProfileService.js';
+import { OneStepRiskProfileService } from './oneStepRiskProfileService.js';
 
 const riskRulesRepo = new RiskRulesRepository();
 const positionRepo = new PositionRepository();
@@ -57,40 +58,97 @@ export class RiskEngine {
    */
   static async _getRulesMap(accountId, account) {
     // Detect Instant account by plan field
-    if (InstantRiskProfileService.isInstantAccount(account) || TwoStepRiskProfileService.isTwoStepAccount(account)) {
+    // Detect Instant account
+    if (InstantRiskProfileService.isInstantAccount(account)) {
       const ip = await InstantRiskProfileService.getProfile();
       const balance = parseFloat(account?.balance) || 0;
-
-      // Convert flat instant_risk_profile columns to the rules-map shape
-      // used by every individual check function.
       return {
-        daily_loss_limit:    { percent: ip.daily_loss_pct,    amount: (ip.daily_loss_pct / 100) * balance },
-        max_drawdown:        { percent: ip.max_drawdown_pct,  amount: (ip.max_drawdown_pct / 100) * balance, type: 'static' },
-        profit_target:       ip.profit_target_pct > 0
-          ? { percent: ip.profit_target_pct, amount: (ip.profit_target_pct / 100) * balance }
-          : null, // null = no profit target check
-        max_positions:       { count: ip.max_open_positions },
-        leverage_limit:      { maxMultiplier: ip.leverage_max },
-        max_position_size:   { percent: ip.max_position_size_pct, amount: (ip.max_position_size_pct / 100) * balance },
-        allowed_segments:    { segments: Array.isArray(ip.allowed_segments) ? ip.allowed_segments : ['NSE','NFO','BFO','MCX','CDS'] },
-        trading_hours:       { start: ip.trading_hours_start, end: ip.trading_hours_end },
-        no_overnight:        ip.overnight_allowed
-          ? null  // null = no overnight check (allowed)
-          : { cutoffTime: ip.overnight_cutoff || '15:15', allowedProducts: ['MIS'] },
-        news_blackout:       { windows: [], blockAll: false },   // managed separately if needed
-        daily_profit_cap:    { percent: ip.daily_profit_cap_pct, amount: (ip.daily_profit_cap_pct / 100) * balance },
-        consistency_rule:    { maxDayProfitPercent: ip.consistency_rule_pct },
-        risk_per_trade_idea: { percent: ip.risk_per_idea_pct, amount: (ip.risk_per_idea_pct / 100) * balance, sameDirectionWindowMinutes: ip.risk_per_idea_window_min },
-        inactivity_close:    { days: ip.inactivity_close_days },
-        // Weekend + holiday handled by hardcoded checks — not in rules map
-        // but we store flags so callers can inspect:
-        _instant_weekend_allowed:  ip.weekend_allowed,
+        daily_loss_limit: { percent: ip.daily_loss_pct, amount: (ip.daily_loss_pct/100)*balance },
+        max_drawdown: { percent: ip.max_drawdown_pct, amount: (ip.max_drawdown_pct/100)*balance, type: 'static' },
+        profit_target: ip.profit_target_pct > 0 ? { percent: ip.profit_target_pct, amount: (ip.profit_target_pct/100)*balance } : null,
+        max_positions: { count: ip.max_open_positions },
+        leverage_limit: { maxMultiplier: ip.leverage_max },
+        max_position_size: { percent: ip.max_position_size_pct, amount: (ip.max_position_size_pct/100)*balance },
+        allowed_segments: { segments: Array.isArray(ip.allowed_segments)?ip.allowed_segments:['NSE','NFO','BFO','MCX','CDS'] },
+        trading_hours: { start: ip.trading_hours_start, end: ip.trading_hours_end },
+        no_overnight: ip.overnight_allowed ? null : { cutoffTime: ip.overnight_cutoff||'15:30', allowedProducts: ['MIS'] },
+        daily_profit_cap: { percent: ip.daily_profit_cap_pct, amount: (ip.daily_profit_cap_pct/100)*balance },
+        consistency_rule: { maxDayProfitPercent: ip.consistency_rule_pct },
+        risk_per_trade_idea: { percent: ip.risk_per_idea_pct, amount: (ip.risk_per_idea_pct/100)*balance, sameDirectionWindowMinutes: ip.risk_per_idea_window_min },
+        news_blackout: { windows: [], blockAll: false },
+        inactivity_close: { days: ip.inactivity_close_days },
+        _instant_weekend_allowed: ip.weekend_allowed,
         _instant_holiday_restriction: ip.holiday_restriction,
-        _instant_profile: ip, // for payout/split access
+        _instant_profit_cap_cooldown_hours: ip.daily_profit_cap_cooldown_hours || 8,
+        _instant_profile: ip,
       };
     }
 
-    // Non-Instant: return per-account risk_rules from DB
+    // Detect 2-Step account
+    if (TwoStepRiskProfileService.isTwoStepAccount(account)) {
+      const tp = await TwoStepRiskProfileService.getProfile();
+      const phase = TwoStepRiskProfileService.getPhase(account);
+      const balance = parseFloat(account?.balance) || 0;
+      const px = phase === 'funded' ? 'f_' : phase === 'phase_2' ? 'p2_' : 'p1_';
+      const dl = tp[px+'daily_loss_pct']; const dd = tp[px+'max_drawdown_pct'];
+      const pt = tp[px+'profit_target_pct']; const md = tp[px+'min_trading_days'];
+      const mp = tp[px+'max_open_positions']; const ps = tp[px+'max_position_size_pct'];
+      const mr = tp[px+'max_risk_per_trade_pct']; const dc = tp[px+'daily_profit_cap_pct'];
+      const lv = tp[px+'leverage_max'];
+      return {
+        daily_loss_limit: { percent: dl, amount: (dl/100)*balance },
+        max_drawdown: { percent: dd, amount: (dd/100)*balance, type: 'static' },
+        profit_target: pt > 0 ? { percent: pt, amount: (pt/100)*balance } : null,
+        max_positions: { count: mp },
+        leverage_limit: { maxMultiplier: lv },
+        max_position_size: { percent: ps, amount: (ps/100)*balance },
+        max_risk_per_trade: { percent: mr, amount: (mr/100)*balance },
+        daily_profit_cap: { percent: dc, amount: (dc/100)*balance },
+        allowed_segments: { segments: Array.isArray(tp.allowed_segments)?tp.allowed_segments:['NSE','NFO','BFO','MCX','CDS'] },
+        trading_hours: { start: tp.trading_hours_start, end: tp.trading_hours_end },
+        no_overnight: tp.overnight_allowed ? null : { cutoffTime: tp.overnight_cutoff||'15:15', allowedProducts: ['MIS'] },
+        consistency_rule: phase==='funded' ? { maxDayProfitPercent: tp.f_consistency_rule_pct } : null,
+        news_blackout: { windows: [], blockAll: false },
+        inactivity_close: { days: tp.inactivity_close_days },
+        _twostep_weekend_allowed: tp.weekend_allowed,
+        _twostep_holiday_restriction: tp.holiday_restriction,
+        _twostep_profile: tp,
+        _twostep_phase: phase,
+      };
+    }
+    // Detect 1-Step account
+    if (OneStepRiskProfileService.isOneStepAccount(account)) {
+      const op = await OneStepRiskProfileService.getProfile();
+      const phase = OneStepRiskProfileService.getPhase(account);
+      const balance = parseFloat(account?.balance) || 0;
+      const px = phase === 'funded' ? 'f_' : 'e_';
+      const dl = op[px+'daily_loss_pct']; const dd = op[px+'max_drawdown_pct'];
+      const pt = op[px+'profit_target_pct']; const mp = op[px+'max_open_positions'];
+      const ps = op[px+'max_position_size_pct']; const mr = op[px+'max_risk_per_trade_pct'];
+      const dc = op[px+'daily_profit_cap_pct']; const lv = op[px+'leverage_max'];
+      return {
+        daily_loss_limit: { percent: dl, amount: (dl/100)*balance },
+        max_drawdown: { percent: dd, amount: (dd/100)*balance, type: 'static' },
+        profit_target: pt > 0 ? { percent: pt, amount: (pt/100)*balance } : null,
+        max_positions: { count: mp },
+        leverage_limit: { maxMultiplier: lv },
+        max_position_size: { percent: ps, amount: (ps/100)*balance },
+        max_risk_per_trade: { percent: mr, amount: (mr/100)*balance },
+        daily_profit_cap: { percent: dc, amount: (dc/100)*balance },
+        allowed_segments: { segments: Array.isArray(op.allowed_segments)?op.allowed_segments:['NSE','NFO','BFO','MCX','CDS'] },
+        trading_hours: { start: op.trading_hours_start, end: op.trading_hours_end },
+        no_overnight: op.overnight_allowed ? null : { cutoffTime: '15:15', allowedProducts: ['MIS'] },
+        consistency_rule: phase==='funded' ? { maxDayProfitPercent: op.f_consistency_rule_pct } : null,
+        news_blackout: { windows: [], blockAll: false },
+        inactivity_close: { days: op.inactivity_close_days },
+        _onestep_weekend_allowed: op.weekend_allowed,
+        _onestep_holiday_restriction: op.holiday_restriction,
+        _onestep_profile: op,
+        _onestep_phase: phase,
+      };
+    }
+
+    // Non-profiled accounts: return per-account risk_rules from DB
     return riskRulesRepo.getRulesMap(accountId);
   }
 
@@ -125,6 +183,17 @@ export class RiskEngine {
 
     // ── Weekend / holiday checks for 2-Step accounts ─────────────────────────
     const isTwoStep = TwoStepRiskProfileService.isTwoStepAccount(account);
+    const isOneStep = OneStepRiskProfileService.isOneStepAccount(account);
+    if (isOneStep) {
+      if (!rules._onestep_weekend_allowed) {
+        const day = new Date().getDay();
+        if (day === 0 || day === 6) return { allowed: false, reason: 'Market closed (weekend). 1-Step does not allow weekend trading.' };
+      }
+      if (rules._onestep_holiday_restriction) {
+        const { isClosed, holidayName } = HolidayService.checkMarketClosed();
+        if (isClosed && holidayName) return { allowed: false, reason: 'Market closed (holiday: ' + holidayName + ')' };
+      }
+    }
     if (isTwoStep) {
       if (!rules._twostep_weekend_allowed) {
         const day = new Date().getDay();
@@ -672,22 +741,38 @@ export class RiskEngine {
     const balance = parseFloat(account.balance) || 0;
     if (balance <= 0) return { allowed: true };
 
-    // Calculate total exposure (existing + new order)
-    const totalUsedMargin = parseFloat(account.used_margin || 0);
-    const newOrderMargin = orderParams.qty * (orderParams.price || 0) * 0.1; // ~10% margin
-    const totalExposure = totalUsedMargin + newOrderMargin;
-
-    const currentLeverage = totalExposure / balance;
-
-    if (currentLeverage > maxMultiplier) {
-      return {
-        allowed: false,
-        reason: `Leverage limit exceeded: ${currentLeverage.toFixed(1)}x > max ${maxMultiplier}x`,
-      };
+    // Instant + 2-Step: compute real exposure from open positions (not used_margin)
+    if (InstantRiskProfileService.isInstantAccount(account) || TwoStepRiskProfileService.isTwoStepAccount(account) || OneStepRiskProfileService.isOneStepAccount(account)) {
+      const orderLtp = orderParams.price || 0;
+      if (orderLtp > 0) {
+        let existingExposure = 0;
+        try {
+          const openPositions = await positionRepo.findOpenByAccountId(account.id || 'unknown');
+          for (const pos of openPositions) {
+            if (!pos.qty || pos.qty === 0) continue;
+            existingExposure += Math.abs(pos.qty) * (pos.avg_price || 0);
+          }
+        } catch {}
+        const newOrderNotional = orderParams.qty * orderLtp;
+        const totalExposure = existingExposure + newOrderNotional;
+        const impliedLeverage = totalExposure / balance;
+        if (impliedLeverage > maxMultiplier) {
+          return { allowed: false, reason: `Leverage limit exceeded: ${impliedLeverage.toFixed(1)}x > max ${maxMultiplier}x` };
+        }
+      }
+      return { allowed: true };
     }
 
+    // Non-Instant/2-Step: original logic
+    const totalUsedMargin = parseFloat(account.used_margin || 0);
+    const newOrderMargin = orderParams.qty * (orderParams.price || 0) * 0.1;
+    const totalExposure = totalUsedMargin + newOrderMargin;
+    const currentLeverage = totalExposure / balance;
+    if (currentLeverage > maxMultiplier) {
+      return { allowed: false, reason: `Leverage limit exceeded: ${currentLeverage.toFixed(1)}x > max ${maxMultiplier}x` };
+    }
     return { allowed: true };
-  }
+  }}
 
   // === Daily Profit Cap (Kill-Switch) ===
 
