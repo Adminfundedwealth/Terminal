@@ -108,159 +108,123 @@ body,
   /* Base page */
   background-color: #f0f2f5 !important;
   color: #111827 !important;
-
-  /* Any element with a hardcoded dark surface gets the light panel color */
-  [class*="bg-[#0"],
-  [class*="bg-[#1"],
-  [class*="from-[#0"],
-  [class*="to-[#0"],
-  [class*="from-[#1"],
-  [class*="to-[#1"] {
-    background-color: #ffffff !important;
-    background-image: none !important;
-  }
-
-  /* Page-level containers */
-  .h-screen, #root, body {
-    background-color: #f0f2f5 !important;
-  }
-
-  /* Panels: watchlist, right panel, bottom dock, any flex container */
-  .bg-fw-surface    { background-color: #ffffff !important; }
-  .bg-fw-bg         { background-color: #f0f2f5 !important; }
-  .bg-fw-panel      { background-color: #ffffff !important; }
-  .bg-fw-hover      { background-color: #f1f5f9 !important; }
-  .bg-fw-selected   { background-color: #e8f0fe !important; }
-
-  /* Borders */
-  .border-fw-border { border-color: #d9dee7 !important; }
-
-  /* Text */
-  .text-fw-text            { color: #111827 !important; }
-  .text-fw-text-secondary  { color: #374151 !important; }
-  .text-fw-text-muted      { color: #6b7280 !important; }
-
-  /* Header */
-  header { background: #ffffff !important; background-image: none !important; border-bottom-color: #d9dee7 !important; }
-
-  /* Sidebar / left nav */
-  [class*="w-[48px]"] { background-color: #f3f5f8 !important; border-right-color: #d9dee7 !important; }
-
-  /* Top toolbar gradients in Watchlist */
-  .bg-gradient-to-b, .bg-gradient-to-r {
-    background-color: #ffffff !important;
-    background-image: none !important;
-  }
-
-  /* Inputs and search boxes */
-  input[class*="bg-[#"], textarea[class*="bg-[#"] {
-    background-color: #ffffff !important;
-    color: #111827 !important;
-    border-color: #c7ced9 !important;
-  }
-
-  /* Dropdowns / menus */
-  [class*="bg-[#12151f]"],
-  [class*="bg-[#0d0f16]"],
-  [class*="bg-[#141720]"] {
-    background-color: #ffffff !important;
-  }
-
-  /* Bottom panel/dock tab bar */
-  [class*="bg-[#0a0c12]"],
-  [class*="bg-[#090b10]"],
-  [class*="bg-[#0c0e16]"],
-  [class*="bg-[#0e1018]"],
-  [class*="bg-[#0d0f15]"],
-  [class*="bg-[#0b0d12]"] {
-    background-color: #f3f5f8 !important;
-    background-image: none !important;
-  }
-
-  /* Option chain table */
-  [class*="bg-[#0b0d14]"],
-  [class*="bg-[#14161f]"],
-  [class*="bg-[#0c0e16]"] {
-    background-color: #ffffff !important;
-    background-image: none !important;
-  }
-
-  /* Market mover cards, stat cards, category cards */
-  [class*="bg-[#0d0f18]"] {
-    background-color: #ffffff !important;
-    background-image: none !important;
-    border-color: #d9dee7 !important;
-  }
-
-  /* Order panel */
-  [class*="bg-[#0a0c12]"],
-  [class*="bg-[#0f1118]"],
-  [class*="bg-[#12141c]"],
-  [class*="bg-[#12141e]"] {
-    background-color: #f3f5f8 !important;
-    background-image: none !important;
-  }
-
-  /* Keep semantic colors visible on light backgrounds */
-  .text-emerald-400 { color: #059669 !important; }
-  .text-red-400     { color: #dc2626 !important; }
-  .text-emerald-300 { color: #10b981 !important; }
-  .text-red-300     { color: #ef4444 !important; }
-  .text-fw-accent   { color: #2563eb !important; }
-
-  /* Keep green/red tints visible on light bg */
-  .bg-emerald-900\/10, [class*="bg-emerald-900/10"] { background-color: rgba(16,185,129,0.08) !important; }
-  .bg-red-900\/10, [class*="bg-red-900/10"]         { background-color: rgba(239,68,68,0.08) !important; }
-
-  /* Keep status badges readable */
-  .fw-badge-green { background-color: rgba(16,185,129,0.12) !important; border-color: rgba(16,185,129,0.3) !important; color: #059669 !important; }
-  .fw-badge-red   { background-color: rgba(239,68,68,0.12) !important; border-color: rgba(239,68,68,0.3) !important; color: #dc2626 !important; }
-  .fw-badge-blue  { background-color: rgba(37,99,235,0.12) !important; border-color: rgba(37,99,235,0.3) !important; color: #2563eb !important; }
-  .fw-badge-muted { background-color: rgba(0,0,0,0.06) !important; border-color: rgba(0,0,0,0.15) !important; color: #374151 !important; }
-  .fw-badge-orange { background-color: rgba(217,119,6,0.12) !important; border-color: rgba(217,119,6,0.3) !important; color: #b45309 !important; }
-  .fw-badge-yellow { background-color: rgba(217,119,6,0.10) !important; border-color: rgba(217,119,6,0.25) !important; color: #92400e !important; }
-  .fw-badge-cyan  { background-color: rgba(3,105,161,0.10) !important; border-color: rgba(3,105,161,0.25) !important; color: #0369a1 !important; }
-
-  /* fw-badge base text */
-  .fw-badge { color: #374151 !important; }
-
-  /* Bottom dock tabs */
-  .fw-tab-inactive { color: #4b5563 !important; opacity: 1 !important; }
-  .fw-tab-active   { color: #2563eb !important; }
-
-  /* Table headers */
-  .fw-table th { color: #374151 !important; }
-  .fw-table td { color: #111827 !important; }
-
-  /* Sidebar icons — active uses text-white which becomes invisible */
-  .text-white { color: #111827 !important; }
-
-  /* Slate text classes used in nav */
-  [class*="text-slate-3"], [class*="text-slate-4"] { color: #374151 !important; }
-
-  /* Top toolbar gradient in Watchlist */
-  [class*="from-[#10121a]"], [class*="to-[#0e1018]"] { background-color: #f3f5f8 !important; background-image: none !important; }
-
-  /* TerminalReadiness and RiskWidget panels */
-  [class*="from-[#0a0c12]"], [class*="to-[#0c0e16]"] { background-color: #ffffff !important; background-image: none !important; }
-
-  /* risk-label should be dark in light mode */
-  .risk-label { color: #4b5563 !important; }
-
-  /* Option Chain table */
-  [class*="bg-[#0b0d14]"] { background-color: #ffffff !important; }
-  [class*="bg-[#0c0e16]"] { background-color: #f3f5f8 !important; }
-
-  /* Category card hover/active tints need to remain clean in light */
-  [class*="bg-fw-accent/1"], [class*="bg-fw-accent/0"] { background-color: rgba(37,99,235,0.08) !important; }
-
-  /* Bottom panel gradient */
-  [class*="from-[#0d0f15]"], [class*="to-[#0b0d12]"] { background-color: #f3f5f8 !important; background-image: none !important; }
-
-  /* Scrollbar */
-  ::-webkit-scrollbar-track { background: #f0f2f5; }
-  ::-webkit-scrollbar-thumb { background: #c7ced9; }
 }
+
+/* Page-level containers */
+[data-theme='light'] .h-screen,
+[data-theme='light'] #root,
+[data-theme='light'] body {
+  background-color: #f0f2f5 !important;
+}
+
+/* Panels: watchlist, right panel, bottom dock */
+[data-theme='light'] .bg-fw-surface    { background-color: #ffffff !important; }
+[data-theme='light'] .bg-fw-bg         { background-color: #f0f2f5 !important; }
+[data-theme='light'] .bg-fw-panel      { background-color: #ffffff !important; }
+[data-theme='light'] .bg-fw-hover      { background-color: #f1f5f9 !important; }
+[data-theme='light'] .bg-fw-selected   { background-color: #e8f0fe !important; }
+
+/* Borders */
+[data-theme='light'] .border-fw-border { border-color: #d9dee7 !important; }
+
+/* Text */
+[data-theme='light'] .text-fw-text            { color: #111827 !important; }
+[data-theme='light'] .text-fw-text-secondary  { color: #374151 !important; }
+[data-theme='light'] .text-fw-text-muted      { color: #6b7280 !important; }
+
+/* Header */
+[data-theme='light'] header {
+  background: #ffffff !important;
+  background-image: none !important;
+  border-bottom-color: #d9dee7 !important;
+}
+
+/* Top toolbar gradients in Watchlist */
+[data-theme='light'] .bg-gradient-to-b,
+[data-theme='light'] .bg-gradient-to-r {
+  background-color: #ffffff !important;
+  background-image: none !important;
+}
+
+/* Bottom panel/dock tab bar — hardcoded darks */
+[data-theme='light'] .bg-\[\#0a0c12\],
+[data-theme='light'] .bg-\[\#090b10\],
+[data-theme='light'] .bg-\[\#0c0e16\],
+[data-theme='light'] .bg-\[\#0e1018\],
+[data-theme='light'] .bg-\[\#0d0f15\],
+[data-theme='light'] .bg-\[\#0b0d12\],
+[data-theme='light'] .bg-\[\#0d0f18\],
+[data-theme='light'] .bg-\[\#0b0d14\],
+[data-theme='light'] .bg-\[\#14161f\],
+[data-theme='light'] .bg-\[\#12151f\],
+[data-theme='light'] .bg-\[\#0d0f16\],
+[data-theme='light'] .bg-\[\#141720\],
+[data-theme='light'] .bg-\[\#0f1118\],
+[data-theme='light'] .bg-\[\#12141c\],
+[data-theme='light'] .bg-\[\#12141e\],
+[data-theme='light'] .bg-\[\#10121a\],
+[data-theme='light'] .bg-\[\#0e1018\] {
+  background-color: #f3f5f8 !important;
+  background-image: none !important;
+}
+
+/* Market mover/stat/category cards specifically */
+[data-theme='light'] .bg-\[\#0d0f18\] {
+  background-color: #ffffff !important;
+  border-color: #d9dee7 !important;
+}
+
+/* Gradient backgrounds used in Watchlist toolbar */
+[data-theme='light'] .from-\[\#10121a\],
+[data-theme='light'] .from-\[\#0d0f15\],
+[data-theme='light'] .from-\[\#0a0c12\],
+[data-theme='light'] .to-\[\#0e1018\],
+[data-theme='light'] .to-\[\#0b0d12\],
+[data-theme='light'] .to-\[\#0c0e16\] {
+  background-color: #f3f5f8 !important;
+  background-image: none !important;
+}
+
+/* Keep semantic colors visible on light backgrounds */
+[data-theme='light'] .text-emerald-400 { color: #059669 !important; }
+[data-theme='light'] .text-red-400     { color: #dc2626 !important; }
+[data-theme='light'] .text-emerald-300 { color: #10b981 !important; }
+[data-theme='light'] .text-red-300     { color: #ef4444 !important; }
+[data-theme='light'] .text-fw-accent   { color: #2563eb !important; }
+
+/* Keep green/red tints visible on light bg */
+[data-theme='light'] .bg-emerald-900\/10 { background-color: rgba(16,185,129,0.08) !important; }
+[data-theme='light'] .bg-red-900\/10     { background-color: rgba(239,68,68,0.08) !important; }
+
+/* Keep status badges readable */
+[data-theme='light'] .fw-badge-green  { background-color: rgba(16,185,129,0.12) !important; border-color: rgba(16,185,129,0.3) !important; color: #059669 !important; }
+[data-theme='light'] .fw-badge-red    { background-color: rgba(239,68,68,0.12) !important; border-color: rgba(239,68,68,0.3) !important; color: #dc2626 !important; }
+[data-theme='light'] .fw-badge-blue   { background-color: rgba(37,99,235,0.12) !important; border-color: rgba(37,99,235,0.3) !important; color: #2563eb !important; }
+[data-theme='light'] .fw-badge-muted  { background-color: rgba(0,0,0,0.06) !important; border-color: rgba(0,0,0,0.15) !important; color: #374151 !important; }
+[data-theme='light'] .fw-badge-orange { background-color: rgba(217,119,6,0.12) !important; border-color: rgba(217,119,6,0.3) !important; color: #b45309 !important; }
+[data-theme='light'] .fw-badge-yellow { background-color: rgba(217,119,6,0.10) !important; border-color: rgba(217,119,6,0.25) !important; color: #92400e !important; }
+[data-theme='light'] .fw-badge-cyan   { background-color: rgba(3,105,161,0.10) !important; border-color: rgba(3,105,161,0.25) !important; color: #0369a1 !important; }
+
+/* fw-badge base text */
+[data-theme='light'] .fw-badge { color: #374151 !important; }
+
+/* Bottom dock tabs */
+[data-theme='light'] .fw-tab-inactive { color: #4b5563 !important; opacity: 1 !important; }
+[data-theme='light'] .fw-tab-active   { color: #2563eb !important; }
+
+/* Table headers */
+[data-theme='light'] .fw-table th { color: #374151 !important; }
+[data-theme='light'] .fw-table td { color: #111827 !important; }
+
+/* Sidebar icons — active uses text-white which becomes invisible */
+[data-theme='light'] .text-white { color: #111827 !important; }
+
+/* risk-label should be dark in light mode */
+[data-theme='light'] .risk-label { color: #4b5563 !important; }
+
+/* Scrollbar */
+[data-theme='light'] ::-webkit-scrollbar-track { background: #f0f2f5; }
+[data-theme='light'] ::-webkit-scrollbar-thumb { background: #c7ced9; }
 
 /* Monospace for all financial data */
 .font-mono {
