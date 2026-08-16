@@ -146,7 +146,7 @@ export const useAppStore = create<AppState>()(
       searchOpen: false,
       panels: { watchlist: true, orderPanel: true, bottomPanel: true, marketDepth: true, optionChain: false },
       pinnedTokens: [],
-      activeWatchlistTab: null,
+      activeWatchlistTab: 'index',
       lastInstrumentPerWorkspace: {},
 
       setTheme: (theme) => {
@@ -233,7 +233,7 @@ export const useAppStore = create<AppState>()(
       setActiveWatchlistTab: (activeWatchlistTab) => set({ activeWatchlistTab }),
     }),
     {
-      name: 'fw-terminal-v5',
+      name: 'fw-terminal-v6',
       partialize: (state) => ({
         theme: state.theme,
         timeframe: state.timeframe,

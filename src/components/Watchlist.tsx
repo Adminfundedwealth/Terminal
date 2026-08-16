@@ -1275,7 +1275,14 @@ export function Watchlist() {
           {watchlists.map(wl => (
             <button
               key={wl.id}
-              onClick={() => setActiveWatchlistTab(wl.id)}
+              onClick={() => {
+                setActiveWatchlistTab(wl.id);
+                // Sync workspace if this tab matches a chart workspace
+                const chartWorkspaces = ['index', 'stocks', 'futures', 'options', 'mcx', 'cds'];
+                if (chartWorkspaces.includes(wl.id) && activeWorkspace !== wl.id) {
+                  useAppStore.getState().setActiveWorkspace(wl.id as any);
+                }
+              }}
               className={cn(
                 'px-2.5 py-1.5 text-[10px] font-bold whitespace-nowrap border-b-2 transition-all flex-shrink-0 uppercase tracking-widest',
                 currentWlId === wl.id
