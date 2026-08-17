@@ -131,27 +131,26 @@ body,
 /* ═══════════════════════════════════════════════════════════════════════════
    NUCLEAR OVERRIDE: Catch ALL Tailwind arbitrary bg-[#hex] dark classes.
    Tailwind generates classes like: bg-\[#0a0c12\] → background-color: #0a0c12
-   We use [class*="bg-[#0"] to match ANY class containing bg-[#0...
-   This approach is CSS-spec valid and catches every dark hex background.
+   Match by looking for "bg-[#0", "bg-[#1", "bg-[#2" in class attribute.
 ═══════════════════════════════════════════════════════════════════════════ */
-[data-theme='light'] [class*="bg-[#0"] {
+[data-theme='light'] [class*="bg-\[#0"] {
   background-color: #f3f5f8 !important;
   background-image: none !important;
 }
-[data-theme='light'] [class*="bg-[#1"] {
+[data-theme='light'] [class*="bg-\[#1"] {
   background-color: #f3f5f8 !important;
   background-image: none !important;
 }
-[data-theme='light'] [class*="bg-[#2"] {
+[data-theme='light'] [class*="bg-\[#2"] {
   background-color: #f3f5f8 !important;
   background-image: none !important;
 }
 /* Don't override higher hex values (bg-[#3+]) as those may be accent/semantic colors */
 
 /* Specific refinements — modals/dialogs get pure white */
-[data-theme='light'] [class*="bg-[#12141f"],
-[data-theme='light'] [class*="bg-[#12151f"],
-[data-theme='light'] [class*="bg-[#0f1219"] {
+[data-theme='light'] [class*="bg-\[#12141f"],
+[data-theme='light'] [class*="bg-\[#12151f"],
+[data-theme='light'] [class*="bg-\[#0f1219"] {
   background-color: #ffffff !important;
 }
 
@@ -161,9 +160,9 @@ body,
 [data-theme='light'] [style*="background: #0"],
 [data-theme='light'] [style*="background: #1"],
 [data-theme='light'] [style*="background:#0"],
-[data-theme='light'] [style*="background:#1"] {
-  background-color: #f3f5f8 !important;
-  background-image: none !important;
+[data-theme='light'] [style*="background:#1"],
+[data-theme='light'] [style*="background: linear-gradient"] {
+  background: #f3f5f8 !important;
 }
 
 /* Protect elements that SHOULD keep their colored backgrounds:
@@ -204,10 +203,15 @@ body,
 
 /* ── Gradient backgrounds — override ALL dark gradients ───────────────── */
 [data-theme='light'] [class*="bg-gradient"],
-[data-theme='light'] [class*="from-[#"],
-[data-theme='light'] [class*="to-[#"] {
+[data-theme='light'] [class*="from-\[#"],
+[data-theme='light'] [class*="to-\[#"] {
   background-image: none !important;
   background-color: #f3f5f8 !important;
+}
+
+/* ── Inline style gradients ───────────────────────────────────────────── */
+[data-theme='light'] [style*="linear-gradient"] {
+  background: #f3f5f8 !important;
 }
 
 /* ── Utility: fw-input ─────────────────────────────────────────────────── */
