@@ -115,8 +115,6 @@ body,
    Strategy: CSS variables handle most things. These !important rules fix
    components that have hardcoded dark Tailwind arbitrary-value classes
    (e.g. bg-[#0a0c12]) and CSS utility classes with hardcoded dark values.
-   We do NOT use !important everywhere — only where Tailwind arbitrary values
-   or hardcoded CSS would otherwise win.
 ═══════════════════════════════════════════════════════════════════════════ */
 
 /* ── Base ─────────────────────────────────────────────────────────────── */
@@ -128,6 +126,60 @@ body,
 [data-theme='light'] body,
 [data-theme='light'] #root {
   background-color: #f0f2f5;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   NUCLEAR OVERRIDE: Catch ALL Tailwind arbitrary bg-[#hex] dark classes.
+   Tailwind generates classes like: bg-\[#0a0c12\] → background-color: #0a0c12
+   We use [class*="bg-[#0"] to match ANY class containing bg-[#0...
+   This approach is CSS-spec valid and catches every dark hex background.
+═══════════════════════════════════════════════════════════════════════════ */
+[data-theme='light'] [class*="bg-[#0"] {
+  background-color: #f3f5f8 !important;
+  background-image: none !important;
+}
+[data-theme='light'] [class*="bg-[#1"] {
+  background-color: #f3f5f8 !important;
+  background-image: none !important;
+}
+[data-theme='light'] [class*="bg-[#2"] {
+  background-color: #f3f5f8 !important;
+  background-image: none !important;
+}
+/* Don't override higher hex values (bg-[#3+]) as those may be accent/semantic colors */
+
+/* Specific refinements — modals/dialogs get pure white */
+[data-theme='light'] [class*="bg-[#12141f"],
+[data-theme='light'] [class*="bg-[#12151f"],
+[data-theme='light'] [class*="bg-[#0f1219"] {
+  background-color: #ffffff !important;
+}
+
+/* Inline style dark backgrounds (rgba with dark values) */
+[data-theme='light'] [style*="background"][style*="rgb(1"],
+[data-theme='light'] [style*="background"][style*="rgb(0"],
+[data-theme='light'] [style*="background: #0"],
+[data-theme='light'] [style*="background: #1"],
+[data-theme='light'] [style*="background:#0"],
+[data-theme='light'] [style*="background:#1"] {
+  background-color: #f3f5f8 !important;
+  background-image: none !important;
+}
+
+/* Protect elements that SHOULD keep their colored backgrounds:
+   BUY/SELL buttons, status badges, accent backgrounds */
+[data-theme='light'] [class*="bg-green"],
+[data-theme='light'] [class*="bg-red"],
+[data-theme='light'] [class*="bg-emerald"],
+[data-theme='light'] [class*="bg-blue"],
+[data-theme='light'] [class*="bg-orange"],
+[data-theme='light'] [class*="bg-yellow"],
+[data-theme='light'] [class*="bg-purple"],
+[data-theme='light'] [class*="bg-cyan"],
+[data-theme='light'] [class*="bg-fw-accent"],
+[data-theme='light'] [class*="bg-fw-green"],
+[data-theme='light'] [class*="bg-fw-red"] {
+  background-color: revert-layer;
 }
 
 /* ── CSS-var utility classes (Tailwind) — ensure correct light values ─── */
@@ -151,87 +203,22 @@ body,
   color: #111827 !important;
 }
 
-/* ── Gradient backgrounds used in watchlist / panel headers ───────────── */
-[data-theme='light'] .bg-gradient-to-b,
-[data-theme='light'] .bg-gradient-to-r {
-  background-color: #ffffff !important;
-  background-image: none !important;
-}
-
-/* ── ALL HARDCODED DARK HEX BACKGROUNDS — universal catch-all ─────────── */
-/* OrderPanel, BottomPanel, ChartPanel, DOM, Sidebar, Watchlist, etc.      */
-[data-theme='light'] .bg-\[\#08090e\],
-[data-theme='light'] .bg-\[\#090b10\],
-[data-theme='light'] .bg-\[\#0a0c12\],
-[data-theme='light'] .bg-\[\#0a0c13\],
-[data-theme='light'] .bg-\[\#0b0d12\],
-[data-theme='light'] .bg-\[\#0b0d14\],
-[data-theme='light'] .bg-\[\#0c0e14\],
-[data-theme='light'] .bg-\[\#0c0e16\],
-[data-theme='light'] .bg-\[\#0d0f15\],
-[data-theme='light'] .bg-\[\#0d0f16\],
-[data-theme='light'] .bg-\[\#0d0f17\],
-[data-theme='light'] .bg-\[\#0d0f18\],
-[data-theme='light'] .bg-\[\#0e1018\],
-[data-theme='light'] .bg-\[\#0f1118\],
-[data-theme='light'] .bg-\[\#10121a\],
-[data-theme='light'] .bg-\[\#11131c\],
-[data-theme='light'] .bg-\[\#12141c\],
-[data-theme='light'] .bg-\[\#12141e\],
-[data-theme='light'] .bg-\[\#12141f\],
-[data-theme='light'] .bg-\[\#12151f\],
-[data-theme='light'] .bg-\[\#14161f\],
-[data-theme='light'] .bg-\[\#141720\],
-[data-theme='light'] .bg-\[\#1a1d28\],
-[data-theme='light'] .bg-\[\#1e2330\] {
-  background-color: #f3f5f8 !important;
-  background-image: none !important;
-}
-
-/* Confirmation/modal dialogs — slightly elevated surface */
-[data-theme='light'] .bg-\[\#12141f\],
-[data-theme='light'] .bg-\[\#12151f\] {
-  background-color: #ffffff !important;
-  background-image: none !important;
-}
-
-/* Sidebar rail — slightly darker than main bg */
-[data-theme='light'] .bg-\[\#08090e\] {
-  background-color: #eceef2 !important;
-  background-image: none !important;
-}
-
-/* Tooltip/popover panels */
-[data-theme='light'] .bg-\[\#1a1d28\] {
-  background-color: #ffffff !important;
-  background-image: none !important;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.15) !important;
-}
-
-/* ── Gradient from/to classes ─────────────────────────────────────────── */
-[data-theme='light'] [class*="from-\[#0"],
-[data-theme='light'] [class*="from-\[#1"],
-[data-theme='light'] [class*="to-\[#0"],
-[data-theme='light'] [class*="to-\[#1"] {
+/* ── Gradient backgrounds — override ALL dark gradients ───────────────── */
+[data-theme='light'] [class*="bg-gradient"],
+[data-theme='light'] [class*="from-[#"],
+[data-theme='light'] [class*="to-[#"] {
   background-image: none !important;
   background-color: #f3f5f8 !important;
 }
 
-/* ── Inline gradients on specific elements ────────────────────────────── */
-/* OrderPanel header, ChartPanel toolbar — uses bg-gradient-to-r with dark stops */
-[data-theme='light'] .bg-gradient-to-r.from-\[\#10121a\],
-[data-theme='light'] .bg-gradient-to-b.from-\[\#0d0f15\] {
-  background: #f3f5f8 !important;
-}
-
-/* ── Utility: fw-input — hardcoded bg-[#141720] ───────────────────────── */
+/* ── Utility: fw-input ─────────────────────────────────────────────────── */
 [data-theme='light'] .fw-input {
   background-color: #ffffff !important;
   color: #111827 !important;
   border-color: #d9dee7 !important;
 }
 
-/* ── Table headers — hardcoded bg: #10121a ────────────────────────────── */
+/* ── Table headers ─────────────────────────────────────────────────────── */
 [data-theme='light'] .fw-table th {
   background: #f0f2f5 !important;
   color: #374151 !important;
@@ -245,7 +232,7 @@ body,
   background-color: #f1f5f9 !important;
 }
 
-/* ── Console-bg / tab-strip / panel-header — hardcoded dark gradients ─── */
+/* ── Console-bg / tab-strip / panel-header ─────────────────────────────── */
 [data-theme='light'] .console-bg {
   background: #f0f2f5 !important;
 }
@@ -265,26 +252,24 @@ body,
   box-shadow: inset 0 1px 0 rgba(0,0,0,0.03) !important;
 }
 
-/* ── Inputs (hardcoded bg classes inside components) ─────────────────── */
-[data-theme='light'] input[class*="bg-\["],
-[data-theme='light'] textarea[class*="bg-\["] {
+/* ── All inputs, textareas, selects with dark bg ──────────────────────── */
+[data-theme='light'] input[class*="bg-["],
+[data-theme='light'] input[class*="bg-fw-surface"],
+[data-theme='light'] textarea[class*="bg-["],
+[data-theme='light'] select[class*="bg-["],
+[data-theme='light'] select[class*="bg-fw-surface"] {
   background-color: #ffffff !important;
   color: #111827 !important;
   border-color: #d9dee7 !important;
 }
-[data-theme='light'] input[class*="bg-\["]:focus,
-[data-theme='light'] textarea[class*="bg-\["]:focus {
+[data-theme='light'] input:focus,
+[data-theme='light'] textarea:focus,
+[data-theme='light'] select:focus {
   border-color: #2563eb !important;
 }
 [data-theme='light'] input::placeholder,
 [data-theme='light'] textarea::placeholder {
   color: #9ca3af !important;
-}
-
-/* ── Bottom panel gradient wrapper ───────────────────────────────────── */
-[data-theme='light'] .bg-gradient-to-b.from-\[\#0d0f15\] {
-  background: #f0f2f5 !important;
-  background-image: none !important;
 }
 
 /* ── Button hardcoded bg classes (qty controls, order type pills) ─────── */
