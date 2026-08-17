@@ -2,6 +2,7 @@
   LayoutDashboard, BarChart3, TrendingUp, LineChart, Activity, Diamond, DollarSign,
   Search, Bell, ScanLine, PieChart, BookOpen, Settings, Wifi, WifiOff, Bot, Users, User, LogOut, Home
 } from 'lucide-react';
+import { useAppStore, type Workspace } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
 import { cn } from '@/utils/helpers';
 import { useState } from 'react';
