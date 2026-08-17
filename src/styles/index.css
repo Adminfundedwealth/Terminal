@@ -167,20 +167,19 @@ body,
 }
 
 /* Protect elements that SHOULD keep their colored backgrounds:
-   BUY/SELL buttons, status badges, accent backgrounds */
-[data-theme='light'] [class*="bg-green"],
-[data-theme='light'] [class*="bg-red"],
-[data-theme='light'] [class*="bg-emerald"],
-[data-theme='light'] [class*="bg-blue"],
-[data-theme='light'] [class*="bg-orange"],
-[data-theme='light'] [class*="bg-yellow"],
-[data-theme='light'] [class*="bg-purple"],
-[data-theme='light'] [class*="bg-cyan"],
-[data-theme='light'] [class*="bg-fw-accent"],
-[data-theme='light'] [class*="bg-fw-green"],
-[data-theme='light'] [class*="bg-fw-red"] {
-  background-color: revert-layer;
-}
+   BUY/SELL buttons, status badges, accent backgrounds.
+   These DON'T match the bg-[#0/1/2 patterns so they are already safe.
+   This block explicitly resets any false-positive matches. */
+[data-theme='light'] .bg-fw-accent { background-color: var(--fw-accent) !important; }
+[data-theme='light'] .bg-fw-green  { background-color: var(--fw-green) !important; }
+[data-theme='light'] .bg-fw-red    { background-color: var(--fw-red) !important; }
+[data-theme='light'] .bg-fw-green-dim { background-color: var(--fw-green-dim) !important; }
+[data-theme='light'] .bg-fw-red-dim   { background-color: var(--fw-red-dim) !important; }
+[data-theme='light'] .bg-white     { background-color: #ffffff !important; }
+[data-theme='light'] .bg-transparent { background-color: transparent !important; }
+[data-theme='light'] .bg-black\/60 { background-color: rgba(0,0,0,0.6) !important; }
+[data-theme='light'] .bg-black\/70 { background-color: rgba(0,0,0,0.7) !important; }
+[data-theme='light'] .bg-black\/90 { background-color: rgba(0,0,0,0.9) !important; }
 
 /* ── CSS-var utility classes (Tailwind) — ensure correct light values ─── */
 [data-theme='light'] .bg-fw-surface    { background-color: #ffffff !important; }
