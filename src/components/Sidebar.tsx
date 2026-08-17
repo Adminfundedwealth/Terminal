@@ -31,7 +31,7 @@ export function Sidebar() {
 
   return (
     <>
-    <div className="w-[48px] min-w-[48px] h-full bg-[#08090e] border-r border-fw-border/60 flex flex-col items-center py-2 select-none flex-shrink-0">
+    <div className="w-[48px] min-w-[48px] h-full bg-fw-bg border-r border-fw-border/60 flex flex-col items-center py-2 select-none flex-shrink-0">
 
       {/* Dashboard */}
       <SidebarBtn
@@ -62,7 +62,7 @@ export function Sidebar() {
             {activeWorkspace === ws.id && (
               <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-r-full" style={{ backgroundColor: ws.color }} />
             )}
-            <div className="absolute left-full ml-2 px-2 py-1 bg-[#1a1d28] border border-fw-border rounded-md text-[14px] text-fw-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 shadow-xl">
+            <div className="absolute left-full ml-2 px-2 py-1 bg-fw-surface border border-fw-border rounded-md text-[14px] text-fw-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 shadow-xl">
               {ws.label}
             </div>
           </button>
@@ -122,7 +122,7 @@ function SidebarBtn({ icon, label, active, onClick }: { icon: React.ReactNode; l
       )}
     >
       {icon}
-      <div className="absolute left-full ml-2 px-2 py-1 bg-[#1a1d28] border border-fw-border rounded-md text-[14px] text-fw-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 shadow-xl">
+      <div className="absolute left-full ml-2 px-2 py-1 bg-fw-surface border border-fw-border rounded-md text-[14px] text-fw-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 shadow-xl">
         {label}
       </div>
     </button>

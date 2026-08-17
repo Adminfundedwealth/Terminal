@@ -46,7 +46,7 @@ function StatCard({
   label, value, sub, color, icon,
 }: { label: string; value: string; sub?: string; color?: string; icon?: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-0.5 bg-[#0d0f18] border border-fw-border/40 rounded px-3 py-2 min-w-0">
+    <div className="flex flex-col gap-0.5 bg-fw-surface border border-fw-border/40 rounded px-3 py-2 min-w-0">
       <div className="flex items-center gap-1 text-fw-text-secondary text-[12px] font-medium uppercase tracking-wider truncate">
         {icon && <span className="opacity-70">{icon}</span>}
         {label}
@@ -64,7 +64,7 @@ function IndexTile({ token, symbol, onClick }: { token: string; symbol: string; 
   return (
     <button
       onClick={onClick}
-      className="flex flex-col gap-0.5 bg-[#0d0f18] border border-fw-border/40 hover:border-fw-accent/40 rounded px-3 py-2 text-left transition-colors min-w-0 group"
+      className="flex flex-col gap-0.5 bg-fw-surface border border-fw-border/40 hover:border-fw-accent/40 rounded px-3 py-2 text-left transition-colors min-w-0 group"
     >
       <span className="text-[12px] text-fw-text-secondary font-medium uppercase tracking-wider">{symbol}</span>
       {q ? (
@@ -95,14 +95,14 @@ function CategoryCard({ ws, label, icon, accentColor }: { ws: Workspace; label: 
         'h-[58px] min-h-[58px] max-h-[58px]',
         active
           ? 'border-opacity-60 bg-opacity-10'
-          : 'border-[rgba(120,140,170,0.28)] bg-[rgba(15,20,32,0.90)] hover:bg-[rgba(25,30,45,0.95)] hover:-translate-y-[1px] hover:border-[rgba(120,140,170,0.45)]'
+          : 'border-fw-border/40 bg-fw-surface hover:bg-fw-hover hover:-translate-y-[1px] hover:border-fw-border'
       )}
       style={active ? { borderColor: accentColor, backgroundColor: `${accentColor}10` } : undefined}
     >
       <div className="flex-shrink-0 w-[28px] h-[28px]">{icon}</div>
       <div className="flex flex-col items-start leading-tight">
-        <span className={cn('text-[13px] font-semibold', active ? 'text-white' : 'text-[#F1F5F9]')}>{label}</span>
-        <span className="text-[10px] font-medium text-[#94A3B8]">Explore ↗</span>
+        <span className={cn('text-[13px] font-semibold text-fw-text')}>{label}</span>
+        <span className="text-[10px] font-medium text-fw-text-muted">Explore ↗</span>
       </div>
     </button>
   );
@@ -386,7 +386,7 @@ export function HomeDashboard() {
         <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
 
           {/* Top Gainers */}
-          <div className="bg-[#0d0f18] border border-fw-border/40 rounded overflow-hidden">
+          <div className="bg-fw-surface border border-fw-border/40 rounded overflow-hidden">
             <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-fw-border/30 bg-emerald-900/10">
               <TrendingUp size={11} className="text-emerald-400" />
               <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">Top Gainers</span>
@@ -401,7 +401,7 @@ export function HomeDashboard() {
           </div>
 
           {/* Top Losers */}
-          <div className="bg-[#0d0f18] border border-fw-border/40 rounded overflow-hidden">
+          <div className="bg-fw-surface border border-fw-border/40 rounded overflow-hidden">
             <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-fw-border/30 bg-red-900/10">
               <TrendingDown size={11} className="text-red-400" />
               <span className="text-[11px] font-bold uppercase tracking-wider text-red-400">Top Losers</span>
@@ -416,7 +416,7 @@ export function HomeDashboard() {
           </div>
 
           {/* Most Traded */}
-          <div className="bg-[#0d0f18] border border-fw-border/40 rounded overflow-hidden">
+          <div className="bg-fw-surface border border-fw-border/40 rounded overflow-hidden">
             <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-fw-border/30 bg-fw-accent/5">
               <BarChart3 size={11} className="text-fw-accent" />
               <span className="text-[11px] font-bold uppercase tracking-wider text-fw-accent/80">Most Traded</span>

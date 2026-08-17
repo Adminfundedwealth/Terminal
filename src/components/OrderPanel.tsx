@@ -95,7 +95,7 @@ export function OrderPanel() {
 
   if (!symbol && !activeSymbol) {
     return (
-      <div className="flex flex-col items-center justify-center h-full gap-2 px-3 py-4 bg-[#0f1118]">
+      <div className="flex flex-col items-center justify-center h-full gap-2 px-3 py-4 bg-fw-bg">
         <p className="text-[14px] text-fw-text-secondary">Select a symbol</p>
         <p className="text-[14px] text-fw-text-muted">Ctrl+K to search</p>
       </div>
@@ -105,11 +105,11 @@ export function OrderPanel() {
   const lotSize = activeSymbol?.lotSize || 1;
 
   return (
-    <div className="relative flex flex-col h-full bg-[#0c0e14] overflow-y-auto scrollbar-none">
+    <div className="relative flex flex-col h-full bg-fw-surface overflow-y-auto scrollbar-none">
       {/* Order Confirmation Dialog */}
       {confirmOrder && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-          <div className="bg-[#12141f] border border-fw-border rounded-xl shadow-2xl p-5 w-[240px] mx-3 flex flex-col gap-4">
+          <div className="bg-fw-surface border border-fw-border rounded-xl shadow-2xl p-5 w-[240px] mx-3 flex flex-col gap-4">
             <div className="flex items-center gap-2">
               <AlertTriangle size={16} className={confirmOrder.side === 'BUY' ? 'text-green' : 'text-red'} />
               <span className="text-[13px] font-black text-fw-text">Confirm Order</span>
@@ -144,11 +144,11 @@ export function OrderPanel() {
         </div>
       )}
       {/* Compact Header with Symbol + LTP — L3 symbol, L1 price */}
-      <div className="px-3 py-2.5 border-b border-fw-border bg-gradient-to-r from-[#10121a] to-[#0e1018] flex items-center justify-between flex-shrink-0">
+      <div className="px-3 py-2.5 border-b border-fw-border bg-fw-surface-2 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-2">
           <span className="tv-symbol-lg">{symbol}</span>
           {activeSymbol?.segment && (
-            <span className="tv-support bg-fw-bg px-1.5 py-0.5 rounded border border-fw-border/50">{activeSymbol.segment}</span>
+            <span className="tv-support bg-fw-surface-2 px-1.5 py-0.5 rounded border border-fw-border/50">{activeSymbol.segment}</span>
           )}
           {activeSymbol?.lotSize && activeSymbol.lotSize > 1 && (
             <span className="tv-support text-fw-accent bg-fw-accent/8 px-1 py-0.5 rounded">Lot {activeSymbol.lotSize}</span>
@@ -195,7 +195,7 @@ export function OrderPanel() {
                 'flex-1 py-1.5 text-[12px] font-bold rounded-md transition-all tracking-wide',
                 orderForm.orderType === ot.value
                   ? 'bg-fw-accent text-white shadow-sm'
-                  : 'bg-[#141720] text-fw-text-secondary border border-fw-border/60 hover:text-fw-text hover:border-fw-text-muted'
+                  : 'bg-fw-surface-2 text-fw-text-secondary border border-fw-border/60 hover:text-fw-text hover:border-fw-text-muted'
               )}
             >
               {ot.label}
@@ -215,7 +215,7 @@ export function OrderPanel() {
                 'flex-1 py-1.5 text-[13px] font-bold rounded-md transition-all',
                 orderForm.productType === pt.value
                   ? 'bg-fw-surface-2 text-fw-text border border-fw-accent/40'
-                  : 'bg-[#141720] text-fw-text-muted border border-fw-border/40 hover:text-fw-text-secondary'
+                  : 'bg-fw-surface-2 text-fw-text-muted border border-fw-border/40 hover:text-fw-text-secondary'
               )}
             >
               {pt.label}
@@ -232,7 +232,7 @@ export function OrderPanel() {
         <div className="flex items-center gap-1">
           <button
             onClick={() => setOrderForm({ qty: Math.max(1, orderForm.qty - (lotSize > 1 ? lotSize : 1)) })}
-            className="w-10 h-10 flex items-center justify-center bg-[#141720] border border-fw-border rounded-md text-fw-text text-[20px] font-bold hover:bg-fw-hover hover:border-fw-text-muted transition-colors"
+            className="w-10 h-10 flex items-center justify-center bg-fw-surface-2 border border-fw-border rounded-md text-fw-text text-[20px] font-bold hover:bg-fw-hover hover:border-fw-text-muted transition-colors"
           >
             −
           </button>
@@ -240,12 +240,12 @@ export function OrderPanel() {
             type="number"
             value={orderForm.qty}
             onChange={(e) => setOrderForm({ qty: Math.max(1, parseInt(e.target.value) || 1) })}
-            className="flex-1 h-10 bg-[#141720] border border-fw-border rounded-md text-center op-qty text-fw-text outline-none focus:border-fw-accent"
+            className="flex-1 h-10 bg-fw-surface-2 border border-fw-border rounded-md text-center op-qty text-fw-text outline-none focus:border-fw-accent"
             min={1}
           />
           <button
             onClick={() => setOrderForm({ qty: orderForm.qty + (lotSize > 1 ? lotSize : 1) })}
-            className="w-10 h-10 flex items-center justify-center bg-[#141720] border border-fw-border rounded-md text-fw-text text-[20px] font-bold hover:bg-fw-hover hover:border-fw-text-muted transition-colors"
+            className="w-10 h-10 flex items-center justify-center bg-fw-surface-2 border border-fw-border rounded-md text-fw-text text-[20px] font-bold hover:bg-fw-hover hover:border-fw-text-muted transition-colors"
           >
             +
           </button>
@@ -259,7 +259,7 @@ export function OrderPanel() {
                 'py-1 text-[12px] rounded-md font-bold tabular-nums transition-colors',
                 orderForm.qty === q * (lotSize > 1 ? lotSize : 1)
                   ? 'bg-fw-accent/20 text-fw-accent border border-fw-accent/30'
-                  : 'bg-[#141720] border border-fw-border/40 text-fw-text-muted hover:text-fw-text'
+                  : 'bg-fw-surface-2 border border-fw-border/40 text-fw-text-muted hover:text-fw-text'
               )}
             >
               {q}
@@ -277,7 +277,7 @@ export function OrderPanel() {
             value={orderForm.price || ''}
             onChange={(e) => setOrderForm({ price: parseFloat(e.target.value) || 0 })}
             placeholder={quote ? formatPrice(quote.ltp) : '0.00'}
-            className="w-full h-10 bg-[#141720] border border-fw-border rounded-md font-mono text-[15px] font-semibold text-fw-text px-3 outline-none focus:border-fw-accent tabular-nums"
+            className="w-full h-10 bg-fw-surface-2 border border-fw-border rounded-md font-mono text-[15px] font-semibold text-fw-text px-3 outline-none focus:border-fw-accent tabular-nums"
           />
         </div>
       )}
@@ -288,7 +288,7 @@ export function OrderPanel() {
             type="number"
             value={orderForm.triggerPrice || ''}
             onChange={(e) => setOrderForm({ triggerPrice: parseFloat(e.target.value) || 0 })}
-            className="w-full h-10 bg-[#141720] border border-fw-border rounded-md font-mono text-[15px] font-semibold text-fw-text px-3 outline-none focus:border-fw-accent tabular-nums"
+            className="w-full h-10 bg-fw-surface-2 border border-fw-border rounded-md font-mono text-[15px] font-semibold text-fw-text px-3 outline-none focus:border-fw-accent tabular-nums"
           />
         </div>
       )}
@@ -311,7 +311,7 @@ export function OrderPanel() {
                 value={slPrice || ''}
                 onChange={(e) => setSlPrice(parseFloat(e.target.value) || 0)}
                 placeholder="0.00"
-                className="w-full h-9 bg-[#141720] border border-red-900/30 rounded-md font-mono text-[14px] text-fw-text px-2 outline-none focus:border-red tabular-nums"
+                className="w-full h-9 bg-fw-surface-2 border border-red-900/30 rounded-md font-mono text-[14px] text-fw-text px-2 outline-none focus:border-red tabular-nums"
               />
             </div>
             <div>
@@ -321,7 +321,7 @@ export function OrderPanel() {
                 value={tpPrice || ''}
                 onChange={(e) => setTpPrice(parseFloat(e.target.value) || 0)}
                 placeholder="0.00"
-                className="w-full h-9 bg-[#141720] border border-green-900/30 rounded-md font-mono text-[14px] text-fw-text px-2 outline-none focus:border-green tabular-nums"
+                className="w-full h-9 bg-fw-surface-2 border border-green-900/30 rounded-md font-mono text-[14px] text-fw-text px-2 outline-none focus:border-green tabular-nums"
               />
             </div>
           </div>
@@ -367,7 +367,7 @@ export function OrderPanel() {
       )}
 
       {/* Margin / Risk Context — L4 labels, L5 values */}
-      <div className="px-3 py-2 border-t border-fw-border/30 bg-[#090b10] flex-shrink-0">
+      <div className="px-3 py-2 border-t border-fw-border/30 bg-fw-surface-2 flex-shrink-0">
         <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
           <div className="flex items-center justify-between">
             <span className="tv-label">Est. Margin</span>
@@ -389,7 +389,7 @@ export function OrderPanel() {
       </div>
 
       {/* Submit Buttons — Premium institutional BUY/SELL */}
-      <div className="px-3 py-3 border-t border-fw-border bg-[#0a0c12] flex-shrink-0">
+      <div className="px-3 py-3 border-t border-fw-border bg-fw-surface flex-shrink-0">
         <div className="grid grid-cols-2 gap-2.5">
           {/* BUY */}
           <button
@@ -401,7 +401,7 @@ export function OrderPanel() {
               'flex items-center justify-center gap-1.5',
               'font-bold text-[15px] tracking-[0.3px] text-white',
               'transition-all duration-[180ms] ease-out',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0a0c12]',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent',
               'active:scale-[0.97] active:duration-[120ms]',
               'disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100',
               !isSubmitting && symbol ? 'hover:scale-[1.02] hover:shadow-[0_4px_20px_rgba(34,197,94,0.35)]' : '',
@@ -443,7 +443,7 @@ export function OrderPanel() {
               'flex items-center justify-center gap-1.5',
               'font-bold text-[15px] tracking-[0.3px] text-white',
               'transition-all duration-[180ms] ease-out',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/60 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0a0c12]',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/60 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent',
               'active:scale-[0.97] active:duration-[120ms]',
               'disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100',
               !isSubmitting && symbol ? 'hover:scale-[1.02] hover:shadow-[0_4px_20px_rgba(239,68,68,0.35)]' : '',
@@ -488,7 +488,7 @@ function ActionBtn({ label, onClick, className }: { label: string; onClick: () =
     <button
       onClick={onClick}
       className={cn(
-        'py-1.5 rounded-md text-[14px] font-bold bg-[#141720] border border-fw-border/50 text-fw-text-secondary hover:text-fw-text transition-colors cursor-pointer',
+        'py-1.5 rounded-md text-[14px] font-bold bg-fw-surface-2 border border-fw-border/50 text-fw-text-secondary hover:text-fw-text transition-colors cursor-pointer',
         className
       )}
     >

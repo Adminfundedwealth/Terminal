@@ -246,7 +246,7 @@ function HoverTooltip({ info, midPrice }: { info: HoverInfo; midPrice: number })
   return (
     <div className={cn(
       'absolute right-full top-0 mr-2 z-50 w-[160px]',
-      'bg-[#12141f] border border-fw-border rounded-lg shadow-2xl',
+      'bg-fw-surface border border-fw-border rounded-lg shadow-2xl',
       'p-2 pointer-events-none',
     )}>
       <div className="space-y-1">
@@ -424,10 +424,10 @@ export function MarketDepthPanel() {
 
   // ── render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col h-full bg-[#08090e] select-none text-fw-text overflow-hidden">
+    <div className="flex flex-col h-full bg-fw-bg select-none text-fw-text overflow-hidden">
 
       {/* ══ HEADER — compact single row ═════════════════════════════════════ */}
-      <div className="flex items-center justify-between px-2 py-1 border-b border-fw-border bg-[#0d0f17] flex-shrink-0 gap-2">
+      <div className="flex items-center justify-between px-2 py-1 border-b border-fw-border bg-fw-surface flex-shrink-0 gap-2">
         <div className="flex items-center gap-1.5 min-w-0">
           <span className="tv-heading text-fw-text-muted">DOM</span>
           {activeSymbol && (
@@ -502,7 +502,7 @@ export function MarketDepthPanel() {
       </div>
 
       {/* ══ COLUMN HEADERS ══════════════════════════════════════════════════ */}
-      <div className="grid grid-cols-[60px_1fr_60px] py-[3px] border-b border-fw-border/20 bg-[#08090e] flex-shrink-0">
+      <div className="grid grid-cols-[60px_1fr_60px] py-[3px] border-b border-fw-border/20 bg-fw-surface flex-shrink-0">
         <span className="text-[8px] text-green/50 text-right pr-1.5 uppercase tracking-wider font-semibold">
           {showCumulative ? 'Cum' : 'Bid'}
         </span>
@@ -549,7 +549,7 @@ export function MarketDepthPanel() {
             ))}
 
             {/* ── MID PRICE DIVIDER ── */}
-            <div className="flex items-center gap-1.5 px-2 py-[4px] bg-[#0e1018] border-y border-fw-accent/15">
+            <div className="flex items-center gap-1.5 px-2 py-[4px] bg-fw-surface-2 border-y border-fw-accent/15">
               <div className="flex-1 h-px bg-fw-accent/15" />
               <span className="text-[9px] font-bold text-fw-accent/60 uppercase tracking-widest whitespace-nowrap">
                 {midPrice > 0 ? formatPrice(midPrice) : 'MID'}
@@ -591,7 +591,7 @@ export function MarketDepthPanel() {
 
       {/* ══ LIQUIDITY WALLS ═════════════════════════════════════════════════ */}
       {(wallBidPrices.size > 0 || wallAskPrices.size > 0) && (
-        <div className="flex gap-1.5 px-2 py-1.5 border-t border-fw-border/20 bg-[#0a0c13] flex-shrink-0 flex-wrap">
+        <div className="flex gap-1.5 px-2 py-1.5 border-t border-fw-border/20 bg-fw-surface flex-shrink-0 flex-wrap">
           {[...wallBidPrices].map(price => {
             const lvl = bids.find(b => b.price === price);
             return lvl ? (
@@ -618,7 +618,7 @@ export function MarketDepthPanel() {
       )}
 
       {/* ══ DOM PRESSURE METER ══════════════════════════════════════════════ */}
-      <div className="px-3 py-2 border-t border-fw-border/20 bg-[#0a0c13] flex-shrink-0">
+      <div className="px-3 py-2 border-t border-fw-border/20 bg-fw-surface flex-shrink-0">
         {/* Labels */}
         <div className="flex items-center justify-between mb-1.5">
           <div className="flex items-center gap-1">
@@ -668,7 +668,7 @@ export function MarketDepthPanel() {
       {/* ══ TIME & SALES TAPE ═══════════════════════════════════════════════ */}
       {showTape && (
         <div className="border-t border-fw-border/30 flex-shrink-0 flex flex-col" style={{ maxHeight: 150 }}>
-          <div className="flex items-center justify-between px-2 py-1 bg-[#0d0f17] border-b border-fw-border/20 flex-shrink-0">
+          <div className="flex items-center justify-between px-2 py-1 bg-fw-surface border-b border-fw-border/20 flex-shrink-0">
             <span className="tv-label-sm uppercase tracking-widest">Time &amp; Sales</span>
             <span className="tv-support text-fw-text-muted/40">{tape.length} ticks</span>
           </div>

@@ -1,4 +1,4 @@
-ï»¿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useAppStore } from '@/store/appStore';
 import { cn } from '@/utils/helpers';
 import { Save, Trash2, Check, Layout } from 'lucide-react';
@@ -77,8 +77,8 @@ export function ChartTemplatesPanel() {
   };
 
   return (
-    <div className="h-full flex flex-col bg-[#0c0e14]">
-      <div className="flex items-center justify-between px-3 py-2 border-b border-fw-border bg-[#10121a] flex-shrink-0">
+    <div className="h-full flex flex-col bg-fw-bg">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-fw-border bg-fw-surface flex-shrink-0">
         <span className="text-[14px] font-bold text-fw-text">Chart Templates</span>
         <span className="text-[14px] text-fw-text-muted">{templates.length} saved</span>
       </div>
@@ -118,7 +118,7 @@ export function ChartTemplatesPanel() {
                 <div>
                   <div className="text-[14px] font-semibold text-fw-text">{tpl.name}</div>
                   <div className="text-[14px] text-fw-text-muted">
-                    {tpl.timeframe}m Â· {tpl.chartType} Â· {tpl.chartLayout}
+                    {tpl.timeframe}m · {tpl.chartType} · {tpl.chartLayout}
                   </div>
                 </div>
               </div>

@@ -207,7 +207,7 @@ function InstrumentDetails({ instrument, onClose, anchorRef }: InstrumentDetails
         zIndex: 9999,
         boxShadow: '0 8px 32px rgba(0,0,0,0.7)',
       }}
-      className="bg-[#12151f] border border-fw-border rounded-lg overflow-hidden"
+      className="bg-fw-surface border border-fw-border rounded-lg overflow-hidden"
     >
       <div className="px-3 py-2 border-b border-fw-border flex items-center justify-between">
         <span className="text-[11px] font-bold text-fw-text uppercase tracking-widest">Instrument Details</span>
@@ -296,9 +296,9 @@ function ContextMenu({
         zIndex: 9999,
         boxShadow: '0 8px 32px rgba(0,0,0,0.7)',
       }}
-      className="bg-[#12151f] border border-fw-border rounded-lg overflow-hidden"
+      className="bg-fw-surface border border-fw-border rounded-lg overflow-hidden"
     >
-      {/* Header � instrument name */}
+      {/* Header — instrument name */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-fw-border/60">
         <SymbolLogo symbol={item.symbol} size={18} />
         <span className="text-[12px] font-bold text-fw-text truncate">{item.symbol}</span>
@@ -814,7 +814,7 @@ function InstrumentBrowser({ onOpenNews, currentWlId, activeSymbol, pinnedTokens
             value={query}
             onChange={e => setQuery(e.target.value)}
             placeholder="Search instruments..."
-            className="w-full bg-[#141720] border border-fw-border/50 rounded text-[12px] text-fw-text pl-6 pr-6 py-1 outline-none focus:border-fw-accent/60 placeholder:text-fw-text-muted"
+            className="w-full bg-fw-surface-2 border border-fw-border/50 rounded text-[12px] text-fw-text pl-6 pr-6 py-1 outline-none focus:border-fw-accent/60 placeholder:text-fw-text-muted"
           />
           {query && (
             <button onClick={() => setQuery('')} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-fw-text-muted hover:text-fw-text">
@@ -827,13 +827,13 @@ function InstrumentBrowser({ onOpenNews, currentWlId, activeSymbol, pinnedTokens
         <div ref={filterMenuRef} className="relative flex-shrink-0">
           <button
             onClick={() => setShowFilterMenu(v => !v)}
-            className="flex items-center gap-1 px-2 py-1 bg-[#141720] border border-fw-border/50 rounded text-[11px] text-fw-text-secondary hover:text-fw-text hover:border-fw-border transition-colors whitespace-nowrap"
+            className="flex items-center gap-1 px-2 py-1 bg-fw-surface-2 border border-fw-border/50 rounded text-[11px] text-fw-text-secondary hover:text-fw-text hover:border-fw-border transition-colors whitespace-nowrap"
           >
             <span>{activeSegLabel}</span>
             <ChevronDown size={10} className={cn('transition-transform', showFilterMenu && 'rotate-180')} />
           </button>
           {showFilterMenu && (
-            <div className="absolute right-0 top-full mt-0.5 z-[200] w-40 bg-[#12151f] border border-fw-border rounded-lg shadow-2xl overflow-hidden py-1"
+            <div className="absolute right-0 top-full mt-0.5 z-[200] w-40 bg-fw-surface border border-fw-border rounded-lg shadow-2xl overflow-hidden py-1"
                  style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.6)' }}>
               {SEGMENT_FILTERS.map(sf => (
                 <button
@@ -856,7 +856,7 @@ function InstrumentBrowser({ onOpenNews, currentWlId, activeSymbol, pinnedTokens
       </div>
 
       {/* Column headers */}
-      <div className="grid grid-cols-[1fr_72px] px-3 py-[3px] border-b border-fw-border/30 flex-shrink-0 bg-[#090b10]">
+      <div className="grid grid-cols-[1fr_72px] px-3 py-[3px] border-b border-fw-border/30 flex-shrink-0 bg-fw-surface">
         <span className="text-[11px] text-fw-text-secondary uppercase tracking-widest">Instrument</span>
         <span className="text-[11px] text-fw-text-secondary uppercase tracking-widest text-right">LTP</span>
       </div>
@@ -929,7 +929,7 @@ function FavoritesView({ pinnedTokens, watchlists, activeSymbol, onSelect, onPin
       </div>
 
       {/* Column headers */}
-      <div className="grid grid-cols-[1fr_68px_52px] px-3 py-[3px] border-b border-fw-border/30 flex-shrink-0 bg-[#090b10]">
+      <div className="grid grid-cols-[1fr_68px_52px] px-3 py-[3px] border-b border-fw-border/30 flex-shrink-0 bg-fw-surface">
         <span className="text-[10px] text-fw-text-muted uppercase tracking-widest">Symbol</span>
         <span className="text-[10px] text-fw-text-muted uppercase tracking-widest text-right">LTP</span>
         <span className="text-[10px] text-fw-text-muted uppercase tracking-widest text-right">Chg%</span>
@@ -1022,13 +1022,13 @@ function ImportPanel({ onClose, activeWatchlist, watchlists, currentWlId, setWat
   };
 
   return (
-    <div className="px-2 py-2 border-b border-fw-border bg-[#0d0f16] space-y-1.5 flex-shrink-0">
+    <div className="px-2 py-2 border-b border-fw-border bg-fw-surface space-y-1.5 flex-shrink-0">
       <textarea
         placeholder="RELIANCE, TCS, INFY, NIFTY..."
         value={importText}
         onChange={e => { setImportText(e.target.value); setImportStatus(null); }}
         rows={2}
-        className="w-full bg-[#141720] border border-fw-border rounded text-[12px] px-2 py-1.5 text-fw-text outline-none focus:border-fw-accent resize-none"
+        className="w-full bg-fw-surface-2 border border-fw-border rounded text-[12px] px-2 py-1.5 text-fw-text outline-none focus:border-fw-accent resize-none"
       />
       {importStatus && (
         <p className={cn('text-[11px] font-medium', importStatus.includes('not found') ? 'text-orange-400' : 'text-emerald-400')}>
@@ -1210,7 +1210,7 @@ export function Watchlist() {
             placeholder="Search..."
             value={inlineQuery}
             onChange={e => setInlineQuery(e.target.value)}
-            className="w-full bg-[#141720] border border-fw-border/50 rounded text-[11px] text-fw-text pl-5.5 pr-5 py-1 outline-none focus:border-fw-accent/60 placeholder:text-fw-text-muted/60"
+            className="w-full bg-fw-surface-2 border border-fw-border/50 rounded text-[11px] text-fw-text pl-5.5 pr-5 py-1 outline-none focus:border-fw-accent/60 placeholder:text-fw-text-muted/60"
             style={{ paddingLeft: '1.4rem', paddingRight: inlineQuery ? '1.2rem' : '0.4rem' }}
           />
           {inlineQuery && (
@@ -1225,13 +1225,13 @@ export function Watchlist() {
           <div ref={segFilterRef} className="relative flex-shrink-0">
             <button
               onClick={() => setShowSegFilter(v => !v)}
-              className="flex items-center gap-0.5 px-1.5 py-1 bg-[#141720] border border-fw-border/50 rounded text-[10px] text-fw-text-secondary hover:text-fw-text hover:border-fw-border transition-colors whitespace-nowrap"
+              className="flex items-center gap-0.5 px-1.5 py-1 bg-fw-surface-2 border border-fw-border/50 rounded text-[10px] text-fw-text-secondary hover:text-fw-text hover:border-fw-border transition-colors whitespace-nowrap"
             >
               <span className="max-w-[40px] truncate">{activeSegLabel === 'Index / Equity' ? 'NSE' : activeSegLabel}</span>
               <ChevronDown size={9} className={cn('transition-transform', showSegFilter && 'rotate-180')} />
             </button>
             {showSegFilter && (
-              <div className="absolute right-0 top-full mt-0.5 z-[200] w-36 bg-[#12151f] border border-fw-border rounded-lg shadow-2xl overflow-hidden py-1"
+              <div className="absolute right-0 top-full mt-0.5 z-[200] w-36 bg-fw-surface border border-fw-border rounded-lg shadow-2xl overflow-hidden py-1"
                    style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.6)' }}>
                 {SEGMENT_FILTERS.map(sf => (
                   <button
@@ -1271,7 +1271,7 @@ export function Watchlist() {
 
       {/* -- WATCHLIST TABS � preserved exactly, shown only in watchlist mode -- */}
       {(panelMode === 'watchlist') && (
-        <div className="flex items-center border-b border-fw-border overflow-x-auto flex-shrink-0 scrollbar-none bg-[#090b10] px-1">
+        <div className="flex items-center border-b border-fw-border overflow-x-auto flex-shrink-0 scrollbar-none bg-fw-surface px-1">
           {watchlists.map(wl => {
             const wlKey = wl.name.toLowerCase();
             const isActive = currentWlId === wl.id || currentWlId === wlKey;
@@ -1334,7 +1334,7 @@ export function Watchlist() {
 
       {/* -- COLUMN HEADERS (watchlist mode only) ------------------------------- */}
       {panelMode === 'watchlist' && (
-        <div className="grid grid-cols-[1fr_68px_52px_28px_22px] px-2 py-[3px] border-b border-fw-border/30 flex-shrink-0 bg-[#090b10]">
+        <div className="grid grid-cols-[1fr_68px_52px_28px_22px] px-2 py-[3px] border-b border-fw-border/30 flex-shrink-0 bg-fw-surface">
           <span className="text-[10px] text-fw-text-muted uppercase tracking-widest">Symbol</span>
           <span className="text-[10px] text-fw-text-muted uppercase tracking-widest text-right">LTP</span>
           <span className="text-[10px] text-fw-text-muted uppercase tracking-widest text-right">Chg%</span>

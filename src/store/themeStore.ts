@@ -148,6 +148,7 @@ interface ThemeState {
 /**
  * Apply theme colors as CSS custom properties on document root.
  * This avoids React re-renders — all components use CSS variables.
+ * Also sets data-theme attribute for light mode CSS cascade overrides.
  */
 function injectThemeCSS(config: ThemeConfig) {
   const root = document.documentElement;
@@ -176,8 +177,16 @@ function injectThemeCSS(config: ThemeConfig) {
   root.style.setProperty('--fw-purple', colors.purple);
   root.style.setProperty('--fw-orange', colors.orange);
 
-  // Remove data-theme attribute — CSS variables handle everything now
-  root.removeAttribute('data-theme');
+  // Determine if this is a light theme based on background luminance.
+  // Light themes have bright backgrounds (e.g. #f8f9fa vs dark #0f1118).
+  const isLightTheme = config.id === 'light-pro' || 
+    (colors.bg.startsWith('#') && parseInt(colors.bg.slice(1, 3), 16) > 128);
+  
+  if (isLightTheme) {
+    root.setAttribute('data-theme', 'light');
+  } else {
+    root.removeAttribute('data-theme');
+  }
 }
 
 function injectDensityCSS(mode: DensityMode) {
@@ -304,7 +313,21 @@ if (typeof window !== 'undefined') {
   setTimeout(() => {
     const state = useThemeStore.getState();
     const all = [...SYSTEM_THEMES, ...state.customThemes];
-    const theme = all.find(t => t.id === state.activeThemeId) || DARK_PRO;
+    let theme = all.find(t => t.id === state.activeThemeId) || DARK_PRO;
+    
+    // If legacy theme key says 'light' but themeStore hasn't been synced yet,
+    // force Light Pro to match what the user selected.
+    try {
+      const legacyKey = localStorage.getItem('fundedwealth-terminal-theme');
+      if (legacyKey === 'light' && state.activeThemeId !== 'light-pro') {
+        theme = LIGHT_PRO;
+        useThemeStore.setState({ activeThemeId: 'light-pro' });
+      } else if (legacyKey === 'dark' && state.activeThemeId === 'light-pro') {
+        theme = DARK_PRO;
+        useThemeStore.setState({ activeThemeId: 'dark-pro' });
+      }
+    } catch {}
+    
     injectThemeCSS(theme);
     injectDensityCSS(state.densityMode);
   }, 0);

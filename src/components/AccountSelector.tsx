@@ -178,10 +178,10 @@ export function AccountSelector() {
 
       {/* ── Dropdown ── */}
       {isOpen && (
-        <div className="absolute top-full right-0 mt-1.5 w-[300px] bg-[#0f1219] border border-fw-border rounded-xl shadow-2xl z-[200] overflow-hidden">
+        <div className="absolute top-full right-0 mt-1.5 w-[300px] bg-fw-surface border border-fw-border rounded-xl shadow-2xl z-[200] overflow-hidden">
 
           {/* Header */}
-          <div className="flex items-center justify-between px-3 py-2 border-b border-fw-border/60 bg-[#0c0e14]">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-fw-border/60 bg-fw-surface-2">
             <span className="text-[11px] font-bold text-fw-text-muted uppercase tracking-widest">
               Trading Accounts ({accounts.length})
             </span>
@@ -266,7 +266,7 @@ export function AccountSelector() {
 
           {/* Footer hint */}
           {hasMultiple && (
-            <div className="px-3 py-1.5 border-t border-fw-border/40 bg-[#0c0e14]">
+            <div className="px-3 py-1.5 border-t border-fw-border/40 bg-fw-surface-2">
               <p className="text-[11px] text-fw-text-muted/60">
                 Switching reloads live data for the selected account.
               </p>

@@ -472,7 +472,7 @@ function OrdWorkspace() {
   useEffect(() => { setBottomTab('orders'); }, [setBottomTab]);
   return (
     <div className="h-full w-full flex flex-col overflow-hidden">
-      <div className="px-4 py-2 border-b border-fw-border bg-[#0a0c12] flex items-center gap-2 flex-shrink-0">
+      <div className="px-4 py-2 border-b border-fw-border bg-fw-surface flex items-center gap-2 flex-shrink-0">
         <span className="text-[11px] font-bold uppercase tracking-widest text-fw-accent">Orders</span>
         <span className="text-[11px] text-fw-text-muted">— All open, filled, cancelled, rejected orders</span>
       </div>

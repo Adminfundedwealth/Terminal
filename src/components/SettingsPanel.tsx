@@ -46,7 +46,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
       <div
-        className="bg-[#12141f] border border-fw-border rounded-xl shadow-2xl w-[480px] max-h-[80vh] flex flex-col overflow-hidden"
+        className="bg-fw-surface border border-fw-border rounded-xl shadow-2xl w-[480px] max-h-[80vh] flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -124,7 +124,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
                   min={1}
                   value={defaultQty}
                   onChange={(e) => setDefaultQty(Math.max(1, parseInt(e.target.value) || 1))}
-                  className="w-28 h-9 bg-[#0e1018] border border-fw-border rounded-md font-mono text-[13px] font-bold text-fw-text px-3 outline-none focus:border-fw-accent tabular-nums"
+                  className="w-28 h-9 bg-fw-surface-2 border border-fw-border rounded-md font-mono text-[13px] font-bold text-fw-text px-3 outline-none focus:border-fw-accent tabular-nums"
                 />
               </SettingSection>
 
@@ -171,7 +171,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
                     )}
                   >
                     <span className="text-fw-text-secondary">{hk.action}</span>
-                    <kbd className="px-2 py-1 bg-[#0e1018] border border-fw-border rounded text-[14px] font-mono font-bold text-fw-text-secondary">
+                    <kbd className="px-2 py-1 bg-fw-surface-2 border border-fw-border rounded text-[14px] font-mono font-bold text-fw-text-secondary">
                       {hk.key}
                     </kbd>
                   </div>

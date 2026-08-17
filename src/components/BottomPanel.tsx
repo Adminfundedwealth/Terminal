@@ -48,7 +48,7 @@ function ConfirmDialog({
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-[#12141f] border border-fw-border rounded-xl shadow-2xl p-5 w-[260px] flex flex-col gap-4">
+      <div className="bg-fw-surface border border-fw-border rounded-xl shadow-2xl p-5 w-[260px] flex flex-col gap-4">
         <div className="flex items-center gap-2">
           <AlertTriangle size={15} className={isDangerous ? 'text-orange-400' : 'text-red-400'} />
           <span className="text-[13px] font-black text-fw-text">Confirm Action</span>
@@ -244,9 +244,9 @@ export function BottomPanel() {
         />
       )}
 
-      <div className="h-full flex flex-col bg-gradient-to-b from-[#0d0f15] to-[#0b0d12]">
+      <div className="h-full flex flex-col bg-fw-bg">
         {/* Tabs — Professional Console Strip */}
-        <div className="flex items-center border-b border-fw-border px-2 bg-[#0a0c12] flex-shrink-0">
+        <div className="flex items-center border-b border-fw-border px-2 bg-fw-surface flex-shrink-0">
           {tabs.map((tab) => (
             <button
               key={tab.id}
@@ -610,7 +610,7 @@ function PositionsTable({
                         placeholder="SL Price"
                         value={slInput.price}
                         onChange={e => setSlInput({ ...slInput, price: e.target.value })}
-                        className="w-20 h-5 bg-fw-bg border border-red-800/40 rounded text-[12px] font-mono text-fw-text px-1.5 outline-none focus:border-red"
+                        className="w-20 h-5 bg-fw-surface-2 border border-red-800/40 rounded text-[12px] font-mono text-fw-text px-1.5 outline-none focus:border-red"
                         autoFocus
                       />
                       <button
@@ -631,7 +631,7 @@ function PositionsTable({
                         placeholder="TP Price"
                         value={tpInput.price}
                         onChange={e => setTpInput({ ...tpInput, price: e.target.value })}
-                        className="w-20 h-5 bg-fw-bg border border-green-800/40 rounded text-[12px] font-mono text-fw-text px-1.5 outline-none focus:border-green"
+                        className="w-20 h-5 bg-fw-surface-2 border border-green-800/40 rounded text-[12px] font-mono text-fw-text px-1.5 outline-none focus:border-green"
                         autoFocus
                       />
                       <button

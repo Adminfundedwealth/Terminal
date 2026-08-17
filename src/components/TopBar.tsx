@@ -2,21 +2,11 @@
 import { Search, Bell, Home, BarChart3, TrendingUp, Activity, LineChart, Diamond, DollarSign, Sun, Moon, PieChart } from 'lucide-react';
 import { useAppStore, type Workspace } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
+import { useThemeStore } from '@/store/themeStore';
 import { cn } from '@/utils/helpers';
 import { AccountSelector } from './AccountSelector';
 
 const STORAGE_KEY = 'fundedwealth-terminal-theme';
-
-function applyThemeToDOM(theme: 'dark' | 'light') {
-  try {
-    if (theme === 'light') {
-      document.documentElement.setAttribute('data-theme', 'light');
-    } else {
-      document.documentElement.removeAttribute('data-theme');
-    }
-    localStorage.setItem(STORAGE_KEY, theme);
-  } catch {}
-}
 
 export function TopBar() {
   const { setSearchOpen, setBottomTab } = useAppStore();
@@ -35,7 +25,11 @@ export function TopBar() {
 
   const toggleTheme = () => {
     const next = isLight ? 'dark' : 'light';
-    applyThemeToDOM(next);
+    // Apply CSS variable theme via themeStore (this also sets/removes data-theme attribute)
+    const themeId = next === 'light' ? 'light-pro' : 'dark-pro';
+    useThemeStore.getState().applyTheme(themeId);
+    // Also persist in legacy storage key for FOUC prevention in main.tsx
+    try { localStorage.setItem(STORAGE_KEY, next); } catch {}
     setIsLight(next === 'light');
     window.dispatchEvent(new CustomEvent('fw:theme-changed'));
   };

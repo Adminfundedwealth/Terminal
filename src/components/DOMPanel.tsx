@@ -60,9 +60,9 @@ export function DOMPanel() {
   const LEVELS = 20;
 
   return (
-    <div className="h-full flex flex-col bg-[#0a0c12] select-none">
+    <div className="h-full flex flex-col bg-fw-bg select-none">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-1.5 border-b border-fw-border bg-[#10121a] flex-shrink-0">
+      <div className="flex items-center justify-between px-3 py-1.5 border-b border-fw-border bg-fw-surface flex-shrink-0">
         <span className="text-[13px] font-bold text-fw-text-secondary uppercase tracking-wider">20-Level DOM</span>
         {quote && (
           <span className={cn('font-mono font-black text-[14px] tabular-nums', (quote.changePercent || 0) >= 0 ? 'text-green' : 'text-red')}>
@@ -72,7 +72,7 @@ export function DOMPanel() {
       </div>
 
       {/* Column Headers */}
-      <div className="grid grid-cols-[1fr_70px_70px_1fr] px-2 py-[3px] border-b border-fw-border/30 bg-[#0d0f15] flex-shrink-0">
+      <div className="grid grid-cols-[1fr_70px_70px_1fr] px-2 py-[3px] border-b border-fw-border/30 bg-fw-surface flex-shrink-0">
         <span className="text-[8px] text-fw-text-muted font-bold text-right pr-1">BID QTY</span>
         <span className="text-[8px] text-green font-bold text-center">BID</span>
         <span className="text-[8px] text-red font-bold text-center">ASK</span>
@@ -137,7 +137,7 @@ export function DOMPanel() {
       </div>
 
       {/* Totals + Pressure Bar */}
-      <div className="border-t border-fw-border bg-[#10121a] px-3 py-2 flex-shrink-0">
+      <div className="border-t border-fw-border bg-fw-surface px-3 py-2 flex-shrink-0">
         <div className="flex justify-between text-[14px] mb-1">
           <span className="font-mono text-green font-bold tabular-nums">{fmtQty(totalBid)}</span>
           <span className="text-[13px] text-fw-text-muted">{bidPct.toFixed(0)}% / {(100 - bidPct).toFixed(0)}%</span>

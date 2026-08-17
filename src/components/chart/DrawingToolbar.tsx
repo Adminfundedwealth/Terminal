@@ -99,7 +99,7 @@ export function DrawingToolbar({
       onMouseDown={e => e.stopPropagation()}
     >
       {/* Main toolbar row */}
-      <div className="flex items-center h-[38px] bg-[#1a1d2e] border border-[#2d3048] rounded-xl shadow-2xl overflow-visible px-1 gap-0.5">
+      <div className="flex items-center h-[38px] bg-[#1a1d2e] border border-fw-border rounded-xl shadow-2xl overflow-visible px-1 gap-0.5">
 
         {/* ⠿ Drag grip — cosmetic */}
         <div className="flex items-center justify-center w-7 h-full cursor-grab text-[#4b5563] hover:text-[#9ca3af] transition-colors">
@@ -126,7 +126,7 @@ export function DrawingToolbar({
             <div className="w-5 h-[3px] rounded-full" style={{ backgroundColor: color }} />
           </button>
           {showColorPicker && (
-            <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-[#12141f] border border-[#2d3048] rounded-xl shadow-2xl p-3 z-[700] w-[148px]">
+            <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-fw-surface border border-fw-border rounded-xl shadow-2xl p-3 z-[700] w-[148px]">
               <div className="grid grid-cols-4 gap-1.5">
                 {PRESET_COLORS.map(c => (
                   <button
@@ -165,7 +165,7 @@ export function DrawingToolbar({
             <span className="text-[10px] text-[#6b7280] leading-none font-mono">{lineStyleSymbol}</span>
           </button>
           {showStylePicker && (
-            <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-[#12141f] border border-[#2d3048] rounded-xl shadow-2xl p-2 z-[700] w-[100px]">
+            <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-fw-surface border border-fw-border rounded-xl shadow-2xl p-2 z-[700] w-[100px]">
               {LINE_STYLES.map(s => (
                 <button
                   key={s.value}
@@ -191,7 +191,7 @@ export function DrawingToolbar({
             <span className="text-[12px] font-medium tabular-nums">{lineWidth}px</span>
           </button>
           {showWidthPicker && (
-            <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-[#12141f] border border-[#2d3048] rounded-xl shadow-2xl p-2 z-[700] w-[80px]">
+            <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-fw-surface border border-fw-border rounded-xl shadow-2xl p-2 z-[700] w-[80px]">
               {LINE_WIDTHS.map(w => (
                 <button
                   key={w}
@@ -240,7 +240,7 @@ export function DrawingToolbar({
             <MoreHorizontal size={14} strokeWidth={1.5} />
           </ToolBtn>
           {showMore && (
-            <div className="absolute top-full mt-2 right-0 bg-[#12141f] border border-[#2d3048] rounded-xl shadow-2xl py-1 z-[700] w-[170px]">
+            <div className="absolute top-full mt-2 right-0 bg-fw-surface border border-fw-border rounded-xl shadow-2xl py-1 z-[700] w-[170px]">
               <MenuItem icon={<Eye size={13} />} label={isHidden ? 'Show drawing' : 'Hide drawing'} onClick={() => { onVisibilityToggle(drawingId); setShowMore(false); }} />
               <MenuItem icon={<Copy size={13} />} label="Duplicate" onClick={() => { onDuplicate(drawingId); setShowMore(false); onClose(); }} />
               <div className="h-px bg-[#2d3048] my-1" />

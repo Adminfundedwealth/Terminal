@@ -46,6 +46,56 @@ function saveDrawings(token: string, drawings: any[]) {
   localStorage.setItem(getDrawingsKey(token), JSON.stringify(drawings));
 }
 
+// ─── Chart theme helpers ──────────────────────────────────────────────────────
+
+function isLightTheme(): boolean {
+  return document.documentElement.getAttribute('data-theme') === 'light';
+}
+
+function getChartThemeOptions() {
+  const light = isLightTheme();
+  return {
+    layout: {
+      background: { type: ColorType.Solid, color: light ? '#ffffff' : 'transparent' },
+      textColor: light ? '#374151' : '#6b7280',
+      fontSize: 11,
+    },
+    grid: {
+      vertLines: { color: light ? 'rgba(209,213,219,0.6)' : 'rgba(38,42,54,0.4)' },
+      horzLines: { color: light ? 'rgba(209,213,219,0.6)' : 'rgba(38,42,54,0.4)' },
+    },
+    crosshair: {
+      mode: CrosshairMode.Normal,
+      vertLine: { color: light ? '#374151' : '#6b7280', width: 1 as const, style: 3 },
+      horzLine: { color: light ? '#374151' : '#6b7280', width: 1 as const, style: 3 },
+    },
+    rightPriceScale: { borderColor: light ? '#d9dee7' : '#262a36' },
+    timeScale: { borderColor: light ? '#d9dee7' : '#262a36', timeVisible: true, secondsVisible: false },
+  };
+}
+
+function getSubChartThemeOptions(container: HTMLElement) {
+  const light = isLightTheme();
+  return {
+    layout: {
+      background: { type: ColorType.Solid as const, color: light ? '#ffffff' : 'transparent' },
+      textColor: light ? '#374151' : '#6b7280',
+      fontSize: 10,
+    },
+    grid: {
+      vertLines: { color: light ? 'rgba(209,213,219,0.5)' : 'rgba(38,42,54,0.3)' },
+      horzLines: { color: light ? 'rgba(209,213,219,0.5)' : 'rgba(38,42,54,0.3)' },
+    },
+    rightPriceScale: { borderColor: light ? '#d9dee7' : '#262a36' },
+    timeScale: { borderColor: light ? '#d9dee7' : '#262a36', visible: false },
+    crosshair: { mode: CrosshairMode.Normal },
+    watermark: { visible: false },
+    width: container.clientWidth,
+    height: container.clientHeight,
+  };
+}
+
+
 export function ChartPanel() {
   const { activeSymbol, timeframe, setTimeframe, chartType, setChartType } = useAppStore();
   const chartContainerRef = useRef<HTMLDivElement>(null);
@@ -192,12 +242,9 @@ export function ChartPanel() {
   useEffect(() => {
     if (!chartContainerRef.current) return;
     const chart = createChart(chartContainerRef.current, {
-      layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: '#6b7280', fontSize: 11 },
-      grid: { vertLines: { color: 'rgba(38, 42, 54, 0.4)' }, horzLines: { color: 'rgba(38, 42, 54, 0.4)' } },
-      crosshair: { mode: CrosshairMode.Normal, vertLine: { color: '#6b7280', width: 1, style: 3 }, horzLine: { color: '#6b7280', width: 1, style: 3 } },
-      rightPriceScale: { borderColor: '#262a36', scaleMargins: { top: 0.06, bottom: 0.22 } },
+      ...getChartThemeOptions(),
       leftPriceScale: { visible: false, borderVisible: false },
-      timeScale: { borderColor: '#262a36', timeVisible: true, secondsVisible: false },
+      rightPriceScale: { ...getChartThemeOptions().rightPriceScale, scaleMargins: { top: 0.06, bottom: 0.22 } },
       handleScale: { axisPressedMouseMove: true },
       handleScroll: { mouseWheel: true, pressedMouseMove: true },
     });
@@ -206,6 +253,35 @@ export function ChartPanel() {
       for (const e of entries) chart.applyOptions({ width: e.contentRect.width, height: e.contentRect.height });
     });
     ro.observe(chartContainerRef.current);
+
+    // Listen to theme changes — re-apply chart options
+    const onThemeChange = () => {
+      const themeOpts = getChartThemeOptions();
+      chart.applyOptions({
+        ...themeOpts,
+        rightPriceScale: { ...themeOpts.rightPriceScale, scaleMargins: { top: 0.06, bottom: 0.22 } },
+      });
+      // Also update all sub-charts
+      subChartsRef.current.forEach((sc) => {
+        const container = sc.chartElement?.() as HTMLElement | undefined;
+        if (container) {
+          sc.applyOptions(getSubChartThemeOptions(container));
+        } else {
+          const light = isLightTheme();
+          sc.applyOptions({
+            layout: {
+              background: { type: ColorType.Solid, color: light ? '#ffffff' : 'transparent' },
+              textColor: light ? '#374151' : '#6b7280',
+            },
+            grid: {
+              vertLines: { color: light ? 'rgba(209,213,219,0.5)' : 'rgba(38,42,54,0.3)' },
+              horzLines: { color: light ? 'rgba(209,213,219,0.5)' : 'rgba(38,42,54,0.3)' },
+            },
+          });
+        }
+      });
+    };
+    window.addEventListener('fw:theme-changed', onThemeChange);
 
     // Drawing click handler — uses refs so it always reads current mode/drawings
     chart.subscribeClick((param) => {
@@ -376,6 +452,7 @@ export function ChartPanel() {
       chartRef.current = null;
       seriesRef.current = null;
       window.removeEventListener('keydown', handleKey);
+      window.removeEventListener('fw:theme-changed', onThemeChange);
     };
   }, []);
 
@@ -1302,16 +1379,7 @@ export function ChartPanel() {
   };
 
   function subChartOptions(container: HTMLElement) {
-    return {
-      layout: { background: { type: ColorType.Solid as const, color: 'transparent' }, textColor: '#6b7280', fontSize: 10 },
-      grid: { vertLines: { color: 'rgba(38,42,54,0.3)' }, horzLines: { color: 'rgba(38,42,54,0.3)' } },
-      rightPriceScale: { borderColor: '#262a36' },
-      timeScale: { borderColor: '#262a36', visible: false },
-      crosshair: { mode: CrosshairMode.Normal },
-      watermark: { visible: false },
-      width: container.clientWidth,
-      height: container.clientHeight,
-    };
+    return getSubChartThemeOptions(container);
   }
 
   function syncTimeScales(main: IChartApi, sub: IChartApi) {
@@ -1496,14 +1564,14 @@ export function ChartPanel() {
   const separatePaneIndicators = indicators.filter(i => i.enabled && i.pane === 'separate');
   const spread = quote ? (quote.high - quote.low) : 0;
   return (
-    <div className={cn('h-full flex flex-col bg-[#0d0f15]', isFullscreen && 'fixed inset-0 z-50')}>
+    <div className={cn('h-full flex flex-col bg-fw-surface-2', isFullscreen && 'fixed inset-0 z-50')}>
       {/* Symbol Context Bar — Institutional Header */}
       {activeSymbol && (
-        <div className="h-[34px] min-h-[34px] flex items-center px-3 gap-3 border-b border-fw-border/40 bg-[#10121a]">
+        <div className="h-[34px] min-h-[34px] flex items-center px-3 gap-3 border-b border-fw-border/40 bg-fw-surface">
           {/* Symbol + Exchange — L3/L5 hierarchy */}
           <div className="flex items-center gap-1.5 flex-shrink-0">
             <span className="tv-symbol-lg">{activeSymbol.symbol}</span>
-            <span className="tv-support bg-[#141720] px-1.5 py-[3px] rounded border border-fw-border/40">{activeSymbol.exchange}</span>
+            <span className="tv-support bg-fw-surface-2 px-1.5 py-[3px] rounded border border-fw-border/40">{activeSymbol.exchange}</span>
           </div>
           {quote && (
             <>
@@ -1550,7 +1618,7 @@ export function ChartPanel() {
       )}
 
       {/* Toolbar */}
-      <div className="h-[30px] min-h-[30px] flex items-center px-2 gap-0.5 border-b border-fw-border/40 bg-[#10121a]">
+      <div className="h-[30px] min-h-[30px] flex items-center px-2 gap-0.5 border-b border-fw-border/40 bg-fw-surface">
         {TIMEFRAMES.map((tf) => (
           <button key={tf} onClick={() => setTimeframe(tf)}
             className={cn('px-1.5 py-0.5 text-[12px] font-semibold rounded transition-all', timeframe === tf ? 'bg-fw-accent text-white' : 'text-fw-text-muted hover:text-fw-text hover:bg-fw-hover')}>
@@ -1601,7 +1669,7 @@ export function ChartPanel() {
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="flex-1 relative" ref={chartContainerRef} onContextMenu={handleChartContextMenu}>
             {isLoading && (
-              <div className="absolute inset-0 flex items-center justify-center bg-[#0d0f15]/80 z-10">
+              <div className="absolute inset-0 flex items-center justify-center bg-fw-surface-2/80 z-10">
                 <div className="w-4 h-4 border-2 border-fw-accent border-t-transparent rounded-full animate-spin" />
               </div>
             )}
@@ -1732,7 +1800,7 @@ export function ChartPanel() {
             )}
             {/* Bottom hint — context-sensitive */}
             {drawingMode === 'none' && drawings.length > 0 && !selectedDrawing && (
-              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 px-2.5 py-0.5 rounded-full bg-[#1a1d28]/80 text-fw-text-muted text-[12px] pointer-events-none border border-fw-border/30">
+              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 px-2.5 py-0.5 rounded-full bg-fw-surface/90 text-fw-text-muted text-[12px] pointer-events-none border border-fw-border/30">
                 Click any drawing to select · Right-click for options
               </div>
             )}
@@ -1763,7 +1831,7 @@ export function ChartPanel() {
                   onContextMenu={(e) => { e.preventDefault(); setCtxMenu(null); }}
                 />
                 <div
-                  className="fixed z-[500] w-[160px] bg-[#14172e] border border-fw-border rounded-lg shadow-2xl overflow-hidden text-[13px]"
+                  className="fixed z-[500] w-[160px] bg-fw-surface border border-fw-border rounded-lg shadow-2xl overflow-hidden text-[13px]"
                   style={{ left: Math.min(ctxMenu.x, window.innerWidth - 170), top: Math.min(ctxMenu.y, window.innerHeight - 110) }}
                 >
                   <div className="px-3 py-1.5 border-b border-fw-border/50 text-fw-text-muted text-[12px] font-semibold uppercase tracking-wide">

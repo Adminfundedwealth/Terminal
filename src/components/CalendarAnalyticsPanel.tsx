@@ -74,9 +74,9 @@ export function CalendarAnalyticsPanel() {
   const maxDayPnl = Math.max(...Array.from(dayPnlMap.values()).map(v => Math.abs(v.pnl)), 1);
 
   return (
-    <div className="h-full flex flex-col bg-[#0c0e14]">
+    <div className="h-full flex flex-col bg-fw-bg">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-fw-border bg-[#10121a] flex-shrink-0">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-fw-border bg-fw-surface flex-shrink-0">
         <div className="flex items-center gap-2">
           <button onClick={prevMonth} className="p-1 rounded hover:bg-fw-hover text-fw-text-muted"><ChevronLeft size={14} /></button>
           <span className="text-[14px] font-bold text-fw-text w-36 text-center">{monthStr}</span>

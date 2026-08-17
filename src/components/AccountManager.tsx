@@ -44,7 +44,7 @@ export function AccountManager() {
   return (
     <div className="h-full flex flex-col bg-fw-surface overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-fw-border bg-[#10121a] flex-shrink-0">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-fw-border bg-fw-surface flex-shrink-0">
         <div className="flex items-center gap-2">
           <Users size={16} className="text-fw-cyan" />
           <span className="text-[14px] font-bold text-fw-text">Account Manager</span>

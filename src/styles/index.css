@@ -9,8 +9,10 @@
   --fw-bg: #0f1118;
   --fw-surface: #181b25;
   --fw-surface-2: #1e2230;
+  --fw-surface-hover: #1f2332;
   --fw-border: #262a36;
   --fw-border-light: #2f3444;
+  --fw-border-strong: #3a4050;
   --fw-text: #f1f5f9;
   --fw-text-secondary: #cbd5e1;
   --fw-text-muted: #94a3b8;
@@ -27,6 +29,9 @@
   --fw-cyan: #06b6d4;
   --fw-purple: #8b5cf6;
   --fw-orange: #f97316;
+  --fw-input-bg: #141720;
+  --fw-card-bg: #181b25;
+  --fw-chart-bg: transparent;
 }
 
 [data-theme='fw-blue'] {
@@ -58,8 +63,10 @@
   --fw-bg: #f0f2f5;
   --fw-surface: #ffffff;
   --fw-surface-2: #f3f5f8;
+  --fw-surface-hover: #eef1f5;
   --fw-border: #d9dee7;
   --fw-border-light: #c7ced9;
+  --fw-border-strong: #b8c0ca;
   --fw-text: #111827;
   --fw-text-secondary: #374151;
   --fw-text-muted: #6b7280;
@@ -76,6 +83,9 @@
   --fw-cyan: #0369a1;
   --fw-purple: #7c3aed;
   --fw-orange: #c2410c;
+  --fw-input-bg: #ffffff;
+  --fw-card-bg: #ffffff;
+  --fw-chart-bg: #ffffff;
 }
 
 * {
@@ -412,6 +422,48 @@ body,
   color: #111827 !important;
 }
 
+/* ── Select elements (any with hardcoded dark bg) ─────────────────────── */
+[data-theme='light'] select[class*="bg-fw-surface-2"],
+[data-theme='light'] select[class*="bg-\["] {
+  background-color: #ffffff !important;
+  color: #111827 !important;
+  border-color: #d9dee7 !important;
+}
+
+/* ── AdminRiskManagement gradient wrapper ─────────────────────────────── */
+[data-theme='light'] .bg-gradient-to-b.from-\[\#0d0f15\].to-\[\#0b0d12\] {
+  background: #f0f2f5 !important;
+  background-image: none !important;
+}
+
+/* ── Ensure all panel flex containers use light bg ─────────────────────── */
+[data-theme='light'] [class*="bg-fw-bg"]   { background-color: var(--fw-bg) !important; }
+[data-theme='light'] [class*="bg-fw-surface-2"] { background-color: var(--fw-surface-2) !important; }
+
+/* ── DrawingLayersPanel backdrop ───────────────────────────────────────── */
+[data-theme='light'] .backdrop-blur-sm[class*="bg-\[#14"] {
+  background: rgba(255,255,255,0.92) !important;
+}
+
+/* ── PositionContextMenu fixed dark bg ─────────────────────────────────── */
+[data-theme='light'] .bg-\[\#0d1117\] {
+  background-color: #ffffff !important;
+  color: #111827 !important;
+  border-color: #d9dee7 !important;
+}
+
+/* ── Chart drawing toolbar toggle ──────────────────────────────────────── */
+[data-theme='light'] [class*="border-white\\/\\[0\\.05\\]"] {
+  border-color: rgba(0,0,0,0.08) !important;
+}
+
+/* ── Remaining text color overrides for light readability ──────────────── */
+[data-theme='light'] .text-\[\#F1F5F9\] { color: #111827 !important; }
+[data-theme='light'] .text-\[\#94A3B8\] { color: #6b7280 !important; }
+[data-theme='light'] .text-\[\#c9d1d9\] { color: #374151 !important; }
+[data-theme='light'] .text-\[\#4b5563\] { color: #6b7280 !important; }
+[data-theme='light'] .text-\[\#9ca3af\] { color: #6b7280 !important; }
+
 /* Monospace for all financial data */
 .font-mono {
   font-family: 'Roboto Mono', 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', ui-monospace, SFMono-Regular, monospace;
@@ -514,7 +566,7 @@ header [data-brand] {
 .fw-table td {
   padding: 5px 10px;
   font-size: 14px;
-  border-bottom: 1px solid rgba(38, 42, 54, 0.3);
+  border-bottom: 1px solid var(--fw-border);
   white-space: nowrap;
   font-feature-settings: "tnum";
   font-variant-numeric: tabular-nums;
@@ -530,7 +582,7 @@ header [data-brand] {
 
 /* Input styles */
 .fw-input {
-  background-color: #141720;
+  background-color: var(--fw-surface-2);
   border: 1px solid var(--fw-border);
   color: var(--fw-text);
   padding: 8px 12px;
@@ -783,12 +835,12 @@ header [data-brand] {
 
 /* Bottom console richer background */
 .console-bg {
-  background: linear-gradient(180deg, #0c0e14 0%, #0a0c12 100%);
+  background: var(--fw-bg);
 }
 
 /* Better tab strip styling */
 .tab-strip {
-  background: #0a0c12;
+  background: var(--fw-bg);
   border-bottom: 1px solid var(--fw-border);
 }
 
@@ -800,7 +852,7 @@ header [data-brand] {
 
 /* Panel header gradient for premium look */
 .panel-header {
-  background: linear-gradient(180deg, #10121a 0%, #0d0f15 100%);
+  background: var(--fw-surface-2);
   border-bottom: 1px solid var(--fw-border);
 }
 
@@ -899,7 +951,7 @@ button, [role="button"] {
 .fw-badge-orange { background: rgba(249,115,22,0.1);  border-color: rgba(249,115,22,0.3);  color: #f97316; }
 .fw-badge-yellow { background: rgba(245,158,11,0.1);  border-color: rgba(245,158,11,0.3);  color: #f59e0b; }
 .fw-badge-cyan   { background: rgba(6,182,212,0.1);   border-color: rgba(6,182,212,0.3);   color: #06b6d4; }
-.fw-badge-muted  { background: rgba(38,42,54,0.6);    border-color: rgba(38,42,54,0.8);    color: #6b7280; }
+.fw-badge-muted  { background: rgba(148,163,184,0.12);  border-color: rgba(148,163,184,0.2); color: var(--fw-text-muted); }
 
 /* Bottom tab — inactive reduced contrast */
 .fw-tab-inactive {

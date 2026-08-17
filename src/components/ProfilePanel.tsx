@@ -53,7 +53,7 @@ export function ProfilePanel({ onClose }: ProfilePanelProps) {
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
       <div
-        className="bg-[#12141f] border border-fw-border rounded-xl shadow-2xl w-[400px] flex flex-col overflow-hidden"
+        className="bg-fw-surface border border-fw-border rounded-xl shadow-2xl w-[400px] flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -184,7 +184,7 @@ function InfoRow({ label, children }: { label: string; children: React.ReactNode
 
 function ChallengeMetric({ label, value, color }: { label: string; value: string; color: string }) {
   return (
-    <div className="flex flex-col items-center gap-1 bg-[#0e1018] rounded-lg px-3 py-2.5 border border-fw-border/30">
+    <div className="flex flex-col items-center gap-1 bg-fw-surface-2 rounded-lg px-3 py-2.5 border border-fw-border/30">
       <span className={cn('text-[15px] font-black font-mono tabular-nums', color)}>{value}</span>
       <span className="text-[13px] text-fw-text-muted text-center leading-tight">{label}</span>
     </div>

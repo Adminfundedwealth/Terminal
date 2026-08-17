@@ -468,7 +468,7 @@ function ProfilePanel({ label, fields, getProfile, updateProfile, getAudit, hasP
   return (
     <div className="flex flex-col gap-3">
       {/* Action bar */}
-      <div className="flex items-center gap-2 sticky top-0 z-10 bg-[#0d0f15] py-1.5 border-b border-fw-border/40">
+      <div className="flex items-center gap-2 sticky top-0 z-10 bg-fw-bg py-1.5 border-b border-fw-border/40">
         <span className="text-[13px] text-fw-text-muted">
           {dirtyKeys.size > 0
             ? <span className="text-yellow-400 font-bold">{dirtyKeys.size} unsaved change{dirtyKeys.size !== 1 ? 's' : ''}</span>
@@ -508,7 +508,7 @@ function ProfilePanel({ label, fields, getProfile, updateProfile, getAudit, hasP
 
       {/* Audit log */}
       {showAudit && (
-        <div className="border border-fw-border/40 rounded-md p-2.5 bg-[#0a0c12]">
+        <div className="border border-fw-border/40 rounded-md p-2.5 bg-fw-surface">
           <div className="text-[12px] font-bold text-fw-text-muted uppercase mb-2">Change History</div>
           {loadingAudit ? (
             <div className="text-[12px] text-fw-text-muted py-2 text-center">Loading…</div>
@@ -579,14 +579,14 @@ export function AdminRiskManagement() {
   return (
     <div className="h-full flex flex-col bg-gradient-to-b from-[#0d0f15] to-[#0b0d12]">
       {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-fw-border bg-[#0a0c12] flex-shrink-0">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-fw-border bg-fw-surface flex-shrink-0">
         <AlertTriangle size={14} className="text-orange-400" />
         <span className="text-[13px] font-bold text-fw-text">Admin — Risk Management</span>
         <span className="ml-1 text-[11px] text-fw-text-muted">Changes are live immediately · All writes are audited</span>
       </div>
 
       {/* Tab bar */}
-      <div className="flex items-center gap-1 px-3 py-1.5 border-b border-fw-border/50 bg-[#0a0c12] flex-shrink-0">
+      <div className="flex items-center gap-1 px-3 py-1.5 border-b border-fw-border/50 bg-fw-surface flex-shrink-0">
         {TABS.map(tab => (
           <button
             key={tab.id}

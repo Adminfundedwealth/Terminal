@@ -1,20 +1,20 @@
-﻿/**
- * CHART DRAWING TOOLBAR — Institutional-grade left vertical strip
+/**
+ * CHART DRAWING TOOLBAR � Institutional-grade left vertical strip
  * Polished to TradeLocker / TradingView quality.
  *
  * Changes vs previous version:
- *   • Icon containers: 36×36px, radius 8px (was 28×28, radius 4px)
- *   • Icon size: 18px (was 16px) — uniform stroke width 1.5
- *   • Toolbar width: 44px (was 36px)
- *   • Active state: soft glow + 1px border (was flat fill)
- *   • Hover: scale(1.03) + shadow + 160ms fade (was 100ms, no scale)
- *   • Press: scale(0.97) tactile feedback (new)
- *   • Icon opacity hierarchy: 65% / 100% / accent / 40%
- *   • Dividers: pure whitespace gaps — no visible lines
- *   • Cursor states: crosshair for drawing tools, pointer for actions
- *   • All values reference CSS design tokens (--toolbar-*)
- *   • Toolbar bg: #0b0d14/90 + backdrop-blur-sm (blends into chart)
- *   • Collapse toggle offset updated to 44px
+ *   � Icon containers: 36�36px, radius 8px (was 28�28, radius 4px)
+ *   � Icon size: 18px (was 16px) � uniform stroke width 1.5
+ *   � Toolbar width: 44px (was 36px)
+ *   � Active state: soft glow + 1px border (was flat fill)
+ *   � Hover: scale(1.03) + shadow + 160ms fade (was 100ms, no scale)
+ *   � Press: scale(0.97) tactile feedback (new)
+ *   � Icon opacity hierarchy: 65% / 100% / accent / 40%
+ *   � Dividers: pure whitespace gaps � no visible lines
+ *   � Cursor states: crosshair for drawing tools, pointer for actions
+ *   � All values reference CSS design tokens (--toolbar-*)
+ *   � Toolbar bg: #0b0d14/90 + backdrop-blur-sm (blends into chart)
+ *   � Collapse toggle offset updated to 44px
  */
 
 import React, { useState, useEffect } from 'react';
@@ -48,7 +48,7 @@ import {
 import { cn } from '@/utils/helpers';
 import type { DrawingMode } from './DrawingTools';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// --- Types --------------------------------------------------------------------
 
 type ToolDef = {
   mode: DrawingMode;
@@ -60,7 +60,7 @@ type ToolDef = {
   cursorType?: 'crosshair' | 'default' | 'pointer';
 };
 
-// ─── Tool lists ───────────────────────────────────────────────────────────────
+// --- Tool lists ---------------------------------------------------------------
 
 const CURSOR_TOOLS: ToolDef[] = [
   { mode: 'none',      icon: <MousePointer2 size={18} strokeWidth={1.5} />, label: 'Pointer',    shortcut: 'Esc', description: 'Select & move',       cursorType: 'default' },
@@ -77,7 +77,7 @@ const LINE_TOOLS: ToolDef[] = [
 ];
 
 const SHAPE_TOOLS: ToolDef[] = [
-  { mode: 'fibonacci', icon: <GitBranch size={18} strokeWidth={1.5} />, label: 'Fibonacci',   shortcut: 'F', description: 'Click high → low', cursorType: 'crosshair' },
+  { mode: 'fibonacci', icon: <GitBranch size={18} strokeWidth={1.5} />, label: 'Fibonacci',   shortcut: 'F', description: 'Click high ? low', cursorType: 'crosshair' },
   { mode: 'rectangle', icon: <Square    size={18} strokeWidth={1.5} />, label: 'Price Zone',  shortcut: 'R', description: 'Click 2 points',  cursorType: 'crosshair' },
 ];
 
@@ -89,7 +89,7 @@ const ANNOTATION_TOOLS: ToolDef[] = [
   { mode: 'zoom',    icon: <ZoomIn size={18} strokeWidth={1.5} />, label: 'Zoom Selection', shortcut: 'Z', description: 'Drag to zoom',     cursorType: 'crosshair' },
 ];
 
-// ─── Props ────────────────────────────────────────────────────────────────────
+// --- Props --------------------------------------------------------------------
 
 interface Props {
   activeMode: DrawingMode;
@@ -108,7 +108,7 @@ interface Props {
   collapsed?: boolean;
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
+// --- Main component -----------------------------------------------------------
 
 export function ChartDrawingToolbar({
   activeMode, onModeChange, onClearLast, onClearAll, drawingCount,
@@ -139,13 +139,13 @@ export function ChartDrawingToolbar({
       )}
       style={{ background: 'rgba(11, 13, 20, 0.90)' }}
     >
-      {/* Scrollable inner — hides scrollbar, overflow-x visible so tooltips escape */}
+      {/* Scrollable inner � hides scrollbar, overflow-x visible so tooltips escape */}
       <div
         className="h-full flex flex-col items-center py-2"
         style={{ overflowY: 'auto', overflowX: 'visible', scrollbarWidth: 'none' }}
       >
 
-        {/* ── Cursor ──────────────────────────────────────────── */}
+        {/* -- Cursor -------------------------------------------- */}
         <ToolGroup>
           {CURSOR_TOOLS.map(t => (
             <ToolBtn key={t.mode} def={t} active={activeMode === t.mode} onClick={() => onModeChange(t.mode)} />
@@ -154,7 +154,7 @@ export function ChartDrawingToolbar({
 
         <Gap />
 
-        {/* ── Lines ───────────────────────────────────────────── */}
+        {/* -- Lines --------------------------------------------- */}
         <ToolGroup>
           {LINE_TOOLS.map(t => (
             <ToolBtn key={t.mode} def={t} active={activeMode === t.mode} onClick={() => onModeChange(t.mode)} />
@@ -163,7 +163,7 @@ export function ChartDrawingToolbar({
 
         <Gap />
 
-        {/* ── Shapes ──────────────────────────────────────────── */}
+        {/* -- Shapes -------------------------------------------- */}
         <ToolGroup>
           {SHAPE_TOOLS.map(t => (
             <ToolBtn key={t.mode} def={t} active={activeMode === t.mode} onClick={() => onModeChange(t.mode)} />
@@ -172,7 +172,7 @@ export function ChartDrawingToolbar({
 
         <Gap />
 
-        {/* ── Annotations ─────────────────────────────────────── */}
+        {/* -- Annotations --------------------------------------- */}
         <ToolGroup>
           {ANNOTATION_TOOLS.map(t => (
             <ToolBtn key={t.mode} def={t} active={activeMode === t.mode} onClick={() => onModeChange(t.mode)} />
@@ -181,7 +181,7 @@ export function ChartDrawingToolbar({
 
         <Gap />
 
-        {/* ── Modifiers ───────────────────────────────────────── */}
+        {/* -- Modifiers ----------------------------------------- */}
         <ToolGroup>
           <ToolBtn
             def={{ mode: 'none', icon: <Magnet size={18} strokeWidth={1.5} />, label: 'Snap to OHLC', shortcut: 'G', description: 'Magnet snap on/off', cursorType: 'pointer' }}
@@ -226,7 +226,7 @@ export function ChartDrawingToolbar({
 
         <Gap />
 
-        {/* ── Actions ─────────────────────────────────────────── */}
+        {/* -- Actions ------------------------------------------- */}
         <ToolGroup>
           <ToolBtn
             def={{
@@ -261,7 +261,7 @@ export function ChartDrawingToolbar({
   );
 }
 
-// ─── Collapse toggle tab ──────────────────────────────────────────────────────
+// --- Collapse toggle tab ------------------------------------------------------
 
 export function DrawingToolbarToggle({
   collapsed,
@@ -285,7 +285,7 @@ export function DrawingToolbarToggle({
       }}
       className={cn(
         'w-[10px] h-[32px] flex items-center justify-center',
-        'bg-[#0b0d14] border-y border-r border-white/[0.05] rounded-r',
+        'bg-fw-bg border-y border-r border-white/[0.05] rounded-r',
         'text-[#4b5563] hover:text-[#9ca3af] transition-colors duration-150',
       )}
     >
@@ -297,7 +297,7 @@ export function DrawingToolbarToggle({
   );
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+// --- Sub-components -----------------------------------------------------------
 
 function ToolGroup({ children }: { children: React.ReactNode }) {
   return (
@@ -307,12 +307,12 @@ function ToolGroup({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Pure whitespace gap between groups — no visible lines */
+/** Pure whitespace gap between groups � no visible lines */
 function Gap() {
   return <div className="flex-shrink-0" style={{ height: '10px' }} />;
 }
 
-// ─── Accent colour map ────────────────────────────────────────────────────────
+// --- Accent colour map --------------------------------------------------------
 
 const ACCENT_ACTIVE: Record<string, { text: string; bg: string; border: string; glow: string }> = {
   blue:   { text: 'text-[#3b82f6]', bg: 'bg-[#3b82f6]/[0.14]', border: 'border-[#3b82f6]/[0.35]', glow: '0 0 8px rgba(59,130,246,0.25)' },
@@ -322,7 +322,7 @@ const ACCENT_ACTIVE: Record<string, { text: string; bg: string; border: string; 
   green:  { text: 'text-green-400',  bg: 'bg-green-400/[0.14]',  border: 'border-green-400/[0.35]',  glow: '0 0 8px rgba(74,222,128,0.25)' },
 };
 
-// ─── ToolBtn ──────────────────────────────────────────────────────────────────
+// --- ToolBtn ------------------------------------------------------------------
 
 function ToolBtn({
   def,
@@ -363,16 +363,16 @@ function ToolBtn({
         'rounded-[8px] border',
         // Size from token (inline style fallback)
         'w-[36px] h-[36px]',
-        // Smooth transitions — transform + opacity only (no layout shifts)
+        // Smooth transitions � transform + opacity only (no layout shifts)
         'transition-all duration-[160ms] ease-out',
         // Press animation
         'active:scale-[0.97] active:duration-[120ms]',
         cursor,
 
-        // ── Active state ──────────────────────────────────────
+        // -- Active state --------------------------------------
         active && [ac.bg, ac.border, ac.text],
 
-        // ── Inactive normal ───────────────────────────────────
+        // -- Inactive normal -----------------------------------
         !active && !danger && !disabled && [
           'border-transparent',
           'text-[#6b7280]/[0.65]',
@@ -380,7 +380,7 @@ function ToolBtn({
           'hover:scale-[1.03] hover:shadow-[0_2px_8px_rgba(0,0,0,0.4)]',
         ],
 
-        // ── Danger — active (drawings exist) ──────────────────
+        // -- Danger � active (drawings exist) ------------------
         danger && !disabled && [
           'border-transparent',
           'text-red-500/[0.50]',
@@ -388,18 +388,18 @@ function ToolBtn({
           'hover:scale-[1.03] hover:shadow-[0_2px_8px_rgba(239,68,68,0.2)]',
         ],
 
-        // ── Danger — disabled (no drawings) ───────────────────
+        // -- Danger � disabled (no drawings) -------------------
         danger && disabled && 'border-transparent text-[#6b7280]/[0.40]',
 
-        // ── Non-danger disabled ────────────────────────────────
+        // -- Non-danger disabled --------------------------------
         !danger && disabled && 'border-transparent opacity-40 pointer-events-none',
       )}
-      // Active glow via inline style (CSS shadow, not box model — no layout shift)
+      // Active glow via inline style (CSS shadow, not box model � no layout shift)
       style={active ? { boxShadow: ac.glow } : undefined}
     >
       {def.icon}
 
-      {/* ── Tooltip ─────────────────────────────────────────── */}
+      {/* -- Tooltip ------------------------------------------- */}
       <span
         className={cn(
           'absolute left-[calc(100%+8px)] top-1/2 -translate-y-1/2',

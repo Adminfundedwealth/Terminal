@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { placeOrder } from '@/services/api';
 import { cn } from '@/utils/helpers';
 import { Plus, Trash2, Play, X } from 'lucide-react';
@@ -45,7 +45,7 @@ export function BasketOrderPanel() {
 
     for (const leg of legs) {
       if (!leg.symbol || !leg.token) {
-        execResults.push({ symbol: leg.symbol || '?', status: 'SKIP — no symbol' });
+        execResults.push({ symbol: leg.symbol || '?', status: 'SKIP � no symbol' });
         continue;
       }
       try {
@@ -65,9 +65,9 @@ export function BasketOrderPanel() {
   };
 
   return (
-    <div className="h-full flex flex-col bg-[#0c0e14]">
+    <div className="h-full flex flex-col bg-fw-bg">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-fw-border bg-[#10121a] flex-shrink-0">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-fw-border bg-fw-surface flex-shrink-0">
         <span className="text-[14px] font-bold text-fw-text">Basket Orders</span>
         <div className="flex items-center gap-2">
           <button onClick={addLeg} className="flex items-center gap-1 px-2 py-1 text-[14px] bg-fw-accent text-white rounded font-bold hover:brightness-110">
@@ -96,9 +96,9 @@ export function BasketOrderPanel() {
                 <button onClick={() => removeLeg(leg.id)} className="text-red-400 hover:text-red-300"><Trash2 size={11} /></button>
               </div>
               <div className="grid grid-cols-4 gap-1.5">
-                <input placeholder="Symbol" value={leg.symbol} onChange={e => updateLeg(leg.id, { symbol: e.target.value.toUpperCase() })} className="col-span-2 bg-[#141720] border border-fw-border rounded text-[13px] px-2 py-1.5 text-fw-text outline-none focus:border-fw-accent" />
-                <input placeholder="Token" value={leg.token} onChange={e => updateLeg(leg.id, { token: e.target.value })} className="bg-[#141720] border border-fw-border rounded text-[13px] px-2 py-1.5 text-fw-text outline-none focus:border-fw-accent" />
-                <select value={leg.segment} onChange={e => updateLeg(leg.id, { segment: e.target.value })} className="bg-[#141720] border border-fw-border rounded text-[14px] px-1 py-1.5 text-fw-text">
+                <input placeholder="Symbol" value={leg.symbol} onChange={e => updateLeg(leg.id, { symbol: e.target.value.toUpperCase() })} className="col-span-2 bg-fw-surface-2 border border-fw-border rounded text-[13px] px-2 py-1.5 text-fw-text outline-none focus:border-fw-accent" />
+                <input placeholder="Token" value={leg.token} onChange={e => updateLeg(leg.id, { token: e.target.value })} className="bg-fw-surface-2 border border-fw-border rounded text-[13px] px-2 py-1.5 text-fw-text outline-none focus:border-fw-accent" />
+                <select value={leg.segment} onChange={e => updateLeg(leg.id, { segment: e.target.value })} className="bg-fw-surface-2 border border-fw-border rounded text-[14px] px-1 py-1.5 text-fw-text">
                   <option>NSE</option><option>NFO</option><option>MCX</option><option>CDS</option>
                 </select>
               </div>
@@ -106,15 +106,15 @@ export function BasketOrderPanel() {
                 <select value={leg.side} onChange={e => updateLeg(leg.id, { side: e.target.value as OrderSide })} className={cn('rounded text-[14px] font-bold px-1 py-1.5 border', leg.side === 'BUY' ? 'bg-green-900/20 text-green border-green-800/30' : 'bg-red-900/20 text-red border-red-800/30')}>
                   <option value="BUY">BUY</option><option value="SELL">SELL</option>
                 </select>
-                <select value={leg.orderType} onChange={e => updateLeg(leg.id, { orderType: e.target.value as OrderType })} className="bg-[#141720] border border-fw-border rounded text-[14px] px-1 py-1.5 text-fw-text">
+                <select value={leg.orderType} onChange={e => updateLeg(leg.id, { orderType: e.target.value as OrderType })} className="bg-fw-surface-2 border border-fw-border rounded text-[14px] px-1 py-1.5 text-fw-text">
                   <option>MARKET</option><option>LIMIT</option><option>SL</option><option>SL-M</option>
                 </select>
-                <select value={leg.productType} onChange={e => updateLeg(leg.id, { productType: e.target.value as ProductType })} className="bg-[#141720] border border-fw-border rounded text-[14px] px-1 py-1.5 text-fw-text">
+                <select value={leg.productType} onChange={e => updateLeg(leg.id, { productType: e.target.value as ProductType })} className="bg-fw-surface-2 border border-fw-border rounded text-[14px] px-1 py-1.5 text-fw-text">
                   <option>MIS</option><option>NRML</option><option>CNC</option>
                 </select>
-                <input type="number" placeholder="Qty" value={leg.qty || ''} onChange={e => updateLeg(leg.id, { qty: parseInt(e.target.value) || 1 })} className="bg-[#141720] border border-fw-border rounded text-[14px] font-mono px-1 py-1.5 text-fw-text text-center outline-none" />
+                <input type="number" placeholder="Qty" value={leg.qty || ''} onChange={e => updateLeg(leg.id, { qty: parseInt(e.target.value) || 1 })} className="bg-fw-surface-2 border border-fw-border rounded text-[14px] font-mono px-1 py-1.5 text-fw-text text-center outline-none" />
                 {leg.orderType === 'LIMIT' && (
-                  <input type="number" placeholder="Price" value={leg.price || ''} onChange={e => updateLeg(leg.id, { price: parseFloat(e.target.value) || 0 })} className="bg-[#141720] border border-fw-border rounded text-[14px] font-mono px-1 py-1.5 text-fw-text text-center outline-none" />
+                  <input type="number" placeholder="Price" value={leg.price || ''} onChange={e => updateLeg(leg.id, { price: parseFloat(e.target.value) || 0 })} className="bg-fw-surface-2 border border-fw-border rounded text-[14px] font-mono px-1 py-1.5 text-fw-text text-center outline-none" />
                 )}
               </div>
             </div>
@@ -124,7 +124,7 @@ export function BasketOrderPanel() {
 
       {/* Results */}
       {results.length > 0 && (
-        <div className="px-3 py-2 border-t border-fw-border bg-[#10121a] flex-shrink-0 space-y-0.5">
+        <div className="px-3 py-2 border-t border-fw-border bg-fw-surface flex-shrink-0 space-y-0.5">
           {results.map((r, i) => (
             <div key={i} className="flex items-center justify-between text-[14px]">
               <span className="text-fw-text-secondary">{r.symbol}</span>
