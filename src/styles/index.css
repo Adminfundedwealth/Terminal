@@ -99,104 +99,253 @@ body,
   line-height: 1.4;
 }
 
-/* ── LIGHT MODE GLOBAL OVERRIDES ────────────────────────────────────────────
-   These rules override hardcoded dark hex backgrounds that bypass CSS vars.
-   Applied via [data-theme='light'] on <html> so they cascade everywhere.
-   Specificity uses !important selectively to win over inline Tailwind classes.
-── */
+/* ═══════════════════════════════════════════════════════════════════════════
+   LIGHT MODE — COMPLETE GLOBAL OVERRIDES
+   All rules are scoped under [data-theme='light'] on <html>.
+   Strategy: CSS variables handle most things. These !important rules fix
+   components that have hardcoded dark Tailwind arbitrary-value classes
+   (e.g. bg-[#0a0c12]) and CSS utility classes with hardcoded dark values.
+   We do NOT use !important everywhere — only where Tailwind arbitrary values
+   or hardcoded CSS would otherwise win.
+═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Base ─────────────────────────────────────────────────────────────── */
 [data-theme='light'] {
-  /* Base page */
-  background-color: #f0f2f5 !important;
-  color: #111827 !important;
+  background-color: #f0f2f5;
+  color: #111827;
 }
 
-/* Page-level containers */
-[data-theme='light'] .h-screen,
-[data-theme='light'] #root,
-[data-theme='light'] body {
-  background-color: #f0f2f5 !important;
+[data-theme='light'] body,
+[data-theme='light'] #root {
+  background-color: #f0f2f5;
 }
 
-/* Panels: watchlist, right panel, bottom dock */
+/* ── CSS-var utility classes (Tailwind) — ensure correct light values ─── */
 [data-theme='light'] .bg-fw-surface    { background-color: #ffffff !important; }
 [data-theme='light'] .bg-fw-bg         { background-color: #f0f2f5 !important; }
 [data-theme='light'] .bg-fw-panel      { background-color: #ffffff !important; }
+[data-theme='light'] .bg-fw-surface-2  { background-color: #f3f5f8 !important; }
 [data-theme='light'] .bg-fw-hover      { background-color: #f1f5f9 !important; }
 [data-theme='light'] .bg-fw-selected   { background-color: #e8f0fe !important; }
-
-/* Borders */
 [data-theme='light'] .border-fw-border { border-color: #d9dee7 !important; }
-
-/* Text */
 [data-theme='light'] .text-fw-text            { color: #111827 !important; }
 [data-theme='light'] .text-fw-text-secondary  { color: #374151 !important; }
 [data-theme='light'] .text-fw-text-muted      { color: #6b7280 !important; }
+[data-theme='light'] .text-fw-accent          { color: #2563eb !important; }
 
-/* Header */
+/* ── Header ───────────────────────────────────────────────────────────── */
 [data-theme='light'] header {
   background: #ffffff !important;
   background-image: none !important;
   border-bottom-color: #d9dee7 !important;
+  color: #111827 !important;
 }
 
-/* Top toolbar gradients in Watchlist */
+/* ── Gradient backgrounds used in watchlist / panel headers ───────────── */
 [data-theme='light'] .bg-gradient-to-b,
 [data-theme='light'] .bg-gradient-to-r {
   background-color: #ffffff !important;
   background-image: none !important;
 }
 
-/* Bottom panel/dock tab bar — hardcoded darks */
-[data-theme='light'] .bg-\[\#0a0c12\],
+/* ── ALL HARDCODED DARK HEX BACKGROUNDS — universal catch-all ─────────── */
+/* OrderPanel, BottomPanel, ChartPanel, DOM, Sidebar, Watchlist, etc.      */
+[data-theme='light'] .bg-\[\#08090e\],
 [data-theme='light'] .bg-\[\#090b10\],
-[data-theme='light'] .bg-\[\#0c0e16\],
-[data-theme='light'] .bg-\[\#0e1018\],
-[data-theme='light'] .bg-\[\#0d0f15\],
+[data-theme='light'] .bg-\[\#0a0c12\],
+[data-theme='light'] .bg-\[\#0a0c13\],
 [data-theme='light'] .bg-\[\#0b0d12\],
-[data-theme='light'] .bg-\[\#0d0f18\],
 [data-theme='light'] .bg-\[\#0b0d14\],
-[data-theme='light'] .bg-\[\#14161f\],
-[data-theme='light'] .bg-\[\#12151f\],
+[data-theme='light'] .bg-\[\#0c0e14\],
+[data-theme='light'] .bg-\[\#0c0e16\],
+[data-theme='light'] .bg-\[\#0d0f15\],
 [data-theme='light'] .bg-\[\#0d0f16\],
-[data-theme='light'] .bg-\[\#141720\],
+[data-theme='light'] .bg-\[\#0d0f17\],
+[data-theme='light'] .bg-\[\#0d0f18\],
+[data-theme='light'] .bg-\[\#0e1018\],
 [data-theme='light'] .bg-\[\#0f1118\],
+[data-theme='light'] .bg-\[\#10121a\],
+[data-theme='light'] .bg-\[\#11131c\],
 [data-theme='light'] .bg-\[\#12141c\],
 [data-theme='light'] .bg-\[\#12141e\],
-[data-theme='light'] .bg-\[\#10121a\],
-[data-theme='light'] .bg-\[\#0e1018\] {
+[data-theme='light'] .bg-\[\#12141f\],
+[data-theme='light'] .bg-\[\#12151f\],
+[data-theme='light'] .bg-\[\#14161f\],
+[data-theme='light'] .bg-\[\#141720\],
+[data-theme='light'] .bg-\[\#1a1d28\],
+[data-theme='light'] .bg-\[\#1e2330\] {
   background-color: #f3f5f8 !important;
   background-image: none !important;
 }
 
-/* Market mover/stat/category cards specifically */
-[data-theme='light'] .bg-\[\#0d0f18\] {
+/* Confirmation/modal dialogs — slightly elevated surface */
+[data-theme='light'] .bg-\[\#12141f\],
+[data-theme='light'] .bg-\[\#12151f\] {
   background-color: #ffffff !important;
+  background-image: none !important;
+}
+
+/* Sidebar rail — slightly darker than main bg */
+[data-theme='light'] .bg-\[\#08090e\] {
+  background-color: #eceef2 !important;
+  background-image: none !important;
+}
+
+/* Tooltip/popover panels */
+[data-theme='light'] .bg-\[\#1a1d28\] {
+  background-color: #ffffff !important;
+  background-image: none !important;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15) !important;
+}
+
+/* ── Gradient from/to classes ─────────────────────────────────────────── */
+[data-theme='light'] [class*="from-\[#0"],
+[data-theme='light'] [class*="from-\[#1"],
+[data-theme='light'] [class*="to-\[#0"],
+[data-theme='light'] [class*="to-\[#1"] {
+  background-image: none !important;
+  background-color: #f3f5f8 !important;
+}
+
+/* ── Inline gradients on specific elements ────────────────────────────── */
+/* OrderPanel header, ChartPanel toolbar — uses bg-gradient-to-r with dark stops */
+[data-theme='light'] .bg-gradient-to-r.from-\[\#10121a\],
+[data-theme='light'] .bg-gradient-to-b.from-\[\#0d0f15\] {
+  background: #f3f5f8 !important;
+}
+
+/* ── Utility: fw-input — hardcoded bg-[#141720] ───────────────────────── */
+[data-theme='light'] .fw-input {
+  background-color: #ffffff !important;
+  color: #111827 !important;
   border-color: #d9dee7 !important;
 }
 
-/* Gradient backgrounds used in Watchlist toolbar */
-[data-theme='light'] .from-\[\#10121a\],
-[data-theme='light'] .from-\[\#0d0f15\],
-[data-theme='light'] .from-\[\#0a0c12\],
-[data-theme='light'] .to-\[\#0e1018\],
-[data-theme='light'] .to-\[\#0b0d12\],
-[data-theme='light'] .to-\[\#0c0e16\] {
-  background-color: #f3f5f8 !important;
+/* ── Table headers — hardcoded bg: #10121a ────────────────────────────── */
+[data-theme='light'] .fw-table th {
+  background: #f0f2f5 !important;
+  color: #374151 !important;
+  border-bottom-color: #d9dee7 !important;
+}
+[data-theme='light'] .fw-table td {
+  color: #111827 !important;
+  border-bottom-color: rgba(209,213,219,0.5) !important;
+}
+[data-theme='light'] .fw-table tr:hover td {
+  background-color: #f1f5f9 !important;
+}
+
+/* ── Console-bg / tab-strip / panel-header — hardcoded dark gradients ─── */
+[data-theme='light'] .console-bg {
+  background: #f0f2f5 !important;
+}
+[data-theme='light'] .tab-strip {
+  background: #f0f2f5 !important;
+  border-bottom-color: #d9dee7 !important;
+}
+[data-theme='light'] .panel-header {
+  background: #f3f5f8 !important;
+  border-bottom-color: #d9dee7 !important;
+}
+
+/* ── terminal-panel ────────────────────────────────────────────────────── */
+[data-theme='light'] .terminal-panel {
+  background: #ffffff !important;
+  border-color: #d9dee7 !important;
+  box-shadow: inset 0 1px 0 rgba(0,0,0,0.03) !important;
+}
+
+/* ── Inputs (hardcoded bg classes inside components) ─────────────────── */
+[data-theme='light'] input[class*="bg-\["],
+[data-theme='light'] textarea[class*="bg-\["] {
+  background-color: #ffffff !important;
+  color: #111827 !important;
+  border-color: #d9dee7 !important;
+}
+[data-theme='light'] input[class*="bg-\["]:focus,
+[data-theme='light'] textarea[class*="bg-\["]:focus {
+  border-color: #2563eb !important;
+}
+[data-theme='light'] input::placeholder,
+[data-theme='light'] textarea::placeholder {
+  color: #9ca3af !important;
+}
+
+/* ── Bottom panel gradient wrapper ───────────────────────────────────── */
+[data-theme='light'] .bg-gradient-to-b.from-\[\#0d0f15\] {
+  background: #f0f2f5 !important;
   background-image: none !important;
 }
 
-/* Keep semantic colors visible on light backgrounds */
-[data-theme='light'] .text-emerald-400 { color: #059669 !important; }
-[data-theme='light'] .text-red-400     { color: #dc2626 !important; }
-[data-theme='light'] .text-emerald-300 { color: #10b981 !important; }
-[data-theme='light'] .text-red-300     { color: #ef4444 !important; }
-[data-theme='light'] .text-fw-accent   { color: #2563eb !important; }
+/* ── Button hardcoded bg classes (qty controls, order type pills) ─────── */
+[data-theme='light'] button[class*="bg-\[#14"] {
+  background-color: #f3f5f8 !important;
+  color: #374151 !important;
+  border-color: #d9dee7 !important;
+}
+[data-theme='light'] button[class*="bg-\[#14"]:hover {
+  background-color: #e5e7eb !important;
+  color: #111827 !important;
+}
 
-/* Keep green/red tints visible on light bg */
+/* ── Chart container backgrounds ─────────────────────────────────────── */
+[data-theme='light'] .bg-\[\#0d0f15\] {
+  background-color: #f8f9fb !important;
+}
+
+/* ── Market depth panel specific ─────────────────────────────────────── */
+/* DOM mid-price divider */
+[data-theme='light'] .bg-\[\#0e1018\] {
+  background-color: #e8ecf0 !important;
+}
+
+/* ── Context menus / floating panels ─────────────────────────────────── */
+[data-theme='light'] .context-menu {
+  background: #ffffff !important;
+  border-color: #d9dee7 !important;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06) !important;
+}
+[data-theme='light'] .context-menu-item {
+  color: #111827 !important;
+}
+[data-theme='light'] .context-menu-item:hover {
+  background: #f1f5f9 !important;
+}
+[data-theme='light'] .context-menu-separator {
+  background: #d9dee7 !important;
+}
+
+/* ── Semantic color text — keep visible on light bg ──────────────────── */
+[data-theme='light'] .text-emerald-400  { color: #059669 !important; }
+[data-theme='light'] .text-emerald-300  { color: #10b981 !important; }
+[data-theme='light'] .text-red-400      { color: #dc2626 !important; }
+[data-theme='light'] .text-red-300      { color: #ef4444 !important; }
+[data-theme='light'] .text-orange-400   { color: #d97706 !important; }
+[data-theme='light'] .text-blue-400     { color: #2563eb !important; }
+[data-theme='light'] .text-yellow-400   { color: #d97706 !important; }
+[data-theme='light'] .text-cyan-400     { color: #0369a1 !important; }
+
+/* text-white used for active sidebar icons / BUY-SELL buttons (keep white on colored bg) */
+/* Only override text-white when it appears standalone without a colored background */
+[data-theme='light'] .text-fw-text-secondary.text-white,
+[data-theme='light'] .text-white.tv-label,
+[data-theme='light'] .text-white.tv-label-sm,
+[data-theme='light'] .text-white.text-fw-text {
+  color: #111827 !important;
+}
+
+/* ── Green/red tint backgrounds — lighter on light bg ───────────────── */
+[data-theme='light'] .bg-green-900\/20,
+[data-theme='light'] .bg-green-900\/30 { background-color: rgba(16,185,129,0.10) !important; }
+[data-theme='light'] .bg-red-900\/20,
+[data-theme='light'] .bg-red-900\/30   { background-color: rgba(239,68,68,0.10) !important; }
 [data-theme='light'] .bg-emerald-900\/10 { background-color: rgba(16,185,129,0.08) !important; }
 [data-theme='light'] .bg-red-900\/10     { background-color: rgba(239,68,68,0.08) !important; }
+[data-theme='light'] .bg-blue-900\/20    { background-color: rgba(37,99,235,0.10) !important; }
+[data-theme='light'] .bg-yellow-900\/20  { background-color: rgba(217,119,6,0.10) !important; }
+[data-theme='light'] .bg-orange-900\/20  { background-color: rgba(234,88,12,0.10) !important; }
 
-/* Keep status badges readable */
+/* ── Badges ───────────────────────────────────────────────────────────── */
 [data-theme='light'] .fw-badge-green  { background-color: rgba(16,185,129,0.12) !important; border-color: rgba(16,185,129,0.3) !important; color: #059669 !important; }
 [data-theme='light'] .fw-badge-red    { background-color: rgba(239,68,68,0.12) !important; border-color: rgba(239,68,68,0.3) !important; color: #dc2626 !important; }
 [data-theme='light'] .fw-badge-blue   { background-color: rgba(37,99,235,0.12) !important; border-color: rgba(37,99,235,0.3) !important; color: #2563eb !important; }
@@ -204,27 +353,64 @@ body,
 [data-theme='light'] .fw-badge-orange { background-color: rgba(217,119,6,0.12) !important; border-color: rgba(217,119,6,0.3) !important; color: #b45309 !important; }
 [data-theme='light'] .fw-badge-yellow { background-color: rgba(217,119,6,0.10) !important; border-color: rgba(217,119,6,0.25) !important; color: #92400e !important; }
 [data-theme='light'] .fw-badge-cyan   { background-color: rgba(3,105,161,0.10) !important; border-color: rgba(3,105,161,0.25) !important; color: #0369a1 !important; }
+[data-theme='light'] .fw-badge        { color: #374151 !important; }
 
-/* fw-badge base text */
-[data-theme='light'] .fw-badge { color: #374151 !important; }
-
-/* Bottom dock tabs */
+/* ── Bottom dock tabs ─────────────────────────────────────────────────── */
 [data-theme='light'] .fw-tab-inactive { color: #4b5563 !important; opacity: 1 !important; }
 [data-theme='light'] .fw-tab-active   { color: #2563eb !important; }
 
-/* Table headers */
-[data-theme='light'] .fw-table th { color: #374151 !important; }
-[data-theme='light'] .fw-table td { color: #111827 !important; }
+/* ── risk-label / topbar labels ──────────────────────────────────────── */
+[data-theme='light'] .risk-label           { color: #4b5563 !important; }
+[data-theme='light'] .topbar-metric-label  { color: #4b5563 !important; }
+[data-theme='light'] .tv-label             { color: #6b7280 !important; }
+[data-theme='light'] .tv-label-sm          { color: #374151 !important; }
+[data-theme='light'] .tv-support           { color: #6b7280 !important; }
+[data-theme='light'] .tv-heading           { color: #374151 !important; }
+[data-theme='light'] .tv-section-label     { color: #6b7280 !important; }
 
-/* Sidebar icons — active uses text-white which becomes invisible */
-[data-theme='light'] .text-white { color: #111827 !important; }
+/* ── kbd shortcut hints ───────────────────────────────────────────────── */
+[data-theme='light'] kbd {
+  background-color: #f0f2f5 !important;
+  border-color: #d9dee7 !important;
+  color: #374151 !important;
+}
 
-/* risk-label should be dark in light mode */
-[data-theme='light'] .risk-label { color: #4b5563 !important; }
-
-/* Scrollbar */
+/* ── Scrollbar ────────────────────────────────────────────────────────── */
 [data-theme='light'] ::-webkit-scrollbar-track { background: #f0f2f5; }
 [data-theme='light'] ::-webkit-scrollbar-thumb { background: #c7ced9; }
+
+/* ── KPI card ─────────────────────────────────────────────────────────── */
+[data-theme='light'] .kpi-card {
+  background: #f3f5f8 !important;
+  border-color: #d9dee7 !important;
+}
+
+/* ── Separator ────────────────────────────────────────────────────────── */
+[data-theme='light'] .separator {
+  background: linear-gradient(90deg, transparent, #d9dee7, transparent) !important;
+}
+
+/* ── Market-closed overlay ────────────────────────────────────────────── */
+[data-theme='light'] .market-closed-overlay::after {
+  background: radial-gradient(ellipse at center, transparent 40%, rgba(240,242,245,0.3) 100%) !important;
+}
+
+/* ── Chart loading overlay ────────────────────────────────────────────── */
+[data-theme='light'] .bg-\[\#0d0f15\]\/80 {
+  background-color: rgba(248,249,251,0.85) !important;
+}
+
+/* ── Drawing hint pill ───────────────────────────────────────────────── */
+[data-theme='light'] .bg-\[\#1a1d28\]\/80 {
+  background-color: rgba(255,255,255,0.9) !important;
+  color: #374151 !important;
+}
+
+/* ── Context menu in ChartPanel ────────────────────────────────────────── */
+[data-theme='light'] .bg-\[\#14172e\] {
+  background-color: #ffffff !important;
+  color: #111827 !important;
+}
 
 /* Monospace for all financial data */
 .font-mono {
@@ -321,7 +507,7 @@ header [data-brand] {
   white-space: nowrap;
   position: sticky;
   top: 0;
-  background: #10121a;
+  background: var(--fw-bg);
   z-index: 1;
 }
 

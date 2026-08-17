@@ -8,7 +8,7 @@ RUN npm run build
 FROM node:22-alpine AS runner
 WORKDIR /app
 COPY server/package*.json ./
-RUN npm install --legacy-peer-deps
+RUN npm install --production --legacy-peer-deps
 COPY server/ .
 COPY --from=frontend-builder /app/dist ./dist
 EXPOSE 4000
