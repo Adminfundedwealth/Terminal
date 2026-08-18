@@ -14,13 +14,22 @@ import type {
 const BASE_URL = '/api';
 
 async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(`${BASE_URL}${endpoint}`, {
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    credentials: 'include',
-    ...options,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${BASE_URL}${endpoint}`, {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include',
+      ...options,
+    });
+  } catch (fetchErr: any) {
+    // AbortError (timeout) or network failure
+    if (fetchErr?.name === 'AbortError') {
+      throw new Error('Request timed out — please try again');
+    }
+    throw new Error('Network error — check your connection');
+  }
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ message: 'Request failed' }));
@@ -148,11 +157,15 @@ export interface PlaceOrderParams {
   tpPrice?: number;   // optional bracket take-profit limit price
 }
 
-export const placeOrder = (params: PlaceOrderParams) =>
-  request<{ orderId: string; status: string }>('/orders/place', {
+export const placeOrder = (params: PlaceOrderParams) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
+  return request<{ orderId: string; status: string }>('/orders/place', {
     method: 'POST',
     body: JSON.stringify(params),
-  });
+    signal: controller.signal,
+  }).finally(() => clearTimeout(timeoutId));
+};
 
 export const modifyOrder = (orderId: string, params: Partial<PlaceOrderParams>) =>
   request<{ status: string }>(`/orders/${orderId}/modify`, {

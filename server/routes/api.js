@@ -538,10 +538,20 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
     try {
       const p = req.validatedBody;
       const realId = await accountService.resolveAccountId(req.user.accountId);
-      const result = await accountService.placeOrder(realId, p);
+      // Add a 10-second timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Order execution timeout — please retry')), 10000)
+      );
+      const result = await Promise.race([
+        accountService.placeOrder(realId, p),
+        timeoutPromise,
+      ]);
       res.json(result);
     } catch (err) {
-      res.status(err.message.includes('rejected') ? 422 : 500).json({ message: err.message });
+      const status = err.message.includes('rejected') ? 422 
+        : err.message.includes('timeout') ? 504 
+        : 500;
+      res.status(status).json({ message: err.message });
     }
   });
 
