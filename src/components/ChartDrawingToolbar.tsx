@@ -1,20 +1,20 @@
 /**
- * CHART DRAWING TOOLBAR — Institutional-grade left vertical strip
+ * CHART DRAWING TOOLBAR ï¿½ Institutional-grade left vertical strip
  * Polished to TradeLocker / TradingView quality.
  *
  * Changes vs previous version:
- *   • Icon containers: 36×36px, radius 8px (was 28×28, radius 4px)
- *   • Icon size: 18px (was 16px) — uniform stroke width 1.5
- *   • Toolbar width: 44px (was 36px)
- *   • Active state: soft glow + 1px border (was flat fill)
- *   • Hover: scale(1.03) + shadow + 160ms fade (was 100ms, no scale)
- *   • Press: scale(0.97) tactile feedback (new)
- *   • Icon opacity hierarchy: 65% / 100% / accent / 40%
- *   • Dividers: pure whitespace gaps — no visible lines
- *   • Cursor states: crosshair for drawing tools, pointer for actions
- *   • All values reference CSS design tokens (--toolbar-*)
- *   • Toolbar bg: #0b0d14/90 + backdrop-blur-sm (blends into chart)
- *   • Collapse toggle offset updated to 44px
+ *   ï¿½ Icon containers: 36ï¿½36px, radius 8px (was 28ï¿½28, radius 4px)
+ *   ï¿½ Icon size: 18px (was 16px) ï¿½ uniform stroke width 1.5
+ *   ï¿½ Toolbar width: 44px (was 36px)
+ *   ï¿½ Active state: soft glow + 1px border (was flat fill)
+ *   ï¿½ Hover: scale(1.03) + shadow + 160ms fade (was 100ms, no scale)
+ *   ï¿½ Press: scale(0.97) tactile feedback (new)
+ *   ï¿½ Icon opacity hierarchy: 65% / 100% / accent / 40%
+ *   ï¿½ Dividers: pure whitespace gaps ï¿½ no visible lines
+ *   ï¿½ Cursor states: crosshair for drawing tools, pointer for actions
+ *   ï¿½ All values reference CSS design tokens (--toolbar-*)
+ *   ï¿½ Toolbar bg: #0b0d14/90 + backdrop-blur-sm (blends into chart)
+ *   ï¿½ Collapse toggle offset updated to 44px
  */
 
 import React, { useState, useEffect } from 'react';
@@ -139,7 +139,7 @@ export function ChartDrawingToolbar({
       )}
       style={{ background: 'rgba(11, 13, 20, 0.90)' }}
     >
-      {/* Scrollable inner — hides scrollbar, overflow-x visible so tooltips escape */}
+      {/* Scrollable inner ï¿½ hides scrollbar, overflow-x visible so tooltips escape */}
       <div
         className="h-full flex flex-col items-center py-2"
         style={{ overflowY: 'auto', overflowX: 'visible', scrollbarWidth: 'none' }}
@@ -286,7 +286,7 @@ export function DrawingToolbarToggle({
       className={cn(
         'w-[10px] h-[32px] flex items-center justify-center',
         'bg-fw-bg border-y border-r border-white/[0.05] rounded-r',
-        'text-[#4b5563] hover:text-[#9ca3af] transition-colors duration-150',
+        'text-fw-text-muted hover:text-fw-text-muted transition-colors duration-150',
       )}
     >
       {collapsed
@@ -307,7 +307,7 @@ function ToolGroup({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Pure whitespace gap between groups — no visible lines */
+/** Pure whitespace gap between groups ï¿½ no visible lines */
 function Gap() {
   return <div className="flex-shrink-0" style={{ height: '10px' }} />;
 }
@@ -363,7 +363,7 @@ function ToolBtn({
         'rounded-[8px] border',
         // Size from token (inline style fallback)
         'w-[36px] h-[36px]',
-        // Smooth transitions — transform + opacity only (no layout shifts)
+        // Smooth transitions ï¿½ transform + opacity only (no layout shifts)
         'transition-all duration-[160ms] ease-out',
         // Press animation
         'active:scale-[0.97] active:duration-[120ms]',
@@ -375,12 +375,12 @@ function ToolBtn({
         // -- Inactive normal -----------------------------------
         !active && !danger && !disabled && [
           'border-transparent',
-          'text-[#6b7280]/[0.65]',
+          'text-fw-text-muted/[0.65]',
           'hover:text-[#c4c9d4] hover:bg-white/[0.07] hover:border-white/[0.06]',
           'hover:scale-[1.03] hover:shadow-[0_2px_8px_rgba(0,0,0,0.4)]',
         ],
 
-        // -- Danger — active (drawings exist) ------------------
+        // -- Danger ï¿½ active (drawings exist) ------------------
         danger && !disabled && [
           'border-transparent',
           'text-red-500/[0.50]',
@@ -388,13 +388,13 @@ function ToolBtn({
           'hover:scale-[1.03] hover:shadow-[0_2px_8px_rgba(239,68,68,0.2)]',
         ],
 
-        // -- Danger — disabled (no drawings) -------------------
-        danger && disabled && 'border-transparent text-[#6b7280]/[0.40]',
+        // -- Danger ï¿½ disabled (no drawings) -------------------
+        danger && disabled && 'border-transparent text-fw-text-muted/[0.40]',
 
         // -- Non-danger disabled --------------------------------
         !danger && disabled && 'border-transparent opacity-40 pointer-events-none',
       )}
-      // Active glow via inline style (CSS shadow, not box model — no layout shift)
+      // Active glow via inline style (CSS shadow, not box model ï¿½ no layout shift)
       style={active ? { boxShadow: ac.glow } : undefined}
     >
       {def.icon}
@@ -406,7 +406,7 @@ function ToolBtn({
           'z-[500] pointer-events-none',
           'flex items-center gap-2 whitespace-nowrap',
           'px-[8px] py-[5px] rounded-[6px]',
-          'bg-[#1a1d2e] border border-white/[0.09]',
+          'bg-fw-surface-2 border border-white/[0.09]',
           'shadow-[0_4px_20px_rgba(0,0,0,0.55)]',
           'opacity-0 group-hover:opacity-100',
           'transition-opacity duration-150 delay-100',
@@ -417,13 +417,13 @@ function ToolBtn({
             {def.label}
           </span>
           {def.description && (
-            <span className="text-[11px] leading-none text-[#6b7280]">
+            <span className="text-[11px] leading-none text-fw-text-muted">
               {def.description}
             </span>
           )}
         </span>
         {def.shortcut && (
-          <span className="px-[5px] py-[2px] rounded-[3px] text-[11px] font-mono font-bold leading-none text-[#6b7280] bg-white/[0.07] border border-white/[0.06]">
+          <span className="px-[5px] py-[2px] rounded-[3px] text-[11px] font-mono font-bold leading-none text-fw-text-muted bg-white/[0.07] border border-white/[0.06]">
             {def.shortcut}
           </span>
         )}

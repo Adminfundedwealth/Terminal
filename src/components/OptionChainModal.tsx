@@ -1,4 +1,4 @@
-﻿/**
+/**
  * OptionChainModal.tsx — FundedWealth Trading Terminal
  *
  * Dynamic option chain panel.
@@ -495,10 +495,10 @@ export function OptionChainModal() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col h-full bg-[#0b0d14] overflow-hidden">
+    <div className="flex flex-col h-full bg-fw-bg overflow-hidden">
 
       {/* ── Header ── */}
-      <div className="flex items-center gap-3 px-3 py-2 border-b border-fw-border flex-shrink-0 bg-[#0e1018]">
+      <div className="flex items-center gap-3 px-3 py-2 border-b border-fw-border flex-shrink-0 bg-fw-surface">
         <span className="text-[14px] font-bold text-fw-text tracking-wide">OPTION CHAIN</span>
         {underlying && (
           <span className="text-[14px] font-bold text-fw-accent">{underlying}</span>
@@ -522,7 +522,7 @@ export function OptionChainModal() {
 
       {/* ── Expiry tabs ── */}
       {expiries.length > 1 && (
-        <div className="flex items-center gap-1 px-3 py-1.5 border-b border-fw-border/50 overflow-x-auto scrollbar-none flex-shrink-0 bg-[#0c0e16]">
+        <div className="flex items-center gap-1 px-3 py-1.5 border-b border-fw-border/50 overflow-x-auto scrollbar-none flex-shrink-0 bg-fw-bg">
           {expiries.map((exp) => (
             <button
               key={exp}
@@ -641,13 +641,13 @@ export function OptionChainModal() {
               )}
             </colgroup>
             <thead className="sticky top-0 z-10">
-              <tr className="bg-[#0e1018]">
+              <tr className="bg-fw-surface">
                 {viewMode !== 'pe' && (
                   <th colSpan={5} className="py-2 text-center text-[11px] font-bold text-emerald-400 uppercase tracking-widest border-b border-emerald-500/20 bg-emerald-500/[0.04]">
                     CALLS
                   </th>
                 )}
-                <th className="py-2 text-center text-[12px] font-bold text-fw-text uppercase tracking-widest border-b border-fw-border bg-[#14161f] border-x border-fw-border/60">
+                <th className="py-2 text-center text-[12px] font-bold text-fw-text uppercase tracking-widest border-b border-fw-border bg-fw-surface-2 border-x border-fw-border/60">
                   STRIKE
                 </th>
                 {viewMode !== 'ce' && (
@@ -656,7 +656,7 @@ export function OptionChainModal() {
                   </th>
                 )}
               </tr>
-              <tr className="bg-[#0c0e16] border-b-2 border-fw-border text-[11px] text-fw-text-secondary uppercase font-semibold">
+              <tr className="bg-fw-bg border-b-2 border-fw-border text-[11px] text-fw-text-secondary uppercase font-semibold">
                 {viewMode !== 'pe' && (
                   <>
                     <th className="px-1 py-1.5 text-center">B/S</th>
@@ -666,7 +666,7 @@ export function OptionChainModal() {
                     <th className="px-2 py-1.5 text-right truncate">LTP</th>
                   </>
                 )}
-                <th className="px-1 py-1.5 text-center bg-[#14161f] border-x border-fw-border/60 text-fw-text">Strike</th>
+                <th className="px-1 py-1.5 text-center bg-fw-surface-2 border-x border-fw-border/60 text-fw-text">Strike</th>
                 {viewMode !== 'ce' && (
                   <>
                     <th className="px-2 py-1.5 text-left truncate">LTP</th>
@@ -767,7 +767,7 @@ export function OptionChainModal() {
 
                     {/* ── STRIKE CENTER ── */}
                     <td className={cn(
-                      'px-1 py-[6px] text-center font-mono font-bold tabular-nums border-x border-fw-border/40 bg-[#14161f] whitespace-nowrap overflow-hidden',
+                      'px-1 py-[6px] text-center font-mono font-bold tabular-nums border-x border-fw-border/40 bg-fw-surface-2 whitespace-nowrap overflow-hidden',
                       isAtm ? 'text-fw-accent text-[13px]' : 'text-fw-text text-[12px]',
                     )}>
                       {isAtm && (

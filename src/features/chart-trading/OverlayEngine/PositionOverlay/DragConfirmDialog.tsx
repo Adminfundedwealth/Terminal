@@ -70,13 +70,13 @@ export function DragConfirmDialog({ confirmation, onConfirm, onCancel }: Props) 
             className="w-2 h-2 rounded-full flex-shrink-0"
             style={{ background: color }}
           />
-          <span className="text-[11px] font-semibold text-[#e2e8f0] tracking-wide">
+          <span className="text-[11px] font-semibold text-fw-text tracking-wide">
             Modify {label}
           </span>
         </div>
 
         {/* Price change */}
-        <div className="flex items-center gap-2 text-[11px] text-[#9ca3af]">
+        <div className="flex items-center gap-2 text-[11px] text-fw-text-muted">
           <span
             className="font-mono px-1.5 py-0.5 rounded"
             style={{ background: 'rgba(255,255,255,0.05)', color: '#6b7280' }}
@@ -108,7 +108,7 @@ export function DragConfirmDialog({ confirmation, onConfirm, onCancel }: Props) 
             Confirm
           </button>
           <button
-            className="flex-1 rounded px-3 py-1 text-[11px] font-semibold text-[#9ca3af] hover:text-[#e2e8f0] transition-colors focus:outline-none"
+            className="flex-1 rounded px-3 py-1 text-[11px] font-semibold text-fw-text-muted hover:text-fw-text transition-colors focus:outline-none"
             style={{ background: 'rgba(255,255,255,0.06)' }}
             onClick={onCancel}
           >
@@ -117,7 +117,7 @@ export function DragConfirmDialog({ confirmation, onConfirm, onCancel }: Props) 
         </div>
 
         {/* Keyboard hint */}
-        <p className="text-[9px] text-[#4b5563] text-center">
+        <p className="text-[9px] text-fw-text-muted text-center">
           Enter to confirm · Esc to cancel
         </p>
       </div>

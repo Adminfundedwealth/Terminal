@@ -89,9 +89,9 @@ export function PositionContextMenu({ positionId, lineType, x, y, onClose }: Pro
     <div
       ref={menuRef}
       className="fixed z-[9999] min-w-[200px] rounded-lg shadow-2xl overflow-hidden text-[12px] py-1"
-      style={{ left: safeX, top: safeY, background: '#0d1117', border: '1px solid #262a36' }}
+      style={{ left: safeX, top: safeY }}
     >
-      <div className="px-3 py-1 text-[10px] text-[#4b5563] font-semibold uppercase tracking-widest border-b border-[#1e2330] mb-1">
+      <div className="px-3 py-1 text-[10px] text-fw-text-muted font-semibold uppercase tracking-widest border-b border-fw-border mb-1">
         {lineType === 'entry' ? 'Position' : lineType === 'sl' ? 'Stop Loss' : 'Take Profit'}
       </div>
       {items.map((item, i) => (
@@ -101,7 +101,7 @@ export function PositionContextMenu({ positionId, lineType, x, y, onClose }: Pro
             'w-full flex items-center gap-2.5 px-3 py-1.5 transition-colors text-left',
             item.danger
               ? 'text-[#ef4444] hover:bg-[#ef444410]'
-              : 'text-[#c9d1d9] hover:bg-[#1e2330]',
+              : 'text-fw-text-secondary hover:bg-fw-surface-2',
           ].join(' ')}
           onClick={item.action}
         >

@@ -99,10 +99,10 @@ export function DrawingToolbar({
       onMouseDown={e => e.stopPropagation()}
     >
       {/* Main toolbar row */}
-      <div className="flex items-center h-[38px] bg-[#1a1d2e] border border-fw-border rounded-xl shadow-2xl overflow-visible px-1 gap-0.5">
+      <div className="flex items-center h-[38px] bg-fw-surface-2 border border-fw-border rounded-xl shadow-2xl overflow-visible px-1 gap-0.5">
 
         {/* ⠿ Drag grip — cosmetic */}
-        <div className="flex items-center justify-center w-7 h-full cursor-grab text-[#4b5563] hover:text-[#9ca3af] transition-colors">
+        <div className="flex items-center justify-center w-7 h-full cursor-grab text-fw-text-muted hover:text-fw-text-muted transition-colors">
           <GripVertical size={14} strokeWidth={1.5} />
         </div>
 
@@ -119,10 +119,10 @@ export function DrawingToolbar({
         <div className="relative">
           <button
             title="Line color"
-            className="flex flex-col items-center justify-center w-8 h-[34px] rounded-lg hover:bg-[#262a3e] transition-colors gap-0.5 px-1"
+            className="flex flex-col items-center justify-center w-8 h-[34px] rounded-lg hover:bg-fw-hover transition-colors gap-0.5 px-1"
             onClick={() => { setShowColorPicker(v => !v); setShowWidthPicker(false); setShowStylePicker(false); setShowMore(false); }}
           >
-            <Pencil size={14} strokeWidth={1.5} className="text-[#c9d1d9]" />
+            <Pencil size={14} strokeWidth={1.5} className="text-fw-text-secondary" />
             <div className="w-5 h-[3px] rounded-full" style={{ backgroundColor: color }} />
           </button>
           {showColorPicker && (
@@ -148,7 +148,7 @@ export function DrawingToolbar({
                   className="w-7 h-7 rounded cursor-pointer border-0 bg-transparent"
                   onChange={e => onColorChange(drawingId, e.target.value)}
                 />
-                <span className="text-[11px] text-[#6b7280]">Custom</span>
+                <span className="text-[11px] text-fw-text-muted">Custom</span>
               </div>
             </div>
           )}
@@ -158,22 +158,22 @@ export function DrawingToolbar({
         <div className="relative">
           <button
             title="Line style"
-            className="flex flex-col items-center justify-center w-8 h-[34px] rounded-lg hover:bg-[#262a3e] transition-colors gap-0.5 px-1"
+            className="flex flex-col items-center justify-center w-8 h-[34px] rounded-lg hover:bg-fw-hover transition-colors gap-0.5 px-1"
             onClick={() => { setShowStylePicker(v => !v); setShowColorPicker(false); setShowWidthPicker(false); setShowMore(false); }}
           >
-            <PaintBucket size={14} strokeWidth={1.5} className="text-[#c9d1d9]" />
-            <span className="text-[10px] text-[#6b7280] leading-none font-mono">{lineStyleSymbol}</span>
+            <PaintBucket size={14} strokeWidth={1.5} className="text-fw-text-secondary" />
+            <span className="text-[10px] text-fw-text-muted leading-none font-mono">{lineStyleSymbol}</span>
           </button>
           {showStylePicker && (
             <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-fw-surface border border-fw-border rounded-xl shadow-2xl p-2 z-[700] w-[100px]">
               {LINE_STYLES.map(s => (
                 <button
                   key={s.value}
-                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-[13px] hover:bg-[#262a3e] transition-colors ${lineStyle === s.value ? 'text-[#2962ff]' : 'text-[#c9d1d9]'}`}
+                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-[13px] hover:bg-fw-hover transition-colors ${lineStyle === s.value ? 'text-[#2962ff]' : 'text-fw-text-secondary'}`}
                   onClick={() => { onLineStyleChange(drawingId, s.value); setShowStylePicker(false); }}
                 >
                   <span className="font-mono text-[15px] w-6">{s.label}</span>
-                  <span className="text-[11px] text-[#6b7280]">{s.title}</span>
+                  <span className="text-[11px] text-fw-text-muted">{s.title}</span>
                 </button>
               ))}
             </div>
@@ -184,7 +184,7 @@ export function DrawingToolbar({
         <div className="relative">
           <button
             title="Line width"
-            className="flex items-center gap-1 px-2 h-[34px] rounded-lg hover:bg-[#262a3e] transition-colors text-[#c9d1d9]"
+            className="flex items-center gap-1 px-2 h-[34px] rounded-lg hover:bg-fw-hover transition-colors text-fw-text-secondary"
             onClick={() => { setShowWidthPicker(v => !v); setShowColorPicker(false); setShowStylePicker(false); setShowMore(false); }}
           >
             <Minus size={14} strokeWidth={2} />
@@ -195,7 +195,7 @@ export function DrawingToolbar({
               {LINE_WIDTHS.map(w => (
                 <button
                   key={w}
-                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-[#262a3e] transition-colors ${lineWidth === w ? 'text-[#2962ff]' : 'text-[#c9d1d9]'}`}
+                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-fw-hover transition-colors ${lineWidth === w ? 'text-[#2962ff]' : 'text-fw-text-secondary'}`}
                   onClick={() => { onLineWidthChange(drawingId, w); setShowWidthPicker(false); }}
                 >
                   <div className="flex-1 rounded-full bg-current" style={{ height: w + 1 }} />
@@ -243,7 +243,7 @@ export function DrawingToolbar({
             <div className="absolute top-full mt-2 right-0 bg-fw-surface border border-fw-border rounded-xl shadow-2xl py-1 z-[700] w-[170px]">
               <MenuItem icon={<Eye size={13} />} label={isHidden ? 'Show drawing' : 'Hide drawing'} onClick={() => { onVisibilityToggle(drawingId); setShowMore(false); }} />
               <MenuItem icon={<Copy size={13} />} label="Duplicate" onClick={() => { onDuplicate(drawingId); setShowMore(false); onClose(); }} />
-              <div className="h-px bg-[#2d3048] my-1" />
+              <div className="h-px bg-fw-border my-1" />
               <MenuItem icon={<Trash2 size={13} />} label="Delete" onClick={() => { onDelete(drawingId); setShowMore(false); onClose(); }} danger />
             </div>
           )}
@@ -271,7 +271,7 @@ export function DrawingToolbar({
 // ─── Small helpers ────────────────────────────────────────────
 
 function Divider() {
-  return <div className="w-px h-5 bg-[#2d3048] mx-0.5 flex-shrink-0" />;
+  return <div className="w-px h-5 bg-fw-border mx-0.5 flex-shrink-0" />;
 }
 
 function ToolBtn({
@@ -293,7 +293,7 @@ function ToolBtn({
           ? 'text-[#ef4444] hover:bg-red-500/15'
           : active
           ? 'text-[#2962ff] bg-[#2962ff]/10 hover:bg-[#2962ff]/20'
-          : 'text-[#9ca3af] hover:bg-[#262a3e] hover:text-[#e2e8f0]',
+          : 'text-fw-text-muted hover:bg-fw-hover hover:text-fw-text',
       ].join(' ')}
     >
       {children}
@@ -312,9 +312,9 @@ function MenuItem({
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center gap-2 px-3 py-1.5 text-[13px] hover:bg-[#262a3e] transition-colors ${danger ? 'text-[#ef4444]' : 'text-[#c9d1d9]'}`}
+      className={`w-full flex items-center gap-2 px-3 py-1.5 text-[13px] hover:bg-fw-hover transition-colors ${danger ? 'text-[#ef4444]' : 'text-fw-text-secondary'}`}
     >
-      <span className={danger ? 'text-[#ef4444]' : 'text-[#6b7280]'}>{icon}</span>
+      <span className={danger ? 'text-[#ef4444]' : 'text-fw-text-muted'}>{icon}</span>
       {label}
     </button>
   );

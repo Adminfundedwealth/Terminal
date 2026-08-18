@@ -1,4 +1,4 @@
-﻿import { useAppStore } from '@/store/appStore';
+import { useAppStore } from '@/store/appStore';
 import { useDepth } from '@/hooks/useMarketData';
 import { useMarketStore } from '@/store/marketStore';
 import { useTradingStore } from '@/store/tradingStore';
@@ -38,9 +38,9 @@ export function FullDOMPanel() {
   const bidPct = totalBid + totalAsk > 0 ? (totalBid / (totalBid + totalAsk)) * 100 : 50;
 
   return (
-    <div className="h-full flex flex-col bg-[#0a0c12] select-none">
+    <div className="h-full flex flex-col bg-fw-bg select-none">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-fw-border bg-[#10121a] flex-shrink-0">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-fw-border bg-fw-surface-2 flex-shrink-0">
         <div className="flex items-center gap-2">
           <span className="text-[14px] font-bold text-fw-text">20-Level DOM</span>
           {activeSymbol && <span className="text-[14px] text-fw-text-muted">{activeSymbol.symbol}</span>}
@@ -53,7 +53,7 @@ export function FullDOMPanel() {
       </div>
 
       {/* Column Headers */}
-      <div className="grid grid-cols-[50px_1fr_80px_80px_1fr_50px] px-1 py-1 border-b border-fw-border/30 bg-[#0d0f15] flex-shrink-0 text-[13px] font-bold text-fw-text-muted uppercase">
+      <div className="grid grid-cols-[50px_1fr_80px_80px_1fr_50px] px-1 py-1 border-b border-fw-border/30 bg-fw-surface flex-shrink-0 text-[13px] font-bold text-fw-text-muted uppercase">
         <span className="text-center">#</span>
         <span className="text-right pr-1">Bid Qty</span>
         <span className="text-center text-green">Bid</span>
@@ -127,7 +127,7 @@ export function FullDOMPanel() {
       </div>
 
       {/* Totals + Pressure */}
-      <div className="border-t border-fw-border bg-[#10121a] px-3 py-2 flex-shrink-0">
+      <div className="border-t border-fw-border bg-fw-surface-2 px-3 py-2 flex-shrink-0">
         <div className="flex justify-between text-[13px] mb-1">
           <span className="font-mono text-green font-bold tabular-nums">{fmtQty(totalBid)}</span>
           <span className="text-[13px] text-fw-text-muted">{bidPct.toFixed(0)}% / {(100-bidPct).toFixed(0)}%</span>

@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Plus, Trash2, Bell, BellOff, Volume2, VolumeX, MessageSquare } from 'lucide-react';
 import { useJournalStore, type PriceAlert, type AlertNotifyMethod } from '@/store/journalStore';
 import { useMarketStore } from '@/store/marketStore';
@@ -16,7 +16,7 @@ function showToast(message: string) {
     document.body.appendChild(container);
   }
   const toast = document.createElement('div');
-  toast.style.cssText = 'background:#1e222d;border:1px solid #2a2e39;border-left:3px solid #3b82f6;color:#e1e4eb;padding:10px 16px;border-radius:8px;font-size:14px;box-shadow:0 8px 24px rgba(0,0,0,0.4);animation:slideIn 0.2s ease-out;max-width:320px;pointer-events:auto;';
+  toast.style.cssText = 'background:var(--fw-surface);border:1px solid var(--fw-border);border-left:3px solid var(--fw-accent);color:var(--fw-text);padding:10px 16px;border-radius:8px;font-size:14px;box-shadow:0 8px 24px rgba(0,0,0,0.4);animation:slideIn 0.2s ease-out;max-width:320px;pointer-events:auto;';
   toast.textContent = message;
   container.appendChild(toast);
   setTimeout(() => {

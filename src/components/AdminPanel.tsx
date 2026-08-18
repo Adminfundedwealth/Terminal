@@ -60,7 +60,7 @@ function ConfirmDialog({
 }) {
   return (
     <div className="fixed inset-0 z-[20000] flex items-center justify-center bg-black/70 backdrop-blur-sm">
-      <div className="bg-[#12141f] border border-fw-border rounded-xl shadow-2xl p-5 w-[340px] mx-3 flex flex-col gap-4">
+      <div className="bg-fw-surface-2 border border-fw-border rounded-xl shadow-2xl p-5 w-[340px] mx-3 flex flex-col gap-4">
         <div className="flex items-start gap-3">
           <AlertTriangle size={18} className="text-yellow-400 mt-0.5 flex-shrink-0" />
           <div>
@@ -196,7 +196,7 @@ function AccountRow({
       {/* Expanded detail row */}
       {expanded && (
         <tr>
-          <td colSpan={6} className="bg-[#0c0e14] border-b border-fw-border/40 px-3 pb-3">
+          <td colSpan={6} className="bg-fw-bg border-b border-fw-border/40 px-3 pb-3">
             {loadingDetail && (
               <div className="py-4 text-center text-[13px] text-fw-text-muted">Loading…</div>
             )}
@@ -379,7 +379,7 @@ function AccountManagementPanel() {
   };
 
   return (
-    <div className="h-full flex flex-col bg-gradient-to-b from-[#0d0f15] to-[#0b0d12] relative">
+    <div className="h-full flex flex-col bg-fw-bg relative">
 
       {/* Freeze Dialog */}
       {freezeTarget && (
@@ -428,7 +428,7 @@ function AccountManagementPanel() {
       )}
 
       {/* Header bar */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-fw-border bg-[#0a0c12] flex-shrink-0">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-fw-border bg-fw-bg flex-shrink-0">
         <Shield size={14} className="text-red-400" />
         <span className="text-[13px] font-bold text-fw-text">Admin — Account Management</span>
         <div className="flex-1" />
@@ -445,7 +445,7 @@ function AccountManagementPanel() {
       </div>
 
       {/* Filters row */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-fw-border/50 bg-[#0a0c12] flex-shrink-0">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-fw-border/50 bg-fw-bg flex-shrink-0">
         {/* Search */}
         <div className="relative flex-1 max-w-xs">
           <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-fw-text-muted" />
@@ -523,7 +523,7 @@ function AccountManagementPanel() {
 
       {/* Pagination footer */}
       {pagination.pages > 1 && (
-        <div className="flex items-center justify-center gap-2 px-3 py-2 border-t border-fw-border bg-[#0a0c12] flex-shrink-0">
+        <div className="flex items-center justify-center gap-2 px-3 py-2 border-t border-fw-border bg-fw-bg flex-shrink-0">
           <button
             disabled={pagination.page <= 1}
             onClick={() => loadAccounts(pagination.page - 1)}
@@ -557,7 +557,7 @@ export function AdminPanel() {
   return (
     <div className="h-full flex flex-col">
       {/* Section switcher */}
-      <div className="flex items-center gap-0 px-2 pt-2 pb-0 bg-[#0a0c12] border-b border-fw-border flex-shrink-0">
+      <div className="flex items-center gap-0 px-2 pt-2 pb-0 bg-fw-bg border-b border-fw-border flex-shrink-0">
         <button
           onClick={() => setSection('accounts')}
           className={cn(

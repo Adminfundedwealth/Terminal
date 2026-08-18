@@ -577,7 +577,7 @@ export function AdminRiskManagement() {
   const [activeTab, setActiveTab] = useState<RiskTab>('flash');
 
   return (
-    <div className="h-full flex flex-col bg-gradient-to-b from-[#0d0f15] to-[#0b0d12]">
+    <div className="h-full flex flex-col bg-fw-bg">
       {/* Header */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-fw-border bg-fw-surface flex-shrink-0">
         <AlertTriangle size={14} className="text-orange-400" />

@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useMemo } from 'react';
+import { useEffect, useRef, useMemo } from 'react';
 import { useTradingStore } from '@/store/tradingStore';
 import { useJournalStore } from '@/store/journalStore';
 import { cn } from '@/utils/helpers';
@@ -129,8 +129,8 @@ export function EquityCurvePanel() {
   }, [equityData]);
 
   return (
-    <div className="h-full flex flex-col bg-[#0c0e14]">
-      <div className="flex items-center justify-between px-3 py-2 border-b border-fw-border bg-[#10121a] flex-shrink-0">
+    <div className="h-full flex flex-col bg-fw-bg">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-fw-border bg-fw-surface-2 flex-shrink-0">
         <span className="text-[14px] font-bold text-fw-text">Equity Curve</span>
         <div className="flex items-center gap-3">
           <div className="text-right">

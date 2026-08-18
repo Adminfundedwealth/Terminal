@@ -1163,10 +1163,10 @@ export function Watchlist() {
 
   // -- Render -----------------------------------------------------------------
   return (
-    <div className="flex flex-col h-full bg-gradient-to-b from-[#0d0f15] to-[#0b0d12] overflow-hidden">
+    <div className="flex flex-col h-full bg-fw-bg overflow-hidden">
 
       {/* -- TOP TOOLBAR: [ ? ] [ ? ] [ Search... ] [ All ? ] [ ? ] --------- */}
-      <div className="flex items-center gap-1 px-2 py-1.5 border-b border-fw-border flex-shrink-0 bg-gradient-to-r from-[#10121a] to-[#0e1018]">
+      <div className="flex items-center gap-1 px-2 py-1.5 border-b border-fw-border flex-shrink-0 bg-fw-surface-2">
 
         {/* ? Instrument Browser toggle */}
         <button

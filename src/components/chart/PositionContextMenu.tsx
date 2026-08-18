@@ -84,17 +84,17 @@ export function PositionContextMenu({
   return (
     <div
       ref={menuRef}
-      className="fixed z-[9999] bg-[#0d1117] border border-[#262a36] rounded-lg shadow-2xl py-1 min-w-[200px] text-sm"
+      className="fixed z-[9999] bg-fw-surface border border-fw-border rounded-lg shadow-2xl py-1 min-w-[200px] text-sm"
       style={{ left: adjustedX, top: adjustedY }}
     >
       {menuItems.map((item, i) => (
         item.type === 'divider' ? (
-          <div key={i} className="h-px bg-[#262a36] my-1" />
+          <div key={i} className="h-px bg-fw-border my-1" />
         ) : (
           <button
             key={i}
-            className={`w-full flex items-center gap-2.5 px-3 py-1.5 hover:bg-[#1e2330] transition-colors text-left
-              ${item.danger ? 'text-red-400 hover:text-red-300' : 'text-[#c9d1d9]'}`}
+            className={`w-full flex items-center gap-2.5 px-3 py-1.5 hover:bg-fw-surface-2 transition-colors text-left
+              ${item.danger ? 'text-red-400 hover:text-red-300' : 'text-fw-text-secondary'}`}
             onClick={() => {
               item.onClick?.();
               onClose();

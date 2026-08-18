@@ -1,4 +1,4 @@
-﻿/**
+/**
  * MOBILE LAYOUT
  * 
  * Tabbed interface for screens < 768px.
@@ -35,7 +35,7 @@ export function MobileLayout() {
   return (
     <div className="h-screen w-screen flex flex-col bg-fw-bg overflow-hidden">
       {/* Mobile Top Bar */}
-      <header className="h-[44px] min-h-[44px] bg-[#12141c] border-b border-fw-border flex items-center px-3 gap-2">
+      <header className="h-[44px] min-h-[44px] bg-fw-surface-2 border-b border-fw-border flex items-center px-3 gap-2">
         <div className="flex flex-col leading-none">
           <span className="text-[14px] font-extrabold tracking-wide bg-gradient-to-r from-[#00D4FF] to-[#7C3AED] bg-clip-text text-transparent">FW</span>
         </div>
@@ -88,7 +88,7 @@ export function MobileLayout() {
       </div>
 
       {/* Bottom Tab Bar */}
-      <nav className="h-[56px] min-h-[56px] bg-[#12141c] border-t border-fw-border flex items-center justify-around px-2 safe-area-bottom">
+      <nav className="h-[56px] min-h-[56px] bg-fw-surface-2 border-t border-fw-border flex items-center justify-around px-2 safe-area-bottom">
         {TABS.map((tab) => (
           <button
             key={tab.id}

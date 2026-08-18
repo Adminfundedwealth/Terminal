@@ -1,4 +1,4 @@
-﻿/**
+/**
  * DRAWING LAYERS PANEL — Object Manager
  *
  * Lists every drawn object with type, identifier, visibility toggle, delete button.
@@ -70,12 +70,12 @@ const TYPE_LABEL: Record<string, string> = {
 export function DrawingLayersPanel({ items, onClose, onHighlight, onToggleVisibility, onDelete }: Props) {
   return (
     <div
-      className="absolute left-[38px] top-4 z-[200] w-[220px] bg-[#14172200] backdrop-blur-sm"
-      style={{ background: '#14172299' }}
+      className="absolute left-[38px] top-4 z-[200] w-[220px] bg-transparent backdrop-blur-sm"
+      style={{ background: 'var(--fw-surface)' }}
     >
       <div
         className="w-[220px] rounded-lg border border-fw-border shadow-2xl overflow-hidden"
-        style={{ background: '#14172e' }}
+        style={{ background: 'var(--fw-surface)' }}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-3 py-2 border-b border-fw-border/50">

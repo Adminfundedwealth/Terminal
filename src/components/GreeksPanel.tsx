@@ -1,4 +1,4 @@
-﻿import { useMemo, useEffect, useRef, useState } from 'react';
+import { useMemo, useEffect, useRef, useState } from 'react';
 import { useAppStore } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
 import { cn } from '@/utils/helpers';
@@ -127,8 +127,8 @@ export function GreeksPanel() {
   const greeks = workerGreeks || mainThreadGreeks;
 
   return (
-    <div className="h-full flex flex-col bg-[#0c0e14] overflow-y-auto">
-      <div className="px-3 py-2 border-b border-fw-border bg-[#10121a] flex-shrink-0">
+    <div className="h-full flex flex-col bg-fw-bg overflow-y-auto">
+      <div className="px-3 py-2 border-b border-fw-border bg-fw-surface-2 flex-shrink-0">
         <div className="flex items-center justify-between">
           <span className="text-[14px] font-bold text-fw-text">Option Greeks</span>
           <span className="text-[14px] text-fw-text-muted">{activeSymbol?.symbol || 'NIFTY'} {strikePrice} {isCall ? 'CE' : 'PE'}</span>

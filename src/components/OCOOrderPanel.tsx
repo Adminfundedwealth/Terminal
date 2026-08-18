@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { useAppStore } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
 import { placeOrder } from '@/services/api';
@@ -61,7 +61,7 @@ export function OCOOrderPanel() {
   }
 
   return (
-    <div className="h-full flex flex-col bg-[#0c0e14] overflow-y-auto px-3 py-3">
+    <div className="h-full flex flex-col bg-fw-bg overflow-y-auto px-3 py-3">
       <div className="text-[14px] font-bold text-fw-text mb-2 flex items-center gap-2">
         OCO Order
         <span className="text-[13px] text-fw-text-muted font-normal">One-Cancels-Other</span>

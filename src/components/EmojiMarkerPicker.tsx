@@ -1,4 +1,4 @@
-﻿/**
+/**
  * EMOJI MARKER PICKER
  * Small floating picker with 12 trading annotation icons.
  * Returns selected emoji string via onSelect.
@@ -32,7 +32,7 @@ interface Props {
 export function EmojiMarkerPicker({ x, y, onSelect, onClose }: Props) {
   return (
     <div
-      className="fixed z-[300] bg-[#14172e] border border-fw-border rounded-lg shadow-2xl p-2"
+      className="fixed z-[300] bg-fw-surface-2 border border-fw-border rounded-lg shadow-2xl p-2"
       style={{ left: x, top: y, minWidth: 160 }}
     >
       <div className="flex items-center justify-between mb-1.5 px-0.5">

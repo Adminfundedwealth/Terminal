@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { getTerminalStatus, type TerminalStatus } from '@/services/api';
 import { useTradingStore } from '@/store/tradingStore';
 import { cn } from '@/utils/helpers';
@@ -36,7 +36,7 @@ export function TerminalReadiness() {
   const readinessBadge = isLocked ? 'fw-badge-red' : !brokerOk ? 'fw-badge-orange' : isReady ? 'fw-badge-green' : 'fw-badge-yellow';
 
   return (
-    <div className="px-3 py-2 border-b border-fw-border bg-gradient-to-r from-[#0a0c12] to-[#0c0e16]">
+    <div className="px-3 py-2 border-b border-fw-border bg-fw-surface">
       {/* Readiness Row */}
       <div className="flex items-center justify-between mb-1.5">
         <div className="flex items-center gap-2">

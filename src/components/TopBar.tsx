@@ -8,112 +8,6 @@ import { AccountSelector } from './AccountSelector';
 
 const STORAGE_KEY = 'fundedwealth-terminal-theme';
 
-const LIGHT_FORCE_ID = 'fw-light-force';
-
-function applyLightModeForce(enable: boolean) {
-  let el = document.getElementById(LIGHT_FORCE_ID) as HTMLStyleElement | null;
-  if (enable) {
-    if (!el) {
-      el = document.createElement('style');
-      el.id = LIGHT_FORCE_ID;
-      document.head.appendChild(el);
-    }
-    el.textContent = `
-      html[data-theme="light"] * {
-        --tw-bg-opacity: 1 !important;
-      }
-      html[data-theme="light"] [class*="bg-"][class*="#0"],
-      html[data-theme="light"] [class*="bg-"][class*="#1"],
-      html[data-theme="light"] [class*="bg-"][class*="#2"],
-      html[data-theme="light"] [class*="from-"][class*="#"],
-      html[data-theme="light"] [class*="to-"][class*="#"] {
-        background-color: var(--fw-surface-2) !important;
-        background-image: none !important;
-      }
-      html[data-theme="light"] header,
-      html[data-theme="light"] [class*="bg-fw-surface"] {
-        background-color: var(--fw-surface) !important;
-      }
-      html[data-theme="light"] [class*="bg-fw-bg"] {
-        background-color: var(--fw-bg) !important;
-      }
-      html[data-theme="light"] [class*="bg-gradient"] {
-        background-image: none !important;
-        background-color: var(--fw-surface-2) !important;
-      }
-      html[data-theme="light"] [style*="linear-gradient"] {
-        background: var(--fw-surface-2) !important;
-      }
-      html[data-theme="light"] [style*="background"][style*="rgb(1"],
-      html[data-theme="light"] [style*="background"][style*="rgb(0"],
-      html[data-theme="light"] [style*="background: #0"],
-      html[data-theme="light"] [style*="background: #1"],
-      html[data-theme="light"] [style*="background:#0"],
-      html[data-theme="light"] [style*="background:#1"] {
-        background: var(--fw-surface-2) !important;
-      }
-      /* Protect BUY/SELL buttons and semantic colors - do NOT override these */
-      html[data-theme="light"] .bg-fw-green { background-color: var(--fw-green) !important; }
-      html[data-theme="light"] .bg-fw-red { background-color: var(--fw-red) !important; }
-      html[data-theme="light"] .bg-fw-accent { background-color: var(--fw-accent) !important; }
-      html[data-theme="light"] .bg-white { background-color: #ffffff !important; }
-      html[data-theme="light"] .bg-transparent { background-color: transparent !important; }
-      html[data-theme="light"] .bg-current { background-color: currentColor !important; }
-      html[data-theme="light"] .bg-fw-hover { background-color: var(--fw-hover) !important; }
-      html[data-theme="light"] .bg-fw-border { background-color: var(--fw-border) !important; }
-      /* Keep text readable — force dark text on light backgrounds */
-      html[data-theme="light"] .text-fw-text { color: var(--fw-text) !important; }
-      html[data-theme="light"] .text-fw-text-secondary { color: var(--fw-text-secondary) !important; }
-      html[data-theme="light"] .text-fw-text-muted { color: var(--fw-text-muted) !important; }
-      html[data-theme="light"] .text-white { color: #111827 !important; }
-      /* But keep white text ON colored button backgrounds */
-      html[data-theme="light"] [class*="bg-fw-green"] .text-white,
-      html[data-theme="light"] [class*="bg-fw-red"] .text-white,
-      html[data-theme="light"] [class*="bg-fw-accent"] .text-white,
-      html[data-theme="light"] [class*="bg-green-"] .text-white,
-      html[data-theme="light"] [class*="bg-red-"] .text-white,
-      html[data-theme="light"] [class*="bg-emerald-"] .text-white,
-      html[data-theme="light"] [class*="bg-blue-"] .text-white,
-      html[data-theme="light"] button[style*="linear-gradient(180deg, #16"] .text-white,
-      html[data-theme="light"] button[style*="linear-gradient(180deg, #7f"] .text-white,
-      html[data-theme="light"] button[style*="background"] span {
-        color: white !important;
-      }
-      /* BUY/SELL buttons have inline style backgrounds - protect them */
-      html[data-theme="light"] button[style*="linear-gradient(180deg, #166534"],
-      html[data-theme="light"] button[style*="linear-gradient(180deg, #16a34a"] {
-        background: linear-gradient(180deg, #166534 0%, #16a34a 50%, #15803d 100%) !important;
-      }
-      html[data-theme="light"] button[style*="linear-gradient(180deg, #7f1d1d"],
-      html[data-theme="light"] button[style*="linear-gradient(180deg, #dc2626"] {
-        background: linear-gradient(180deg, #7f1d1d 0%, #dc2626 50%, #b91c1c 100%) !important;
-      }
-      /* Fix borders */
-      html[data-theme="light"] [class*="border-fw-border"] {
-        border-color: var(--fw-border) !important;
-      }
-      /* Fix the RiskOverlay specific gradient wrapper */
-      html[data-theme="light"] [class*="select-none"][class*="border-b"] {
-        background: var(--fw-surface) !important;
-        background-image: none !important;
-      }
-    `;
-  } else {
-    if (el) el.remove();
-  }
-}
-
-// Apply on load if already light
-if (typeof window !== 'undefined') {
-  try {
-    const stored = localStorage.getItem('fundedwealth-terminal-theme');
-    if (stored === 'light') {
-      // Defer to after DOM ready
-      setTimeout(() => applyLightModeForce(true), 50);
-    }
-  } catch {}
-}
-
 export function TopBar() {
   const { setSearchOpen, setBottomTab } = useAppStore();
   const marketStatus = useMarketStore((s) => s.marketStatus);
@@ -131,14 +25,10 @@ export function TopBar() {
 
   const toggleTheme = () => {
     const next = isLight ? 'dark' : 'light';
-    // Apply CSS variable theme via themeStore (this also sets/removes data-theme attribute)
     const themeId = next === 'light' ? 'light-pro' : 'dark-pro';
     useThemeStore.getState().applyTheme(themeId);
-    // Also persist in legacy storage key for FOUC prevention in main.tsx
     try { localStorage.setItem(STORAGE_KEY, next); } catch {}
     setIsLight(next === 'light');
-    // Force-override all dark backgrounds via runtime style injection
-    applyLightModeForce(next === 'light');
     window.dispatchEvent(new CustomEvent('fw:theme-changed'));
   };
 

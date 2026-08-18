@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAppStore } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
 import { cn, formatPrice } from '@/utils/helpers';
@@ -64,9 +64,9 @@ export function TimeSalesPanel() {
   const buyPct = tape.length > 0 ? (buyCount / tape.length) * 100 : 50;
 
   return (
-    <div className="h-full flex flex-col bg-[#0c0e14]">
+    <div className="h-full flex flex-col bg-fw-bg">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-fw-border bg-[#10121a] flex-shrink-0">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-fw-border bg-fw-surface-2 flex-shrink-0">
         <div className="flex items-center gap-2">
           <span className="text-[14px] font-bold text-fw-text">Time & Sales</span>
           {activeSymbol && <span className="text-[14px] text-fw-text-muted">{activeSymbol.symbol}</span>}
@@ -89,7 +89,7 @@ export function TimeSalesPanel() {
       )}
 
       {/* Column Headers */}
-      <div className="grid grid-cols-[60px_1fr_80px_60px] px-3 py-1 border-b border-fw-border/20 bg-[#0d0f15] flex-shrink-0">
+      <div className="grid grid-cols-[60px_1fr_80px_60px] px-3 py-1 border-b border-fw-border/20 bg-fw-surface flex-shrink-0">
         <span className="text-[13px] text-fw-text-muted font-bold">TIME</span>
         <span className="text-[13px] text-fw-text-muted font-bold text-right">PRICE</span>
         <span className="text-[13px] text-fw-text-muted font-bold text-right">QTY</span>

@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useTradingStore } from '@/store/tradingStore';
 import { cn, getChallengeRulePct, formatChallengePhase } from '@/utils/helpers';
 import { Shield, Zap, TrendingDown, TrendingUp, Target, AlertTriangle, Lock, Activity } from 'lucide-react';
@@ -62,7 +62,7 @@ export function RiskWidget() {
   const riskLevel = overallRisk > 80 ? 'CRITICAL' : overallRisk > 60 ? 'HIGH' : overallRisk > 30 ? 'CAUTION' : 'SAFE';
 
   return (
-    <div className="border-b border-fw-border bg-gradient-to-b from-[#0c0e16] to-[#0a0c12] select-none">
+    <div className="border-b border-fw-border bg-fw-bg select-none">
       {/* Challenge Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-fw-border/30">
         <div className="flex items-center gap-2">
