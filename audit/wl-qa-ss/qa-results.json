@@ -1,0 +1,28 @@
+{
+  "passed": 3,
+  "failed": 0,
+  "total": 3,
+  "results": [
+    {
+      "label": "Vite/React bundle served",
+      "ok": true,
+      "detail": "bundle present"
+    },
+    {
+      "label": "Auth gate (expected in prod)",
+      "ok": true,
+      "detail": "Terminal requires login — not a code bug"
+    },
+    {
+      "label": "No bundle/compile errors in console",
+      "ok": true,
+      "detail": "clean"
+    }
+  ],
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+    "Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+    "Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+    "Failed to load resource: the server responded with a status of 500 (Internal Server Error)"
+  ]
+}

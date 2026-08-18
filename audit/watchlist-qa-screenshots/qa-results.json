@@ -1,0 +1,13 @@
+{
+  "passed": 0,
+  "failed": 1,
+  "results": [
+    {
+      "test": "QA script execution",
+      "pass": false,
+      "detail": "page.goto: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/\", waiting until \"networkidle\"\u001b[22m\n"
+    }
+  ],
+  "consoleErrors": [],
+  "pageErrors": []
+}

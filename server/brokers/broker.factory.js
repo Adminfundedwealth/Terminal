@@ -11,7 +11,7 @@
  */
 
 import { AngelOneAdapter } from './angelone/angelone.adapter.js';
-// import { DhanAdapter } from './dhan/dhan.adapter.js'; // Placeholder — not yet implemented
+import { DhanAdapter } from './dhan/dhan.adapter.js';
 
 export class BrokerFactory {
   static instances = new Map();
@@ -61,8 +61,8 @@ export class BrokerFactory {
         break;
       }
       case 'dhan': {
-        // Dhan adapter placeholder — structure exists but not implemented
-        throw new Error('[BrokerFactory] Dhan adapter not yet implemented. Credentials available but adapter pending.');
+        adapter = new DhanAdapter();
+        break;
       }
       case 'upstox':
         throw new Error('[BrokerFactory] Upstox adapter not implemented');
@@ -159,7 +159,7 @@ export class BrokerFactory {
       },
       dhan: {
         configured: !!(process.env.DHAN_ACCESS_TOKEN && process.env.DHAN_CLIENT_ID),
-        status: 'not_implemented',
+        status: this.healthStatus.get(`dhan:${process.env.DHAN_CLIENT_ID}`)?.connected || 'available',
       },
     };
     return report;

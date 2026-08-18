@@ -1,4 +1,4 @@
-/**
+﻿/**
  * FUNDEDWEALTH TERMINAL â€” SERVER ENTRY POINT
  * 
  * Wires together all backend components:
@@ -59,6 +59,7 @@ import { HealthMonitor } from './brokers/health.monitor.js';
 import { AngelFeedConnector } from './brokers/angelone/angel.feed.connector.js';
 import { eventBus, EventBridge } from './events/index.js';
 import { eventDispatcher } from './services/eventDispatcher.js';
+import { DataProviderSwitch } from './services/dataProviderSwitch.js';
 
 const PORT = process.env.PORT || 4000;
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
@@ -74,6 +75,7 @@ const redisPubSub = new RedisPubSub();
 const healthMonitor = new HealthMonitor({ interval: 30000 });
 const angelFeed = new AngelFeedConnector(marketDataEngine);
 const eventBridge = new EventBridge();
+const dataProviderSwitch = new DataProviderSwitch(candleService, optionChainService);
 let tradingViewDatafeed = null;
 let realtimeServer = null;
 
@@ -237,7 +239,7 @@ app.use('/api/market/option-chain', optionChainLimiter);
 app.use('/api/market/expiries', optionChainLimiter);
 
 // API routes (protected + public)
-app.use('/api', createApiRouter(accountService, instrumentService, marketDataEngine, candleService, depthService, optionChainService));
+app.use('/api', createApiRouter(accountService, instrumentService, marketDataEngine, candleService, depthService, optionChainService, dataProviderSwitch));
 
 // Dashboard sync routes — called by fundedwealth.com main site (API key auth, no session needed)
 app.use('/api/dashboard', createDashboardSyncRouter());
@@ -432,6 +434,12 @@ async function startup() {
   console.log('[Startup] Initializing market data engine...');
   await marketDataEngine.initialize();
   console.log('[Startup] âœ“ Market data engine ready (awaiting broker adapter)');
+
+  // 2a. Initialize Data Provider Switch (Dhan + Angel One failover)
+  console.log('[Startup] Initializing data provider switch...');
+  await dataProviderSwitch.initialize();
+  const dpStatus = dataProviderSwitch.getStatus();
+  console.log('[Startup] Data provider switch ready (active: ' + dpStatus.activeProvider + ', dhan: ' + dpStatus.dhanReady + ')');
 
   // 2b. Initialize Event Dispatcher (persistence subscriber)
   console.log('[Startup] Initializing event dispatcher (persistence layer)...');

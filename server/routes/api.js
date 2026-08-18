@@ -6,7 +6,7 @@ import { eventBus } from '../events/eventBus.js';
 
 import { TradingViewDatafeed } from '../realtime/tradingview.datafeed.js';
 
-export function createApiRouter(accountService, instrumentService, marketDataEngine, candleService, depthService, optionChainService) {
+export function createApiRouter(accountService, instrumentService, marketDataEngine, candleService, depthService, optionChainService, dataProviderSwitch) {
   const router = Router();
   const tvDatafeed = new TradingViewDatafeed(instrumentService, marketDataEngine);
 
@@ -644,12 +644,44 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
     const { token, tf, from, to, exchange } = req.query;
     if (!token || !tf) return res.status(400).json({ message: 'token and tf required' });
 
-    // Use CandleService for historical data from Angel One API
+    // Use DataProviderSwitch for historical data (routes to Dhan or Angel One with failover)
+    if (dataProviderSwitch) {
+      try {
+        const resolvedExchange = exchange ? String(exchange) : 'NSE';
+        // Also register exchange in candleService for live candle aggregation
+        if (candleService && resolvedExchange && token) {
+          candleService.registerTokenExchange(String(token), resolvedExchange);
+        }
+
+        const fromTs = from ? parseInt(String(from), 10) : Math.floor((Date.now() - 7 * 24 * 60 * 60 * 1000) / 1000);
+        const toTs = to ? parseInt(String(to), 10) : Math.floor(Date.now() / 1000);
+
+        const result = await dataProviderSwitch.getHistoricalCandles(
+          token, tf, resolvedExchange, fromTs, toTs
+        );
+
+        if (result.data && result.data.length > 0) {
+          return res.json(result.data);
+        }
+
+        // If provider returned empty, try live candle fallback
+        if (candleService) {
+          const currentCandle = candleService.getCurrentCandle(token, String(tf));
+          if (currentCandle) {
+            console.warn(`[API] /market/history (${result.provider}) returned 0 candles for ${token}/${tf}, returning live candle fallback`);
+            return res.json([currentCandle]);
+          }
+        }
+
+        console.warn(`[API] /market/history returned 0 candles for ${token}/${tf} via ${result.provider}`);
+      } catch (err) {
+        console.error('[API] /market/history dataProviderSwitch error:', err.message || err);
+      }
+    }
+
+    // Legacy fallback: Use CandleService directly (Angel One only)
     if (candleService) {
       try {
-        // Always register the exchange passed by the frontend so candle lookups use the correct exchange.
-        // This is critical for NFO futures, MCX commodities, and CDS currency pairs — without this
-        // registration the service falls back to 'NSE' which returns empty or wrong data.
         const resolvedExchange = exchange ? String(exchange) : undefined;
         if (resolvedExchange && token) {
           candleService.registerTokenExchange(String(token), resolvedExchange);
@@ -663,20 +695,12 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
           to ? parseInt(String(to), 10) : undefined
         );
         if (candles.length > 0) return res.json(candles);
-
-        const currentCandle = candleService.getCurrentCandle(token, String(tf));
-        if (currentCandle) {
-          console.warn(`[API] /market/history returned 0 candles for ${token}/${tf}, returning current live candle fallback`);
-          return res.json([currentCandle]);
-        }
-
-        console.warn(`[API] /market/history returned 0 candles for ${token}/${tf} — candleService may lack auth token or market data`);
       } catch (err) {
-        console.error('[API] /market/history error:', err.message || err);
+        console.error('[API] /market/history candleService fallback error:', err.message || err);
       }
     }
 
-    // Fallback: return empty
+    // Final fallback: return empty
     res.json([]);
   });
 
@@ -718,11 +742,25 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
   router.get('/market/option-chain', async (req, res) => {
     const { symbol, expiry } = req.query;
     if (!symbol || !expiry) return res.status(400).json({ message: 'symbol and expiry required' });
-    if (!optionChainService) return res.json([]);
 
     console.log(`[OptionChain] Request: symbol=${symbol}, expiry=${expiry}`);
 
-    // Ensure token is available before attempting fetch
+    // Try DataProviderSwitch first (routes to Dhan with Greeks or Angel One)
+    if (dataProviderSwitch) {
+      try {
+        const result = await dataProviderSwitch.getOptionChain(symbol, expiry);
+        if (result.data && result.data.length > 0) {
+          console.log(`[OptionChain] Response via ${result.provider}: ${result.data.length} strikes`);
+          return res.json(result.data);
+        }
+      } catch (err) {
+        console.warn(`[OptionChain] DataProviderSwitch failed: ${err.message} — falling back to Angel`);
+      }
+    }
+
+    // Fallback: existing Angel One optionChainService
+    if (!optionChainService) return res.json([]);
+
     await optionChainService._ensureToken();
 
     if (!optionChainService.jwtToken) {
@@ -731,11 +769,8 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
     }
 
     const chain = await optionChainService.getOptionChain(symbol, expiry);
-    console.log(`[OptionChain] Response: ${chain.length} strikes returned`);
+    console.log(`[OptionChain] Response via Angel: ${chain.length} strikes returned`);
 
-    // Always return 200. Empty array means no contracts found for this
-    // symbol/expiry — that is valid data (e.g. SENSEX, expired expiry).
-    // 503 is reserved for service-unavailable (no JWT) only.
     return res.json(chain);
   });
 
@@ -743,8 +778,20 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
     const { symbol } = req.query;
     if (!symbol) return res.status(400).json({ message: 'symbol required' });
 
+    // Try DataProviderSwitch first (Dhan or Angel with failover)
+    if (dataProviderSwitch) {
+      try {
+        const result = await dataProviderSwitch.getExpiries(symbol);
+        if (result.data && result.data.length > 0) {
+          return res.json(result.data);
+        }
+      } catch (err) {
+        console.warn(`[Expiries] DataProviderSwitch failed: ${err.message}`);
+      }
+    }
+
+    // Fallback: existing Angel One optionChainService
     if (optionChainService) {
-      // Ensure token before attempting
       await optionChainService._ensureToken();
 
       if (optionChainService.jwtToken) {
@@ -757,7 +804,7 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
       }
     }
 
-    // Fallback: instrumentService hardcoded expiries (always returns something)
+    // Final fallback: instrumentService hardcoded expiries (always returns something)
     return res.json(instrumentService.getExpiries(symbol));
   });
 
@@ -802,11 +849,25 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
     // Resolve token from symbol name
     const info = tvDatafeed.resolveSymbol(symbol);
     const token = info?.token || symbol;
+    const exchange = info?.exchange || 'NSE';
 
-    // Fetch from CandleService (Angel One historical API)
-    const candles = candleService
-      ? await candleService.getHistoricalCandles(token, resolution, parseInt(from) || undefined, parseInt(to) || undefined)
-      : [];
+    // Use DataProviderSwitch if available (Dhan/Angel failover)
+    let candles = [];
+    if (dataProviderSwitch) {
+      try {
+        const fromTs = parseInt(from) || Math.floor((Date.now() - 7 * 24 * 60 * 60 * 1000) / 1000);
+        const toTs = parseInt(to) || Math.floor(Date.now() / 1000);
+        const result = await dataProviderSwitch.getHistoricalCandles(token, resolution, exchange, fromTs, toTs);
+        candles = result.data || [];
+      } catch (err) {
+        console.warn(`[TV] DataProviderSwitch error: ${err.message}`);
+      }
+    }
+
+    // Fallback to direct CandleService if DataProviderSwitch returned empty
+    if (candles.length === 0 && candleService) {
+      candles = await candleService.getHistoricalCandles(token, resolution, parseInt(from) || undefined, parseInt(to) || undefined) || [];
+    }
 
     if (!candles || candles.length === 0) {
       return res.json({ s: 'no_data' });
@@ -831,6 +892,15 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
       res.json(BrokerFactory.getHealthReport());
     } catch {
       res.json({ error: 'broker factory not available' });
+    }
+  });
+
+  // Data provider switch status (Dhan/Angel failover)
+  router.get('/provider/status', (req, res) => {
+    if (dataProviderSwitch) {
+      res.json(dataProviderSwitch.getStatus());
+    } else {
+      res.json({ activeProvider: 'ANGELONE', dhanReady: false, failoverActive: false });
     }
   });
 
