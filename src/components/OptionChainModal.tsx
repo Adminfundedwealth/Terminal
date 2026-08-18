@@ -426,6 +426,18 @@ export function OptionChainModal() {
     if (!activeSymbol) return;
     // Use real broker token from chain data if available; fall back to synthetic placeholder
     const token = realToken || `${underlying}_${strike}_${type}`;
+
+    // Seed the market store with the option chain LTP so the UI shows a price immediately
+    // (before live WebSocket ticks arrive). Prevents "0.00" display in order panel.
+    if (ltp && ltp > 0) {
+      useMarketStore.getState().updateQuote(token, {
+        ltp,
+        symbol: `${underlying} ${strike} ${type}`,
+        exchange: optExchange,
+        timestamp: Date.now(),
+      });
+    }
+
     setActiveSymbol({
       token,
       symbol: `${underlying} ${strike} ${type}`,

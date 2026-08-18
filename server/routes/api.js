@@ -651,8 +651,23 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
   });
 
   router.get('/market/history', async (req, res) => {
-    const { token, tf, from, to, exchange } = req.query;
+    let { token, from, to, exchange } = req.query;
+    const tf = req.query.tf || req.query.timeframe || req.query.resolution;
     if (!token || !tf) return res.status(400).json({ message: 'token and tf required' });
+
+    // Resolve placeholder futures/commodity tokens to spot underlying
+    const PLACEHOLDER_TO_SPOT = {
+      'NF_FUT': '99926000', 'NF_FUT_N': '99926000', 'NF_FUT_F': '99926000',
+      'BNF_FUT': '99926009', 'BNF_FUT_N': '99926009',
+      'FNF_FUT': '99926037', 'MCN_FUT': '99926074', 'SEN_FUT': '99919000',
+      'REL_FUT': '2885', 'SBIN_FUT': '3045', 'HDFC_FUT': '1333',
+      'ICICI_FUT': '4963', 'TCS_FUT': '11536', 'INFY_FUT': '1594',
+      'GOLD_F': '99926000', 'GOLDM_F': '99926000', 'SILVER_F': '99926000',
+      'SILVERM_F': '99926000', 'CRUDE_F': '99926000', 'NATGAS_F': '99926000',
+      'COPPER_F': '99926000', 'USDINR_F': '99926000', 'EURINR_F': '99926000',
+      'GBPINR_F': '99926000', 'JPYINR_F': '99926000',
+    };
+    token = PLACEHOLDER_TO_SPOT[token] || token;
 
     // Use DataProviderSwitch for historical data (routes to Dhan or Angel One with failover)
     if (dataProviderSwitch) {
@@ -724,12 +739,35 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
     res.json(marketDataEngine.getDepth(token));
   });
 
-  router.get('/market/quote', (req, res) => {
-    const { token } = req.query;
+  router.get('/market/quote', async (req, res) => {
+    let { token, exchange } = req.query;
     if (!token) return res.status(400).json({ message: 'token required' });
-    const quote = marketDataEngine.getQuote(token);
-    if (!quote) return res.json(null);
-    res.json(quote);
+
+    // Resolve placeholder tokens to their underlying spot index for display
+    const PLACEHOLDER_TO_SPOT = {
+      'NF_FUT': '99926000', 'NF_FUT_N': '99926000', 'NF_FUT_F': '99926000',
+      'BNF_FUT': '99926009', 'BNF_FUT_N': '99926009',
+      'FNF_FUT': '99926037', 'MCN_FUT': '99926074', 'SEN_FUT': '99919000',
+      'REL_FUT': '2885', 'SBIN_FUT': '3045', 'HDFC_FUT': '1333',
+      'ICICI_FUT': '4963', 'TCS_FUT': '11536', 'INFY_FUT': '1594',
+    };
+    const resolvedToken = PLACEHOLDER_TO_SPOT[token] || token;
+
+    const quote = marketDataEngine.getQuote(resolvedToken);
+    if (quote && quote.ltp > 0) return res.json(quote);
+
+    // No cached quote — try getLivePrice fallback (Dhan API, candle close, depth midpoint)
+    if (marketDataEngine.getLivePrice) {
+      try {
+        const ltp = await marketDataEngine.getLivePrice(resolvedToken, exchange || 'NSE');
+        if (ltp && ltp > 0) {
+          const fallbackQuote = { token: resolvedToken, ltp, exchange: exchange || 'NSE', timestamp: Date.now() };
+          return res.json(fallbackQuote);
+        }
+      } catch (_) {}
+    }
+
+    res.json(quote || null);
   });
 
   router.get('/market/status', (req, res) => {
@@ -815,6 +853,29 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
     }
 
     // Final fallback: instrumentService hardcoded expiries (always returns something)
+    return res.json(instrumentService.getExpiries(symbol));
+  });
+
+  // Alias: /market/option-expiries → same handler as /market/expiries
+  router.get('/market/option-expiries', async (req, res) => {
+    const { symbol } = req.query;
+    if (!symbol) return res.status(400).json({ message: 'symbol required' });
+
+    if (dataProviderSwitch) {
+      try {
+        const result = await dataProviderSwitch.getExpiries(symbol);
+        if (result.data && result.data.length > 0) {
+          return res.json(result.data);
+        }
+      } catch (_) {}
+    }
+    if (optionChainService) {
+      try {
+        await optionChainService._ensureToken();
+        const expiries = await optionChainService.getExpiries(symbol);
+        if (expiries && expiries.length > 0) return res.json(expiries);
+      } catch (_) {}
+    }
     return res.json(instrumentService.getExpiries(symbol));
   });
 
