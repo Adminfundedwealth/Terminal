@@ -52,16 +52,8 @@ const SEGMENT_MAP = {
   'MCX_COMM': 'MCX_COMM',
 };
 
-// Instrument type by segment
-const INSTRUMENT_MAP = {
-  'NSE_EQ': 'EQUITY',
-  'BSE_EQ': 'EQUITY',
-  'NSE_FNO': 'FUTIDX',
-  'BSE_FNO': 'FUTIDX',
-  'MCX_COMM': 'FUTCOM',
-  'IDX_I': 'INDEX',
-  'CUR': 'FUTCUR',
-};
+// Instrument type by segment (reference only — actual logic in _resolveInstrument)
+// NSE_EQ → EQUITY, NSE_FNO → FUTIDX, MCX_COMM → FUTCOM, IDX_I → INDEX, CUR → FUTCUR
 
 // Timeframe → endpoint + interval
 const TIMEFRAME_CONFIG = {
@@ -200,10 +192,30 @@ export class DhanHistoricalService {
 
     // Map exchange to Dhan segment
     const segment = SEGMENT_MAP[exchange] || 'NSE_EQ';
-    const instrument = INSTRUMENT_MAP[segment] || 'EQUITY';
 
-    // For NSE equity, the Angel token IS the Dhan securityId
-    // For NFO/MCX, they may differ — but many are the same
+    // Determine instrument type based on segment AND token characteristics
+    let instrument;
+    switch (segment) {
+      case 'NSE_FNO':
+      case 'BSE_FNO':
+        instrument = 'FUTIDX'; // Futures on index
+        break;
+      case 'MCX_COMM':
+        instrument = 'FUTCOM'; // Commodity futures
+        break;
+      case 'CUR':
+        instrument = 'FUTCUR'; // Currency futures
+        break;
+      case 'IDX_I':
+        instrument = 'INDEX';
+        break;
+      case 'NSE_EQ':
+      case 'BSE_EQ':
+      default:
+        instrument = 'EQUITY';
+        break;
+    }
+
     return {
       securityId: String(token),
       segment,

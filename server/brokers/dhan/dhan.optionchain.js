@@ -123,50 +123,63 @@ export class DhanOptionChainService {
   }
 
   async _fetchChain(secId, symbol, expiry) {
-    // Try the expiry as-is (YYYY-MM-DD from expirylist)
-    const formats = [expiry];
+    // Dhan requires exact key "Expiry" (capital E, not Expirydate)
+    const normalizedExpiry = this._normalizeExpiry(expiry);
 
-    // Also try without leading zeros and other formats
-    if (/^\d{4}-\d{2}-\d{2}$/.test(expiry)) {
-      // Try DD-MM-YYYY
-      const [y, m, d] = expiry.split('-');
-      formats.push(`${d}-${m}-${y}`);
-    }
+    const payload = {
+      UnderlyingScrip: secId,
+      UnderlyingSeg: 'IDX_I',
+      Expiry: normalizedExpiry,
+    };
 
-    let lastError = null;
-    for (const fmt of formats) {
-      try {
-        const payload = {
-          UnderlyingScrip: secId,
-          UnderlyingSeg: 'IDX_I',
-          Expirydate: fmt,
-        };
+    console.log(`[DhanOC] Fetching chain: ${symbol} Expiry=${normalizedExpiry}`);
 
-        console.log(`[DhanOC] Trying chain: ${symbol} expiry=${fmt}`);
+    try {
+      const resp = await axios.post(`${DHAN_API_BASE}/optionchain`, payload, {
+        httpsAgent: IPV4_AGENT,
+        timeout: 12000,
+        headers: this.auth.getHeaders(),
+      });
 
-        const resp = await axios.post(`${DHAN_API_BASE}/optionchain`, payload, {
-          httpsAgent: IPV4_AGENT,
-          timeout: 12000,
-          headers: this.auth.getHeaders(),
-        });
-
-        const data = resp.data?.data || resp.data;
-        if (Array.isArray(data) && data.length > 0) {
-          console.log(`[DhanOC] Got ${data.length} strikes for ${symbol}/${fmt}`);
-          return this._parseChain(data);
-        }
-      } catch (err) {
-        lastError = err;
-        const status = err.response?.status;
-        const msg = err.response?.data;
-        console.warn(`[DhanOC] Format ${fmt} failed: HTTP ${status}`, JSON.stringify(msg).slice(0, 100));
-        // If 401, token is dead — don't try more formats
-        if (status === 401) throw err;
+      const data = resp.data?.data || resp.data;
+      if (Array.isArray(data) && data.length > 0) {
+        console.log(`[DhanOC] Got ${data.length} strikes for ${symbol}/${normalizedExpiry}`);
+        return this._parseChain(data);
       }
+      return [];
+    } catch (err) {
+      const status = err.response?.status;
+      const msg = err.response?.data;
+      console.error(`[DhanOC] Chain failed: HTTP ${status}`, JSON.stringify(msg).slice(0, 150));
+      throw err;
     }
+  }
 
-    if (lastError) throw lastError;
-    return [];
+  /**
+   * Normalize expiry to YYYY-MM-DD format.
+   */
+  _normalizeExpiry(expiry) {
+    if (!expiry) return '';
+    // Already YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}$/.test(expiry)) return expiry;
+    // DDMMMYY (Angel format) e.g. 25AUG26
+    const MONTHS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+    const m = expiry.match(/^(\d{2})([A-Z]{3})(\d{2})$/i);
+    if (m) {
+      const dd = m[1];
+      const mon = m[2].toUpperCase();
+      const yy = parseInt(m[3]);
+      const yyyy = yy >= 50 ? 1900 + yy : 2000 + yy;
+      const mm = String(MONTHS.indexOf(mon) + 1).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    }
+    // DD-MM-YYYY
+    const dm = expiry.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+    if (dm) return `${dm[3]}-${dm[2]}-${dm[1]}`;
+    // Try parsing as date
+    const d = new Date(expiry);
+    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+    return expiry;
   }
 
   /**
