@@ -8,6 +8,83 @@ import { AccountSelector } from './AccountSelector';
 
 const STORAGE_KEY = 'fundedwealth-terminal-theme';
 
+const LIGHT_FORCE_ID = 'fw-light-force';
+
+function applyLightModeForce(enable: boolean) {
+  let el = document.getElementById(LIGHT_FORCE_ID) as HTMLStyleElement | null;
+  if (enable) {
+    if (!el) {
+      el = document.createElement('style');
+      el.id = LIGHT_FORCE_ID;
+      document.head.appendChild(el);
+    }
+    el.textContent = `
+      html[data-theme="light"] * {
+        --tw-bg-opacity: 1 !important;
+      }
+      html[data-theme="light"] [class*="bg-"][class*="#0"],
+      html[data-theme="light"] [class*="bg-"][class*="#1"],
+      html[data-theme="light"] [class*="bg-"][class*="#2"] {
+        background-color: var(--fw-surface-2) !important;
+        background-image: none !important;
+      }
+      html[data-theme="light"] header,
+      html[data-theme="light"] [class*="bg-fw-surface"] {
+        background-color: var(--fw-surface) !important;
+      }
+      html[data-theme="light"] [class*="bg-fw-bg"] {
+        background-color: var(--fw-bg) !important;
+      }
+      html[data-theme="light"] [class*="bg-gradient"] {
+        background-image: none !important;
+        background-color: var(--fw-surface-2) !important;
+      }
+      html[data-theme="light"] [style*="linear-gradient"] {
+        background: var(--fw-surface-2) !important;
+      }
+      html[data-theme="light"] [style*="background"][style*="rgb(1"],
+      html[data-theme="light"] [style*="background"][style*="rgb(0"],
+      html[data-theme="light"] [style*="background: #0"],
+      html[data-theme="light"] [style*="background: #1"],
+      html[data-theme="light"] [style*="background:#0"],
+      html[data-theme="light"] [style*="background:#1"] {
+        background: var(--fw-surface-2) !important;
+      }
+      /* Protect BUY/SELL buttons and semantic colors */
+      html[data-theme="light"] .bg-fw-green,
+      html[data-theme="light"] .bg-fw-red,
+      html[data-theme="light"] .bg-fw-accent,
+      html[data-theme="light"] [class*="bg-green-"],
+      html[data-theme="light"] [class*="bg-red-"],
+      html[data-theme="light"] [class*="bg-emerald-"],
+      html[data-theme="light"] [class*="bg-blue-"],
+      html[data-theme="light"] [class*="bg-orange-"],
+      html[data-theme="light"] [class*="bg-yellow-"],
+      html[data-theme="light"] [class*="bg-purple-"],
+      html[data-theme="light"] [class*="bg-amber-"],
+      html[data-theme="light"] [class*="bg-black"],
+      html[data-theme="light"] .bg-white,
+      html[data-theme="light"] .bg-transparent,
+      html[data-theme="light"] [class*="bg-current"] {
+        background-color: revert !important;
+      }
+    `;
+  } else {
+    if (el) el.remove();
+  }
+}
+
+// Apply on load if already light
+if (typeof window !== 'undefined') {
+  try {
+    const stored = localStorage.getItem('fundedwealth-terminal-theme');
+    if (stored === 'light') {
+      // Defer to after DOM ready
+      setTimeout(() => applyLightModeForce(true), 50);
+    }
+  } catch {}
+}
+
 export function TopBar() {
   const { setSearchOpen, setBottomTab } = useAppStore();
   const marketStatus = useMarketStore((s) => s.marketStatus);
@@ -31,6 +108,8 @@ export function TopBar() {
     // Also persist in legacy storage key for FOUC prevention in main.tsx
     try { localStorage.setItem(STORAGE_KEY, next); } catch {}
     setIsLight(next === 'light');
+    // Force-override all dark backgrounds via runtime style injection
+    applyLightModeForce(next === 'light');
     window.dispatchEvent(new CustomEvent('fw:theme-changed'));
   };
 
