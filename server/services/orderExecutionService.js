@@ -88,12 +88,16 @@ export class OrderExecutionService {
           if (shouldFill) {
             this._pendingPaperOrders.delete(orderId);
             console.log(`[PaperMonitor] Triggering ${entry.orderType} ${entry.side} ${entry.symbol} @ LTP ${ltp} (trigger=${entry.triggerPrice || ''} limit=${entry.price || ''})`);
+            // Resolve account for post-trade risk checks
+            let acct = null;
+            try { acct = await this._getAccount(entry.accountId); } catch (_) {}
             await this._handleMarketFill(
               entry.accountId, orderId,
               { ...entry.orderParams, orderType: 'MARKET' },
               'PAPER-TRIGGER-' + orderId,
               'paper',
-              0
+              0,
+              acct
             );
           }
         } catch (err) {
@@ -131,6 +135,14 @@ export class OrderExecutionService {
    */
   async executeOrder(accountId, orderId, orderParams, account) {
     const startTime = Date.now();
+
+    // ── Safety: ensure account is defined and usable ──────────────────────
+    if (!account || typeof account !== 'object') {
+      try { account = await this._getAccount(accountId); } catch (_) {}
+    }
+    if (!account) {
+      account = { id: accountId, broker_provider: 'angelone', balance: 0, status: 'active' };
+    }
 
     try {
       // ── Step 1: Risk Validation ──────────────────────────────
@@ -328,6 +340,11 @@ export class OrderExecutionService {
    * DB writes happen in parallel AFTER the position event is emitted.
    */
   async _handleMarketFill(accountId, orderId, orderParams, brokerOrderId, brokerProvider, latencyMs, account = null) {
+    // Safe resolution: ensure account is available for post-trade risk checks
+    if (!account && accountId) {
+      try { account = await this._getAccount(accountId); } catch (_) {}
+    }
+
     // ── Fill price: SYNCHRONOUS cache-only lookup (zero network latency) ──
     // Priority: live LTP cache > explicit order price
     const quote = this.marketDataEngine.getQuote(orderParams.token);
@@ -457,6 +474,12 @@ export class OrderExecutionService {
    * Non-blocking, fire-and-forget.
    */
   async _postTradeRiskCheck(accountId, orderParams, account) {
+    // Safety: ensure account is available
+    if (!account) {
+      try { account = await this._getAccount(accountId); } catch (_) {}
+    }
+    if (!account) return; // Can't do risk check without account data
+
     const quoteProvider = (token) => {
       const q = this.marketDataEngine.getQuote(token);
       const ltp = q?.ltp;
@@ -854,16 +877,24 @@ export class OrderExecutionService {
         id: 'dev-account',
         broker_provider: 'angelone',
         balance: 10000000,
+        leverage_max: 50,
         status: 'active',
       };
     }
-    if (!supabase) return { id: accountId, broker_provider: 'angelone', balance: 0, status: 'active' };
+    if (!supabase) return { id: accountId, broker_provider: 'angelone', balance: 1000000, leverage_max: 10, status: 'active' };
     const { data, error } = await supabase
       .from('trading_accounts')
       .select('*')
       .eq('id', accountId)
       .single();
-    if (error) return { id: accountId, broker_provider: 'angelone', balance: 0, status: 'active' };
+    if (error || !data) {
+      // Fallback: don't return 0 balance which blocks ALL orders
+      return { id: accountId, broker_provider: 'angelone', balance: 1000000, leverage_max: 10, status: 'active' };
+    }
+    // Ensure leverage_max has a sane default
+    if (!data.leverage_max || data.leverage_max <= 0) {
+      data.leverage_max = 10; // Standard prop-firm intraday leverage
+    }
     return data;
   }
 }

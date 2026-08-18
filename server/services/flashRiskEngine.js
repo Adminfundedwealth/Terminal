@@ -202,7 +202,7 @@ export class FlashRiskEngine {
     }
 
     // ── 10. Margin availability ───────────────────────────────────────────
-    const marginResult = await MarginService.validateMargin(accountId, orderParams, balance, quoteProvider);
+    const marginResult = await MarginService.validateMargin(accountId, orderParams, balance, quoteProvider, account);
     if (!marginResult.allowed) return { ...marginResult, ruleType: 'margin' };
 
     // ── 11. Consistency rule (pre-trade) ──────────────────────────────────

@@ -5,11 +5,20 @@
  * 
  * Margin Rules:
  *   - Equity Delivery (CNC): 100% of order value
- *   - Equity Intraday (MIS): 20% of order value
- *   - F&O (NRML): Exchange-defined lot margins
- *   - F&O Intraday (MIS): 40% of NRML margin
- *   - MCX: Hardcoded lot margins per commodity
- *   - CDS: Hardcoded per lot
+ *   - Equity Intraday (MIS): 20% of order value (or leverage-adjusted)
+ *   - F&O (NRML): Exchange-defined lot margins (leverage-adjusted for prop-firm accounts)
+ *   - F&O Intraday (MIS): 40% of NRML margin (leverage-adjusted)
+ *   - F&O Option BUY: Premium only (qty × LTP) — no SPAN margin
+ *   - MCX: Hardcoded lot margins per commodity (leverage-adjusted)
+ *   - CDS: Hardcoded per lot (leverage-adjusted)
+ * 
+ * Prop-firm Leverage:
+ *   When an account has intraday leverage (e.g. 5x, 10x, 50x), the margin
+ *   requirement is reduced by that factor:
+ *     effectiveMargin = baseMargin / leverageMultiplier
+ *   
+ *   Option BUY orders only require the premium amount (qty × LTP), regardless
+ *   of leverage settings, since max loss is capped at premium paid.
  * 
  * Available Margin = account.balance - sum(margin used by open positions)
  */
@@ -52,15 +61,21 @@ export class MarginService {
    * Calculate required margin for an order.
    * @param {object} orderParams - { symbol, token, segment, side, orderType, productType, qty, price }
    * @param {function} quoteProvider - (token) => ltp
+   * @param {object} [account] - Account object with leverage_max or leverage settings
    * @returns {{ requiredMargin: number, marginType: string }}
    */
-  static calculateOrderMargin(orderParams, quoteProvider = null) {
-    const { symbol, token, segment, productType, qty, price } = orderParams;
+  static calculateOrderMargin(orderParams, quoteProvider = null, account = null) {
+    const { symbol, token, segment, productType, qty, price, side } = orderParams;
     const ltp = price || (quoteProvider ? quoteProvider(token) : 0);
 
     if (!ltp || !qty) {
       return { requiredMargin: 0, marginType: 'unknown' };
     }
+
+    // ── Determine leverage multiplier from account/risk-profile ──
+    // Prop-firm accounts get reduced margin based on their leverage setting.
+    // Default: 1 (no leverage discount — full exchange margin).
+    const leverageMax = this._getAccountLeverage(account);
 
     let requiredMargin = 0;
     let marginType = '';
@@ -71,13 +86,14 @@ export class MarginService {
         // Equity segment
         const orderValue = ltp * qty;
         if (productType === 'CNC') {
-          // Delivery: 100% margin
+          // Delivery: 100% margin (no leverage on delivery)
           requiredMargin = orderValue;
           marginType = 'delivery_100pct';
         } else {
-          // Intraday (MIS): 20% of order value
-          requiredMargin = orderValue * 0.20;
-          marginType = 'equity_intraday_20pct';
+          // Intraday (MIS): leverage-adjusted
+          // With leverage_max=5 → 20% margin; leverage_max=10 → 10% margin; leverage_max=50 → 2%
+          requiredMargin = orderValue / leverageMax;
+          marginType = `equity_intraday_${leverageMax}x`;
         }
         break;
       }
@@ -85,16 +101,42 @@ export class MarginService {
       case 'NFO':
       case 'BFO': {
         // F&O segment
-        const lotMargin = this._getFOLotMargin(symbol, token);
-        const lotSize = this._getLotSize(symbol, segment);
-        const lots = Math.ceil(qty / lotSize);
+        const isOption = this._isOptionSymbol(symbol, orderParams);
+        const isBuySide = (side || '').toUpperCase() === 'BUY';
 
-        if (productType === 'MIS') {
-          requiredMargin = lotMargin * lots * MIS_MULTIPLIER;
-          marginType = 'fo_intraday_40pct';
+        if (isOption && isBuySide) {
+          // Option BUY: Premium only (max loss = premium paid)
+          // No SPAN margin needed — just the cost of the option
+          requiredMargin = ltp * qty;
+          marginType = 'option_buy_premium';
+        } else if (isOption && !isBuySide) {
+          // Option SELL (writing): requires SPAN margin with leverage discount
+          const lotMargin = this._getFOLotMargin(symbol, token);
+          const lotSize = this._getLotSize(symbol, segment);
+          const lots = Math.ceil(qty / lotSize);
+          const baseMargin = lotMargin * lots;
+
+          if (productType === 'MIS') {
+            requiredMargin = (baseMargin * MIS_MULTIPLIER) / leverageMax;
+            marginType = `fo_option_sell_intraday_${leverageMax}x`;
+          } else {
+            requiredMargin = baseMargin / leverageMax;
+            marginType = `fo_option_sell_nrml_${leverageMax}x`;
+          }
         } else {
-          requiredMargin = lotMargin * lots;
-          marginType = 'fo_nrml';
+          // Futures: use lot-based margin with leverage discount
+          const lotMargin = this._getFOLotMargin(symbol, token);
+          const lotSize = this._getLotSize(symbol, segment);
+          const lots = Math.ceil(qty / lotSize);
+          const baseMargin = lotMargin * lots;
+
+          if (productType === 'MIS') {
+            requiredMargin = (baseMargin * MIS_MULTIPLIER) / leverageMax;
+            marginType = `fo_futures_intraday_${leverageMax}x`;
+          } else {
+            requiredMargin = baseMargin / leverageMax;
+            marginType = `fo_futures_nrml_${leverageMax}x`;
+          }
         }
         break;
       }
@@ -105,12 +147,14 @@ export class MarginService {
         const mcxLotSize = this._getLotSize(symbol, segment);
         const mcxLots = Math.ceil(qty / mcxLotSize);
 
+        const baseMargin = mcxMargin * mcxLots;
+
         if (productType === 'MIS') {
-          requiredMargin = mcxMargin * mcxLots * MIS_MULTIPLIER;
-          marginType = 'mcx_intraday';
+          requiredMargin = (baseMargin * MIS_MULTIPLIER) / leverageMax;
+          marginType = `mcx_intraday_${leverageMax}x`;
         } else {
-          requiredMargin = mcxMargin * mcxLots;
-          marginType = 'mcx_nrml';
+          requiredMargin = baseMargin / leverageMax;
+          marginType = `mcx_nrml_${leverageMax}x`;
         }
         break;
       }
@@ -121,20 +165,22 @@ export class MarginService {
         const cdsLotSize = this._getLotSize(symbol, segment);
         const cdsLots = Math.ceil(qty / cdsLotSize);
 
+        const baseMargin = cdsMargin * cdsLots;
+
         if (productType === 'MIS') {
-          requiredMargin = cdsMargin * cdsLots * MIS_MULTIPLIER;
-          marginType = 'cds_intraday';
+          requiredMargin = (baseMargin * MIS_MULTIPLIER) / leverageMax;
+          marginType = `cds_intraday_${leverageMax}x`;
         } else {
-          requiredMargin = cdsMargin * cdsLots;
-          marginType = 'cds_nrml';
+          requiredMargin = baseMargin / leverageMax;
+          marginType = `cds_nrml_${leverageMax}x`;
         }
         break;
       }
 
       default: {
-        // Fallback: 20% of order value
-        requiredMargin = ltp * qty * 0.20;
-        marginType = 'default_20pct';
+        // Fallback: leverage-adjusted
+        requiredMargin = (ltp * qty) / leverageMax;
+        marginType = `default_${leverageMax}x`;
       }
     }
 
@@ -148,9 +194,10 @@ export class MarginService {
    * Calculate total margin used by open positions.
    * @param {string} accountId
    * @param {function} quoteProvider - (token) => ltp
+   * @param {object} [account] - Account object with leverage settings
    * @returns {number} Total margin locked
    */
-  static async calculateUsedMargin(accountId, quoteProvider = null) {
+  static async calculateUsedMargin(accountId, quoteProvider = null, account = null) {
     if (!supabase) return 0;
 
     const { data: positions, error } = await supabase
@@ -178,7 +225,8 @@ export class MarginService {
         productType,
         qty: absQty,
         price: ltp || pos.avg_price,
-      }, quoteProvider);
+        side: pos.side,
+      }, quoteProvider, account);
 
       totalUsed += requiredMargin;
     }
@@ -190,8 +238,8 @@ export class MarginService {
    * Get available margin for an account.
    * Available = balance - usedMargin
    */
-  static async getAvailableMargin(accountId, balance, quoteProvider = null) {
-    const usedMargin = await this.calculateUsedMargin(accountId, quoteProvider);
+  static async getAvailableMargin(accountId, balance, quoteProvider = null, account = null) {
+    const usedMargin = await this.calculateUsedMargin(accountId, quoteProvider, account);
     return {
       balance,
       usedMargin,
@@ -203,9 +251,9 @@ export class MarginService {
    * Validate if account has sufficient margin for an order.
    * Returns { allowed: true } or { allowed: false, reason: "..." }
    */
-  static async validateMargin(accountId, orderParams, balance, quoteProvider = null) {
-    const { requiredMargin } = this.calculateOrderMargin(orderParams, quoteProvider);
-    const { availableMargin, usedMargin } = await this.getAvailableMargin(accountId, balance, quoteProvider);
+  static async validateMargin(accountId, orderParams, balance, quoteProvider = null, account = null) {
+    const { requiredMargin } = this.calculateOrderMargin(orderParams, quoteProvider, account);
+    const { availableMargin, usedMargin } = await this.getAvailableMargin(accountId, balance, quoteProvider, account);
 
     if (requiredMargin > availableMargin) {
       return {
@@ -218,6 +266,37 @@ export class MarginService {
   }
 
   // ─── Internal Helpers ──────────────────────────────────────
+
+  /**
+   * Extract the effective leverage multiplier from an account's risk profile.
+   * Sources (priority order):
+   *   1. account.leverage_max (from instant/flash/2-step risk profile)
+   *   2. account.risk_profile?.leverage_max
+   *   3. account.challenge?.leverage_max
+   *   4. Default: 10 (standard prop-firm intraday leverage)
+   *
+   * For prop-firm accounts, typical values:
+   *   - 5x  → conservative (20% margin)
+   *   - 10x → standard prop-firm intraday (10% margin)
+   *   - 20x → aggressive intraday (5% margin)
+   *   - 50x → flash challenge (2% margin)
+   *   - Option BUY always uses premium-only regardless of this value.
+   *
+   * @param {object|null} account
+   * @returns {number} leverage multiplier (minimum 1)
+   */
+  static _getAccountLeverage(account) {
+    if (!account) return 10; // Default prop-firm leverage (10x = 10% margin)
+
+    const lev = account.leverage_max
+      || account.risk_profile?.leverage_max
+      || account.challenge?.leverage_max;
+
+    // If no leverage configured at all, use 10x as standard prop-firm default
+    if (!lev || lev <= 0) return 10;
+
+    return Math.max(1, Number(lev) || 10);
+  }
 
   static _getFOLotMargin(symbol, token) {
     // Check if it's an option (CE/PE in symbol)
@@ -263,6 +342,23 @@ export class MarginService {
     if (upper.includes('GBP')) return LOT_MARGINS['GBPINR'];
     if (upper.includes('JPY')) return LOT_MARGINS['JPYINR'];
     return 25000;
+  }
+
+  /**
+   * Determine if a symbol represents an option contract.
+   * Checks multiple patterns: "24200CE", "NIFTY25AUG24200CE", etc.
+   * Also checks orderParams.instrumentType if available.
+   */
+  static _isOptionSymbol(symbol, orderParams = {}) {
+    if (orderParams.instrumentType === 'OPTIDX' || orderParams.instrumentType === 'OPTSTK' || orderParams.instrumentType === 'OPTFUT') {
+      return true;
+    }
+    if (!symbol) return false;
+    // Match CE/PE at end (with or without digits before)
+    if (/\d+(CE|PE)$/i.test(symbol)) return true;
+    // Match patterns like "NIFTY 24200 CE" or "NIFTY24200CE"
+    if (/(CE|PE)\s*$/i.test(symbol)) return true;
+    return false;
   }
 
   static _getLotSize(symbol, segment) {
