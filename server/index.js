@@ -635,9 +635,9 @@ async function connectDhanFeed() {
 
     // MCX commodity tokens
     const mcxTokens = [
-      { securityId: '429604', segment: 'MCX_COMM', symbol: 'GOLD' },
-      { securityId: '429638', segment: 'MCX_COMM', symbol: 'SILVER' },
-      { securityId: '425475', segment: 'MCX_COMM', symbol: 'CRUDEOIL' },
+      { securityId: '483079', segment: 'MCX_COMM', symbol: 'GOLD' },
+      { securityId: '471725', segment: 'MCX_COMM', symbol: 'SILVER' },
+      { securityId: '560977', segment: 'MCX_COMM', symbol: 'CRUDEOIL' },
       { securityId: '431765', segment: 'MCX_COMM', symbol: 'NATURALGAS' },
       { securityId: '430596', segment: 'MCX_COMM', symbol: 'COPPER' },
       { securityId: '438629', segment: 'MCX_COMM', symbol: 'ALUMINIUM' },

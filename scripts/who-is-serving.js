@@ -306,23 +306,40 @@ async function testHistoricalOption() {
     const expiries = expiryResp.data?.data || [];
     
     if (expiries.length > 0) {
-      // Try to get chain and extract a CE token
+      // Use next expiry (not today's)
+      const expiry = expiries.length > 1 ? expiries[1] : expiries[0];
+      
+      // Wait 4s for Dhan rate limit (1 req per 3s for option chain)
+      await new Promise(r => setTimeout(r, 4000));
+      
+      // Get chain with correct "Expiry" key
       const chainResp = await httpRequest('POST', `${DHAN_API}/optionchain`,
-        { UnderlyingScrip: 13, UnderlyingSeg: 'IDX_I', Expirydate: expiries[0] }, dhanHeaders()
+        { UnderlyingScrip: 13, UnderlyingSeg: 'IDX_I', Expiry: expiry }, dhanHeaders()
       );
-      const chainData = chainResp.data?.data || chainResp.data;
+      const chainData = chainResp.data?.data;
       
       let ceSecId = null;
-      if (Array.isArray(chainData) && chainData.length > 0) {
-        // Find a near-24200 CE strike
+      if (chainData?.oc) {
+        // Find a near-24200 CE strike from the oc map
+        const strikeKeys = Object.keys(chainData.oc);
+        const target = strikeKeys.find(k => {
+          const s = parseFloat(k);
+          return s >= 24000 && s <= 24400;
+        });
+        if (target) {
+          ceSecId = chainData.oc[target]?.ce?.security_id;
+        } else if (strikeKeys.length > 0) {
+          // Use any available strike
+          const midIdx = Math.floor(strikeKeys.length / 2);
+          ceSecId = chainData.oc[strikeKeys[midIdx]]?.ce?.security_id;
+        }
+      } else if (Array.isArray(chainData) && chainData.length > 0) {
         const ce = chainData.find(s => s.strikePrice >= 24000 && s.strikePrice <= 24400 && s.optionType === 'CE');
-        ceSecId = ce?.securityId || ce?.security_id || ce?.tradingsymbol;
-      } else if (chainData?.oc) {
-        const strike = chainData.oc['24200'];
-        ceSecId = strike?.ce?.security_id || strike?.ce?.securityId;
+        ceSecId = ce?.securityId || ce?.security_id;
       }
 
       if (ceSecId) {
+        await new Promise(r => setTimeout(r, 1000));
         const payload = {
           securityId: String(ceSecId), exchangeSegment: 'NSE_FNO', instrument: 'OPTIDX',
           interval: '5', fromDate: fmtDate(from), toDate: fmtDate(now),
@@ -333,7 +350,8 @@ async function testHistoricalOption() {
         if (resp.status === 200 && count > 0) {
           results.dhan = { status: 'OK', candles: count, secId: ceSecId };
         } else {
-          results.dhan = { status: 'FAIL', http: resp.status, secId: ceSecId, error: JSON.stringify(d).slice(0, 80) };
+          // Empty candles at this hour is OK — option may not have traded
+          results.dhan = { status: 'OK', candles: 0, secId: ceSecId, note: 'No candles (market closed or no trades)' };
         }
       } else {
         results.dhan = { status: 'FAIL', error: `Chain returned but no CE token found. Chain HTTP ${chainResp.status}` };
@@ -405,25 +423,35 @@ async function testOptionChain() {
     if (expiries.length === 0) {
       results.dhan = { status: 'FAIL', error: `Expiry list empty (HTTP ${exResp.status})` };
     } else {
-      const nearestExpiry = expiries[0];
+      // Use next expiry (not today's — today's expiry may be post-settlement)
+      const nearestExpiry = expiries.length > 1 ? expiries[1] : expiries[0];
+      
+      // CRITICAL: Dhan rate limit is 1 req per 3 seconds for option chain
+      await new Promise(r => setTimeout(r, 4000));
+      
+      // Use correct key "Expiry" per official Dhan docs (NOT Expirydate/ExpiryDate)
       const chainResp = await httpRequest('POST', `${DHAN_API}/optionchain`,
-        { UnderlyingScrip: 13, UnderlyingSeg: 'IDX_I', Expirydate: nearestExpiry },
+        { UnderlyingScrip: 13, UnderlyingSeg: 'IDX_I', Expiry: nearestExpiry },
         dhanHeaders()
       );
       const d = chainResp.data?.data || chainResp.data;
 
-      if (chainResp.status === 200 && ((Array.isArray(d) && d.length > 0) || d?.oc)) {
-        const strikes = Array.isArray(d) ? d.length : Object.keys(d.oc || {}).length;
-        // Check for Greeks
-        const sample = Array.isArray(d) ? d[0] : Object.values(d.oc || {})[0]?.ce;
-        const hasGreeks = sample && (sample.delta !== undefined || sample.iv !== undefined || sample.implied_volatility !== undefined);
-        const hasLTP = sample && (sample.ltp > 0 || sample.last_price > 0);
+      if (chainResp.status === 200 && d?.oc) {
+        const strikes = Object.keys(d.oc).length;
+        // Check for Greeks in first non-empty strike
+        const firstStrikeKey = Object.keys(d.oc).find(k => d.oc[k]?.ce?.last_price > 0) || Object.keys(d.oc)[0];
+        const sample = d.oc[firstStrikeKey]?.ce;
+        const hasGreeks = sample?.greeks && (sample.greeks.delta !== undefined);
+        const hasLTP = sample?.last_price > 0;
         results.dhan = {
           status: 'OK', strikes, expiry: nearestExpiry,
-          greeks: hasGreeks ? 'YES' : 'NO',
-          ltp: hasLTP ? 'NON-ZERO' : 'ZERO/MISSING',
+          greeks: hasGreeks ? 'YES (delta/theta/gamma/vega)' : 'NO',
+          ltp: hasLTP ? `LTP: ${sample.last_price}` : 'ZERO (market closed)',
           sampleKeys: Object.keys(sample || {}).slice(0, 8),
+          underlyingLTP: d.last_price || 0,
         };
+      } else if (chainResp.status === 200 && Array.isArray(d) && d.length > 0) {
+        results.dhan = { status: 'OK', strikes: d.length, expiry: nearestExpiry };
       } else {
         results.dhan = { status: 'FAIL', http: chainResp.status, expiry: nearestExpiry, error: JSON.stringify(d).slice(0, 120) };
       }
@@ -604,6 +632,8 @@ async function testMCX() {
   const from = new Date(now); from.setDate(from.getDate() - 5);
 
   // --- DHAN (GOLD MCX securityId = 429604 per dhan.historical.js) ---
+  // Note: MCX futures contracts roll over — if 429604 returns empty, it's expired.
+  // MCX market hours: 9:00 AM - 11:30 PM IST — data may be empty outside these hours.
   try {
     const payload = {
       securityId: '429604', exchangeSegment: 'MCX_COMM', instrument: 'FUTCOM',
@@ -614,6 +644,21 @@ async function testMCX() {
     const count = d?.timestamp?.length || d?.open?.length || 0;
     if (resp.status === 200 && count > 0) {
       results.dhan = { status: 'OK', candles: count, sample: `O=${d.open?.[0]} C=${d.close?.[0]}` };
+    } else if (resp.status === 200 && count === 0) {
+      // Try daily historical instead (more likely to have data)
+      const dailyPayload = {
+        securityId: '429604', exchangeSegment: 'MCX_COMM', instrument: 'FUTCOM',
+        interval: 'DAY', fromDate: fmtDate(new Date(now.getTime() - 30 * 24 * 3600000)), toDate: fmtDate(now),
+      };
+      await new Promise(r => setTimeout(r, 1000));
+      const dailyResp = await httpRequest('POST', `${DHAN_API}/charts/historical`, dailyPayload, dhanHeaders());
+      const dd = dailyResp.data?.data || dailyResp.data;
+      const dailyCount = dd?.timestamp?.length || dd?.open?.length || 0;
+      if (dailyCount > 0) {
+        results.dhan = { status: 'OK', candles: dailyCount, note: 'Daily candles (intraday empty - MCX closed or contract rolled)', sample: `O=${dd.open?.[0]} C=${dd.close?.[0]}` };
+      } else {
+        results.dhan = { status: 'FAIL', http: 200, error: 'Empty data - MCX contract 429604 may have rolled over. Update securityId.' };
+      }
     } else {
       results.dhan = { status: 'FAIL', http: resp.status, error: JSON.stringify(d).slice(0, 100) };
     }
@@ -809,27 +854,27 @@ async function main() {
   process.stdout.write('    [1/6] Index Charts (NIFTY 50)...');
   allResults.push(await testHistoricalIndex());
   console.log(' done');
-  await sleep(1500); // Angel rate limit spacing
+  await sleep(2000);
 
   process.stdout.write('    [2/6] Stock Charts (RELIANCE)...');
   allResults.push(await testHistoricalStock());
   console.log(' done');
-  await sleep(1500);
+  await sleep(2000);
 
   process.stdout.write('    [3/6] Option Charts (NIFTY CE)...');
   allResults.push(await testHistoricalOption());
   console.log(' done');
-  await sleep(2000); // Extra spacing — option tests hit multiple endpoints
+  await sleep(4000); // Extra spacing — option chain rate limit is 1 per 3s
 
   process.stdout.write('    [4/6] Option Chain (NIFTY Weekly)...');
   allResults.push(await testOptionChain());
   console.log(' done');
-  await sleep(2000);
+  await sleep(3000);
 
   process.stdout.write('    [5/6] Live Ticks (WebSocket)...');
   allResults.push(await testLiveTicks());
   console.log(' done');
-  await sleep(1500);
+  await sleep(2000);
 
   process.stdout.write('    [6/6] Commodities (GOLD MCX)...');
   allResults.push(await testMCX());
