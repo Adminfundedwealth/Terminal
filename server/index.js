@@ -1,4 +1,4 @@
-﻿﻿﻿﻿/**
+﻿﻿﻿﻿﻿﻿/**
  * FUNDEDWEALTH TERMINAL â€” SERVER ENTRY POINT
  * 
  * Wires together all backend components:
@@ -447,7 +447,7 @@ async function startup() {
   // Wire LTP fallbacks into MarketDataEngine and OrderExecution
   const dhanAdapter = dataProviderSwitch.getDhanAdapter();
   if (dhanAdapter) dhanAdapter.setMarketDataEngine(marketDataEngine);
-  marketDataEngine.setLtpFallbacks(dhanAdapter, candleService);
+  // marketDataEngine.setLtpFallbacks(dhanAdapter, candleService); // DISABLED — causes 502
 
   // Pre-load Dhan scrip master in background (prevents 502 timeout on first MCX/CDS quote)
   if (dhanAdapter?.historical?._getScripMaster) {
@@ -521,7 +521,7 @@ async function startup() {
     console.log('â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');
 
     // 9. Connect Dhan WebSocket Feed (PRIMARY live market data) - fire and forget
-    connectDhanFeed().catch(e => console.error("[connectDhanFeed] Fatal error:", e.message));
+    // connectDhanFeed().catch(e => console.error("[connectDhanFeed] Fatal error:", e.message));
 
     // 9b. Connect Angel Feed (SECONDARY - broker adapter only, NOT live ticks)
     connectAngelFeedForBroker().catch(e => console.error("[connectAngelFeedForBroker] Error:", e.message));

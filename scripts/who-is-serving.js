@@ -631,12 +631,12 @@ async function testMCX() {
   const now = new Date();
   const from = new Date(now); from.setDate(from.getDate() - 5);
 
-  // --- DHAN (GOLD MCX securityId = 429604 per dhan.historical.js) ---
-  // Note: MCX futures contracts roll over — if 429604 returns empty, it's expired.
+  // --- DHAN (GOLD MCX securityId = 483079 — current active contract) ---
+  // Note: MCX futures contracts roll over — if this returns empty, contract has expired.
   // MCX market hours: 9:00 AM - 11:30 PM IST — data may be empty outside these hours.
   try {
     const payload = {
-      securityId: '429604', exchangeSegment: 'MCX_COMM', instrument: 'FUTCOM',
+      securityId: '483079', exchangeSegment: 'MCX_COMM', instrument: 'FUTCOM',
       interval: '5', fromDate: fmtDate(from), toDate: fmtDate(now),
     };
     const resp = await httpRequest('POST', `${DHAN_API}/charts/intraday`, payload, dhanHeaders());
@@ -647,7 +647,7 @@ async function testMCX() {
     } else if (resp.status === 200 && count === 0) {
       // Try daily historical instead (more likely to have data)
       const dailyPayload = {
-        securityId: '429604', exchangeSegment: 'MCX_COMM', instrument: 'FUTCOM',
+        securityId: '483079', exchangeSegment: 'MCX_COMM', instrument: 'FUTCOM',
         interval: 'DAY', fromDate: fmtDate(new Date(now.getTime() - 30 * 24 * 3600000)), toDate: fmtDate(now),
       };
       await new Promise(r => setTimeout(r, 1000));
