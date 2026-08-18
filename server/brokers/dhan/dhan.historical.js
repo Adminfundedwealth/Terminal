@@ -310,6 +310,10 @@ export class DhanHistoricalService {
       const lines = resp.data.split('\n');
       const header = lines[0].split(',');
 
+      // Detect column indices from header
+      const expiryCol = header.findIndex(h => h.trim().toUpperCase().includes('EXPIRY'));
+      const symbolNameCol = header.findIndex(h => h.trim().toUpperCase() === 'SM_SYMBOL_NAME');
+
       // Column indices: SEM_SEGMENT(1), SEM_SMST_SECURITY_ID(2), SEM_INSTRUMENT_NAME(3), SEM_TRADING_SYMBOL(5)
       const byId = new Map();      // securityId → { securityId, segment, instrument }
       const bySymbol = new Map();  // "SYMBOL:SEGMENT" → { securityId, segment, instrument }
@@ -327,7 +331,9 @@ export class DhanHistoricalService {
         const secId = f[2]?.trim();
         const inst = f[3]?.trim();
         const symbol = f[5]?.trim();
-        const expiry = f.length > 10 ? f[10]?.trim() : null; // SEM_EXPIRY_DATE column
+        const expiry = expiryCol >= 0 && f.length > expiryCol ? f[expiryCol]?.trim() : null;
+        // Also try to get the underlying symbol name (SM_SYMBOL_NAME)
+        const symName = symbolNameCol >= 0 && f.length > symbolNameCol ? f[symbolNameCol]?.trim() : null;
 
         if (!secId || !seg) continue;
 
@@ -351,7 +357,7 @@ export class DhanHistoricalService {
 
         // Store MCX/CDS futures for active contract resolution
         if ((seg === 'M' || seg === 'C') && (inst === 'FUTCOM' || inst === 'FUTCUR' || inst === 'FUTIDX')) {
-          futuresEntries.push({ securityId: secId, segment: dhanSeg, symbol, instrument: inst, expiry });
+          futuresEntries.push({ securityId: secId, segment: dhanSeg, symbol: symName || symbol, tradingSymbol: symbol, instrument: inst, expiry });
         }
       }
 
@@ -369,6 +375,45 @@ export class DhanHistoricalService {
       console.error('[DhanHist] Scrip master fetch error:', err.message);
       return null;
     }
+  }
+
+  /**
+   * Get the nearest active expiry contract for a commodity/currency symbol.
+   * Returns the Dhan security ID for the front-month contract.
+   * @param {string} symbol - e.g. 'GOLD', 'CRUDEOIL', 'USDINR'
+   * @param {string} segment - 'MCX_COMM' or 'NSE_CURRENCY'
+   * @returns {string|null} security ID or null
+   */
+  getActiveContract(symbol, segment) {
+    if (!this._scripMaster?.futuresEntries) return null;
+
+    const now = new Date();
+    const target = symbol.toUpperCase();
+    const matches = this._scripMaster.futuresEntries.filter(item => {
+      if (item.segment !== segment) return false;
+      // Match by symbol name or trading symbol
+      const sym = (item.symbol || '').toUpperCase();
+      const tsym = (item.tradingSymbol || '').toUpperCase();
+      if (sym !== target && !tsym.startsWith(target)) return false;
+      // Must have future expiry (or no expiry = always valid)
+      if (!item.expiry) return true;
+      try {
+        const expDate = new Date(item.expiry);
+        return !isNaN(expDate.getTime()) && expDate >= now;
+      } catch { return false; }
+    });
+
+    if (matches.length === 0) return null;
+
+    // Sort by earliest expiry (nearest month = front month contract)
+    matches.sort((a, b) => {
+      const da = a.expiry ? new Date(a.expiry).getTime() : Infinity;
+      const db = b.expiry ? new Date(b.expiry).getTime() : Infinity;
+      return da - db;
+    });
+
+    console.log(`[DhanHist] Active contract for ${symbol}/${segment}: ${matches[0].securityId} (expiry: ${matches[0].expiry || 'none'})`);
+    return matches[0].securityId;
   }
 
   // (CSV parsing handled inline in _loadScripMaster)

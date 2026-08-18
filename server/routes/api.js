@@ -708,15 +708,18 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
         token = mapping.securityId;
         exchange = mapping.segment;
       } else if (mapping.scripSymbol && dataProviderSwitch) {
-        // Dynamic resolution via scrip master for MCX/CDS
+        // Dynamic resolution via getActiveContract for MCX/CDS
         try {
           const dhan = dataProviderSwitch.getDhanAdapter();
-          if (dhan?.historical?._getScripMaster) {
-            const master = await dhan.historical._getScripMaster();
-            if (master?.bySymbol) {
-              const dhanSeg = mapping.segment === 'NSE_CURRENCY' ? 'CUR' : mapping.segment;
-              const entry = master.bySymbol.get(`${mapping.scripSymbol}:${dhanSeg}`) ||
-                           master.bySymbol.get(`${mapping.scripSymbol}:${mapping.segment}`);
+          if (dhan?.historical) {
+            const activeId = dhan.historical.getActiveContract(mapping.scripSymbol, mapping.segment);
+            if (activeId) {
+              token = activeId;
+              exchange = mapping.segment;
+            } else if (dhan.historical._scripMaster?.bySymbol) {
+              const dhanSeg = mapping.segment === 'CUR' ? 'CUR' : mapping.segment;
+              const entry = dhan.historical._scripMaster.bySymbol.get(`${mapping.scripSymbol}:${dhanSeg}`) ||
+                           dhan.historical._scripMaster.bySymbol.get(`${mapping.scripSymbol}:${mapping.segment}`);
               if (entry?.securityId) {
                 token = entry.securityId;
                 exchange = mapping.segment;
@@ -724,7 +727,7 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
             }
           }
         } catch (e) {
-          console.warn(`[History] Scrip resolution failed for ${token}: ${e.message}`);
+          console.warn(`[History] Active contract resolution failed for ${token}: ${e.message}`);
         }
       }
     }
@@ -872,17 +875,25 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
           return _parseDhanQuote(result, mapping.securityId, dhanSeg);
         }
 
-        // Path B: Dynamic resolution via pre-loaded scrip master (MCX/CDS)
-        if (mapping.scripSymbol && dhan.historical?._scripMaster) {
-          const master = dhan.historical._scripMaster; // Already loaded — no await
-          if (!master?.bySymbol) return null;
-          const dhanSeg = mapping.segment === 'NSE_CURRENCY' ? 'CUR' : mapping.segment;
-          const entry = master.bySymbol.get(`${mapping.scripSymbol}:${dhanSeg}`) ||
-                       master.bySymbol.get(`${mapping.scripSymbol}:${mapping.segment}`) ||
-                       master.bySymbol.get(`${mapping.scripSymbol}:E`);
-          if (!entry?.securityId) return null;
-          const result = await dhan.getQuote(entry.securityId, dhanSeg);
-          return _parseDhanQuote(result, entry.securityId, dhanSeg);
+        // Path B: Dynamic resolution via getActiveContract (MCX/CDS nearest expiry)
+        if (mapping.scripSymbol && dhan.historical) {
+          const dhanSeg = mapping.segment === 'CUR' ? 'CUR' : mapping.segment;
+          // Try getActiveContract first (uses pre-loaded futures entries)
+          const activeId = dhan.historical.getActiveContract(mapping.scripSymbol, mapping.segment);
+          if (activeId) {
+            const result = await dhan.getQuote(activeId, dhanSeg);
+            return _parseDhanQuote(result, activeId, dhanSeg);
+          }
+          // Fallback: try scrip master bySymbol map
+          if (dhan.historical._scripMaster?.bySymbol) {
+            const entry = dhan.historical._scripMaster.bySymbol.get(`${mapping.scripSymbol}:${dhanSeg}`) ||
+                         dhan.historical._scripMaster.bySymbol.get(`${mapping.scripSymbol}:${mapping.segment}`) ||
+                         dhan.historical._scripMaster.bySymbol.get(`${mapping.scripSymbol}:E`);
+            if (entry?.securityId) {
+              const result = await dhan.getQuote(entry.securityId, dhanSeg);
+              return _parseDhanQuote(result, entry.securityId, dhanSeg);
+            }
+          }
         }
         return null;
       };
