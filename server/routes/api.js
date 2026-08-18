@@ -671,24 +671,45 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
       'ICICI_FUT': { securityId: '4963', segment: 'NSE_EQ', spotToken: '4963' },
       'TCS_FUT': { securityId: '11536', segment: 'NSE_EQ', spotToken: '11536' },
       'INFY_FUT': { securityId: '1594', segment: 'NSE_EQ', spotToken: '1594' },
-      'GOLD_F': { securityId: '429604', segment: 'MCX_COMM', spotToken: null },
-      'GOLDM_F': { securityId: '429604', segment: 'MCX_COMM', spotToken: null },
-      'SILVER_F': { securityId: '429605', segment: 'MCX_COMM', spotToken: null },
-      'SILVERM_F': { securityId: '429605', segment: 'MCX_COMM', spotToken: null },
-      'CRUDE_F': { securityId: '429606', segment: 'MCX_COMM', spotToken: null },
-      'NATGAS_F': { securityId: '429607', segment: 'MCX_COMM', spotToken: null },
-      'COPPER_F': { securityId: '429608', segment: 'MCX_COMM', spotToken: null },
-      'USDINR_F': { securityId: '2', segment: 'NSE_CURRENCY', spotToken: null },
-      'EURINR_F': { securityId: '3', segment: 'NSE_CURRENCY', spotToken: null },
-      'GBPINR_F': { securityId: '4', segment: 'NSE_CURRENCY', spotToken: null },
-      'JPYINR_F': { securityId: '5', segment: 'NSE_CURRENCY', spotToken: null },
+      'GOLD_F': { securityId: null, segment: 'MCX_COMM', scripSymbol: 'GOLD' },
+      'GOLDM_F': { securityId: null, segment: 'MCX_COMM', scripSymbol: 'GOLDM' },
+      'SILVER_F': { securityId: null, segment: 'MCX_COMM', scripSymbol: 'SILVER' },
+      'SILVERM_F': { securityId: null, segment: 'MCX_COMM', scripSymbol: 'SILVERM' },
+      'CRUDE_F': { securityId: null, segment: 'MCX_COMM', scripSymbol: 'CRUDEOIL' },
+      'NATGAS_F': { securityId: null, segment: 'MCX_COMM', scripSymbol: 'NATURALGAS' },
+      'COPPER_F': { securityId: null, segment: 'MCX_COMM', scripSymbol: 'COPPER' },
+      'USDINR_F': { securityId: null, segment: 'NSE_CURRENCY', scripSymbol: 'USDINR' },
+      'EURINR_F': { securityId: null, segment: 'NSE_CURRENCY', scripSymbol: 'EURINR' },
+      'GBPINR_F': { securityId: null, segment: 'NSE_CURRENCY', scripSymbol: 'GBPINR' },
+      'JPYINR_F': { securityId: null, segment: 'NSE_CURRENCY', scripSymbol: 'JPYINR' },
     };
 
     const mapping = PLACEHOLDER_TO_DHAN[token];
     if (mapping) {
-      // Route directly to Dhan with correct security ID and segment
-      token = mapping.securityId;
-      exchange = mapping.segment;
+      if (mapping.securityId) {
+        // Static resolution (Index/Stock futures → use securityId directly)
+        token = mapping.securityId;
+        exchange = mapping.segment;
+      } else if (mapping.scripSymbol && dataProviderSwitch) {
+        // Dynamic resolution via scrip master for MCX/CDS
+        try {
+          const dhan = dataProviderSwitch.getDhanAdapter();
+          if (dhan?.historical?._getScripMaster) {
+            const master = await dhan.historical._getScripMaster();
+            if (master?.bySymbol) {
+              const dhanSeg = mapping.segment === 'NSE_CURRENCY' ? 'CUR' : mapping.segment;
+              const entry = master.bySymbol.get(`${mapping.scripSymbol}:${dhanSeg}`) ||
+                           master.bySymbol.get(`${mapping.scripSymbol}:${mapping.segment}`);
+              if (entry?.securityId) {
+                token = entry.securityId;
+                exchange = mapping.segment;
+              }
+            }
+          }
+        } catch (e) {
+          console.warn(`[History] Scrip resolution failed for ${token}: ${e.message}`);
+        }
+      }
     }
 
     // Use DataProviderSwitch for historical data (routes to Dhan or Angel One with failover)
@@ -783,19 +804,19 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
       'ICICI_FUT': { securityId: '4963', segment: 'NSE_EQ', spotToken: '4963' },
       'TCS_FUT': { securityId: '11536', segment: 'NSE_EQ', spotToken: '11536' },
       'INFY_FUT': { securityId: '1594', segment: 'NSE_EQ', spotToken: '1594' },
-      // MCX Commodities (MCX_COMM)
-      'GOLD_F': { securityId: '429604', segment: 'MCX_COMM', spotToken: null },
-      'GOLDM_F': { securityId: '429604', segment: 'MCX_COMM', spotToken: null },
-      'SILVER_F': { securityId: '429605', segment: 'MCX_COMM', spotToken: null },
-      'SILVERM_F': { securityId: '429605', segment: 'MCX_COMM', spotToken: null },
-      'CRUDE_F': { securityId: '429606', segment: 'MCX_COMM', spotToken: null },
-      'NATGAS_F': { securityId: '429607', segment: 'MCX_COMM', spotToken: null },
-      'COPPER_F': { securityId: '429608', segment: 'MCX_COMM', spotToken: null },
-      // CDS Currencies (NSE_CURRENCY)
-      'USDINR_F': { securityId: '2', segment: 'NSE_CURRENCY', spotToken: null },
-      'EURINR_F': { securityId: '3', segment: 'NSE_CURRENCY', spotToken: null },
-      'GBPINR_F': { securityId: '4', segment: 'NSE_CURRENCY', spotToken: null },
-      'JPYINR_F': { securityId: '5', segment: 'NSE_CURRENCY', spotToken: null },
+      // MCX Commodities (MCX_COMM) — dynamic resolution via scrip master preferred
+      'GOLD_F': { securityId: null, segment: 'MCX_COMM', spotToken: null, scripSymbol: 'GOLD' },
+      'GOLDM_F': { securityId: null, segment: 'MCX_COMM', spotToken: null, scripSymbol: 'GOLDM' },
+      'SILVER_F': { securityId: null, segment: 'MCX_COMM', spotToken: null, scripSymbol: 'SILVER' },
+      'SILVERM_F': { securityId: null, segment: 'MCX_COMM', spotToken: null, scripSymbol: 'SILVERM' },
+      'CRUDE_F': { securityId: null, segment: 'MCX_COMM', spotToken: null, scripSymbol: 'CRUDEOIL' },
+      'NATGAS_F': { securityId: null, segment: 'MCX_COMM', spotToken: null, scripSymbol: 'NATURALGAS' },
+      'COPPER_F': { securityId: null, segment: 'MCX_COMM', spotToken: null, scripSymbol: 'COPPER' },
+      // CDS Currencies (NSE_CURRENCY) — dynamic resolution
+      'USDINR_F': { securityId: null, segment: 'NSE_CURRENCY', spotToken: null, scripSymbol: 'USDINR' },
+      'EURINR_F': { securityId: null, segment: 'NSE_CURRENCY', spotToken: null, scripSymbol: 'EURINR' },
+      'GBPINR_F': { securityId: null, segment: 'NSE_CURRENCY', spotToken: null, scripSymbol: 'GBPINR' },
+      'JPYINR_F': { securityId: null, segment: 'NSE_CURRENCY', spotToken: null, scripSymbol: 'JPYINR' },
     };
 
     const mapping = PLACEHOLDER_TO_DHAN[token];
@@ -803,25 +824,29 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
       // Try spot token from Angel feed first (instant)
       if (mapping.spotToken) {
         const spotQuote = marketDataEngine.getQuote(mapping.spotToken);
-        if (spotQuote && spotQuote.ltp > 0) return res.json(spotQuote);
+        if (spotQuote && spotQuote.ltp > 0) return res.json({ ...spotQuote, token });
       }
-      // Try Dhan REST API with native security ID
-      if (dataProviderSwitch) {
+      // Try Dhan REST API with native security ID (with timeout protection)
+      if (dataProviderSwitch && mapping.securityId) {
         try {
           const dhan = dataProviderSwitch.getDhanAdapter();
           if (dhan && dhan.isConnected) {
-            const result = await dhan.getQuote(mapping.securityId, mapping.segment);
-            // Dhan marketfeed/quote returns nested data by segment
+            // Use correct Dhan segment key for API call
+            const dhanSegment = mapping.segment === 'NSE_CURRENCY' ? 'CUR' : mapping.segment;
+            const timeoutRace = Promise.race([
+              dhan.getQuote(mapping.securityId, dhanSegment),
+              new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000)),
+            ]);
+            const result = await timeoutRace;
+            // Parse nested Dhan response
             let ltp = null;
             if (result) {
-              // Could be { ltp } directly or nested { [segment]: { [secId]: { ltp } } }
               if (result.ltp) ltp = result.ltp;
               else if (result.last_price) ltp = result.last_price;
               else if (typeof result === 'object') {
-                // Try extracting from nested response
-                const segData = result[mapping.segment] || Object.values(result)[0];
+                const segData = result[dhanSegment] || Object.values(result)[0];
                 if (segData) {
-                  const entry = segData[mapping.securityId] || Object.values(segData)[0];
+                  const entry = segData[mapping.securityId] || segData[parseInt(mapping.securityId)] || Object.values(segData)[0];
                   if (entry?.ltp) ltp = entry.ltp;
                   else if (entry?.last_price) ltp = entry.last_price;
                 }
@@ -831,7 +856,50 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
               return res.json({ token, ltp, exchange: mapping.segment, timestamp: Date.now(), symbol: token });
             }
           }
-        } catch (_) {}
+        } catch (e) {
+          // Log but don't crash — fall through to next fallback
+          console.warn(`[Quote] Dhan MCX/CDS quote failed for ${token}: ${e.message}`);
+        }
+      }
+
+      // Try dynamic scrip master resolution for MCX/CDS (securityId is null)
+      if (!mapping.securityId && mapping.scripSymbol && dataProviderSwitch) {
+        try {
+          const dhan = dataProviderSwitch.getDhanAdapter();
+          if (dhan?.historical?._getScripMaster) {
+            const master = await Promise.race([
+              dhan.historical._getScripMaster(),
+              new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000)),
+            ]);
+            if (master?.bySymbol) {
+              const dhanSeg = mapping.segment === 'NSE_CURRENCY' ? 'CUR' : mapping.segment;
+              const entry = master.bySymbol.get(`${mapping.scripSymbol}:${dhanSeg}`) || 
+                           master.bySymbol.get(`${mapping.scripSymbol}:${mapping.segment}`);
+              if (entry?.securityId) {
+                const quoteResult = await Promise.race([
+                  dhan.getQuote(entry.securityId, dhanSeg),
+                  new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000)),
+                ]);
+                let ltp = null;
+                if (quoteResult?.ltp) ltp = quoteResult.ltp;
+                else if (quoteResult?.last_price) ltp = quoteResult.last_price;
+                else if (typeof quoteResult === 'object') {
+                  const segData = quoteResult[dhanSeg] || Object.values(quoteResult)[0];
+                  if (segData) {
+                    const qEntry = segData[entry.securityId] || segData[parseInt(entry.securityId)] || Object.values(segData)[0];
+                    if (qEntry?.ltp) ltp = qEntry.ltp;
+                    else if (qEntry?.last_price) ltp = qEntry.last_price;
+                  }
+                }
+                if (ltp && Number.isFinite(ltp) && ltp > 0) {
+                  return res.json({ token, ltp, exchange: mapping.segment, timestamp: Date.now(), symbol: mapping.scripSymbol });
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.warn(`[Quote] Dynamic scrip resolution failed for ${token}: ${e.message}`);
+        }
       }
       // Final fallback: use getLivePrice on the spot token
       if (mapping.spotToken && marketDataEngine.getLivePrice) {
