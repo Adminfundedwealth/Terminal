@@ -895,12 +895,12 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
     }
   });
 
-  // Data provider switch status (Dhan/Angel failover)
+  // Data provider switch status — FULL DIAGNOSTICS
   router.get('/provider/status', (req, res) => {
     if (dataProviderSwitch) {
       res.json(dataProviderSwitch.getStatus());
     } else {
-      res.json({ activeProvider: 'ANGELONE', dhanReady: false, failoverActive: false });
+      res.json({ activeProvider: 'ANGELONE', dhanReady: false, error: 'DataProviderSwitch not initialized' });
     }
   });
 

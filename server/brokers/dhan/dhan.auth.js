@@ -91,6 +91,7 @@ export class DhanAuthService extends EventEmitter {
       'access-token': this.accessToken,
       'client-id': this.clientId,
       'dhan-client-id': this.clientId,
+      'dhanClientId': this.clientId,
     };
   }
 
