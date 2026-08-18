@@ -275,7 +275,7 @@ export class OrderExecutionService {
       // For MARKET orders, assume immediate fill at LTP (broker returns quickly)
       // For LIMIT/SL orders, set to OPEN (awaiting fill)
       if (orderParams.orderType === 'MARKET') {
-        return await this._handleMarketFill(accountId, orderId, orderParams, brokerOrderId, brokerProvider, latencyMs);
+        return await this._handleMarketFill(accountId, orderId, orderParams, brokerOrderId, brokerProvider, latencyMs, account);
       } else {
         // LIMIT, SL, SL-M → mark as OPEN
         try {
@@ -323,194 +323,157 @@ export class OrderExecutionService {
   }
 
   /**
-   * Handle market order fill — assume immediate execution.
+   * Handle market order fill — INSTANT execution (<50ms).
+   * Uses synchronous cache LTP only. No blocking network calls in the hot path.
+   * DB writes happen in parallel AFTER the position event is emitted.
    */
-  async _handleMarketFill(accountId, orderId, orderParams, brokerOrderId, brokerProvider, latencyMs) {
-    // ── Fill price safety guard ──────────────────────────────────────────────
-    // Priority: live LTP > Dhan LTP fetch > last candle close > order price
+  async _handleMarketFill(accountId, orderId, orderParams, brokerOrderId, brokerProvider, latencyMs, account = null) {
+    // ── Fill price: SYNCHRONOUS cache-only lookup (zero network latency) ──
+    // Priority: live LTP cache > explicit order price
     const quote = this.marketDataEngine.getQuote(orderParams.token);
     const rawLtp = quote?.ltp;
-    let validLtp = (rawLtp && Number.isFinite(rawLtp) && rawLtp > 0) ? rawLtp : null;
+    let fillPrice = (rawLtp && Number.isFinite(rawLtp) && rawLtp > 0) ? rawLtp : null;
 
-    // Use universal getLivePrice if direct cache miss
-    if (!validLtp && this.marketDataEngine.getLivePrice) {
-      try {
-        validLtp = await this.marketDataEngine.getLivePrice(orderParams.token, orderParams.segment);
-      } catch (_) {}
+    // Fallback: use order price (from option chain LTP at order-creation time)
+    if (!fillPrice && orderParams.price > 0) {
+      fillPrice = orderParams.price;
     }
 
-    // Fallback (Paper mode): For option orders with synthetic/placeholder tokens
-    // (e.g. "NIFTY_24300_PE") that don't receive live feed ticks, accept the explicit
-    // order price as fill price. This allows paper mode execution when the option chain
-    // provided an LTP at order-creation time which was stored as orderParams.price.
-    if (!validLtp && orderParams.price > 0) {
-      const { ExecutionMode: EMFallback } = await import('./executionMode.js').catch(() => ({ ExecutionMode: { isPaper: false } }));
-      if (EMFallback.isPaper) {
-        validLtp = orderParams.price;
-        console.log(`[OrderExecution] Paper mode LTP fallback from order price: ${orderParams.symbol} = ${validLtp}`);
+    // Last resort: synchronous depth midpoint (no network)
+    if (!fillPrice) {
+      const depth = this.marketDataEngine.depthCache?.get(orderParams.token);
+      if (depth?.bids?.[0]?.price && depth?.asks?.[0]?.price) {
+        fillPrice = (depth.bids[0].price + depth.asks[0].price) / 2;
       }
     }
 
-    // Fallback: explicit order price (for LIMIT orders converted to market)
-    const candidatePrice = validLtp ?? (orderParams.price > 0 ? orderParams.price : null);
-
-    if (!candidatePrice) {
-      // ALL fallbacks exhausted — reject order rather than record at price 0
+    if (!fillPrice || fillPrice <= 0) {
+      // ALL synchronous fallbacks exhausted — reject
       const reason = 'Market data unavailable — LTP is zero or missing. Order not executed. Please retry.';
       console.error(`[OrderExecution] REJECTED fill for order ${orderId} (${orderParams.symbol}): ${reason}`);
-      try {
-        await orderRepo.markRejected(orderId, reason);
-      } catch (e) { /* best effort */ }
+      try { await orderRepo.markRejected(orderId, reason); } catch (_) {}
 
       eventBus.publish('order.updated', {
-        orderId,
-        status: 'REJECTED',
-        rejectReason: reason,
-        symbol: orderParams.symbol,
-        token: orderParams.token,
-        segment: orderParams.segment,
-        side: orderParams.side,
-        brokerOrderId,
-        brokerProvider,
+        orderId, status: 'REJECTED', rejectReason: reason,
+        symbol: orderParams.symbol, token: orderParams.token,
+        segment: orderParams.segment, side: orderParams.side,
+        brokerOrderId, brokerProvider,
       }, { accountId });
 
       return { orderId, status: 'REJECTED', message: reason };
     }
 
-    const fillPrice = candidatePrice;
     const filledQty = orderParams.qty;
 
-    // ── Step 4: Mark Order as FILLED ─────────────────────────
-    try {
-      await orderRepo.markFilled(orderId, filledQty, fillPrice, brokerOrderId);
-    } catch (dbErr) {
-      // If tables don't exist, continue — the order was tracked in-memory
-      if (!dbErr.message?.includes('schema cache')) {
-        console.error(`[OrderExecution] Failed to mark order filled:`, dbErr.message);
-      }
-    }
-
+    // ── OPTIMISTIC: Emit position + order events IMMEDIATELY ──
+    // This reaches the UI in <5ms via EventBridge → Socket.IO.
+    // DB persistence happens in parallel afterwards.
     eventBus.publish('order.updated', {
-      orderId,
-      status: 'FILLED',
-      symbol: orderParams.symbol,
-      token: orderParams.token,
-      segment: orderParams.segment,
-      side: orderParams.side,
-      filledQty,
-      avgPrice: fillPrice,
-      brokerOrderId,
-      brokerProvider,
-      latencyMs,
+      orderId, status: 'FILLED',
+      symbol: orderParams.symbol, token: orderParams.token,
+      segment: orderParams.segment, side: orderParams.side,
+      filledQty, avgPrice: fillPrice,
+      brokerOrderId, brokerProvider, latencyMs,
       qty: orderParams.qty,
     }, { accountId });
 
-    // ── Step 5: Update Position ──────────────────────────────
-    try {
-      await positionRepo.upsertPosition(accountId, {
-        symbol: orderParams.symbol,
-        token: orderParams.token,
-        segment: orderParams.segment,
-        exchange: orderParams.exchange || orderParams.segment,
-        productType: orderParams.productType,
-        side: orderParams.side,
-        qty: filledQty,
-        price: fillPrice,
-      });
-    } catch (posErr) {
-      // Non-blocking — position tracking may fail if tables don't exist
-      if (!posErr.message?.includes('schema cache')) {
-        console.error(`[OrderExecution] Position update failed for order ${orderId}:`, posErr.message);
-      }
-    }
+    // Emit position update optimistically (before DB write)
+    eventBus.publish('position.updated', {
+      symbol: orderParams.symbol,
+      token: orderParams.token,
+      segment: orderParams.segment,
+      exchange: orderParams.exchange || orderParams.segment,
+      productType: orderParams.productType,
+      side: orderParams.side,
+      qty: filledQty,
+      avgPrice: fillPrice,
+      ltp: fillPrice,
+      pnl: 0,
+    }, { accountId });
 
-    // ── Step 5b: Flash 24h timer — record first OPENING position ────────
-    // For Flash accounts only.
-    // The timer must start ONLY when the trader establishes their first
-    // open position — NOT on closing/reducing fills.
-    //
-    // We determine "opening" by checking whether the position is still open
-    // and has a non-zero qty AFTER the upsert in Step 5. If the fill resulted
-    // in qty=0 (full close) or reduced an existing position (partial close),
-    // it is a closing/reducing fill — timer must NOT start.
-    //
-    // Additionally the timer must not start if first_position_at is already
-    // set (idempotent guard is also inside recordFirstPosition, but checking
-    // here avoids the DB round-trip entirely for subsequent fills).
-    if (FlashRiskProfileService.isFlashAccount(account)) {
+    // Emit trade event optimistically
+    eventBus.publish('trade.executed', {
+      orderId, symbol: orderParams.symbol, token: orderParams.token,
+      segment: orderParams.segment, side: orderParams.side,
+      qty: filledQty, price: fillPrice,
+      executedAt: new Date().toISOString(),
+    }, { accountId });
+
+    // ── NON-BLOCKING: Persist to DB in parallel (fire-and-forget) ──
+    // These writes happen AFTER the UI has already updated.
+    const persistPromises = [];
+
+    // Mark order as FILLED
+    persistPromises.push(
+      orderRepo.markFilled(orderId, filledQty, fillPrice, brokerOrderId)
+        .catch(err => { if (!err.message?.includes('schema cache')) console.error(`[OrderExecution] DB order fill write failed:`, err.message); })
+    );
+
+    // Upsert position
+    persistPromises.push(
+      positionRepo.upsertPosition(accountId, {
+        symbol: orderParams.symbol, token: orderParams.token,
+        segment: orderParams.segment, exchange: orderParams.exchange || orderParams.segment,
+        productType: orderParams.productType, side: orderParams.side,
+        qty: filledQty, price: fillPrice,
+      }).catch(err => { if (!err.message?.includes('schema cache')) console.error(`[OrderExecution] DB position write failed:`, err.message); })
+    );
+
+    // Record trade
+    persistPromises.push(
+      tradeRepo.recordTrade(accountId, orderId, {
+        symbol: orderParams.symbol, token: orderParams.token,
+        segment: orderParams.segment, exchange: orderParams.exchange || orderParams.segment,
+        side: orderParams.side, qty: filledQty, price: fillPrice,
+      }).catch(err => { if (!err.message?.includes('schema cache')) console.error(`[OrderExecution] DB trade write failed:`, err.message); })
+    );
+
+    // Run all DB writes in parallel — don't block the response
+    Promise.all(persistPromises).then(() => {
+      // Post-trade risk check (non-blocking, after persistence)
+      if (account) {
+        this._postTradeRiskCheck(accountId, orderParams, account).catch(() => {});
+      }
+    }).catch(() => {});
+
+    // Flash 24h timer (non-blocking)
+    if (account && FlashRiskProfileService.isFlashAccount(account)) {
       const challengeId = account.challenge_id || account.challenge?.id;
-      // Only proceed if this was an opening order (not a close order)
       if (challengeId && !orderParams.isCloseOrder) {
-        // Check whether the position is now open and non-zero after the fill.
-        // An opening fill results in is_open=true, qty>0.
-        // A closing/reducing fill results in qty=0 or reduced qty.
-        // We verify by re-reading the position from the repo.
-        (async () => {
-          try {
-            const posAfter = await positionRepo.findOpenPosition(
-              accountId, orderParams.token, orderParams.productType
-            );
-            // posAfter is non-null with qty>0 only if we have an open position
-            const isOpeningFill = posAfter && posAfter.qty > 0;
-            if (isOpeningFill) {
-              await FlashRiskProfileService.recordFirstPosition(challengeId);
+        positionRepo.findOpenPosition(accountId, orderParams.token, orderParams.productType)
+          .then(posAfter => {
+            if (posAfter && posAfter.qty > 0) {
+              FlashRiskProfileService.recordFirstPosition(challengeId).catch(() => {});
             }
-          } catch (e) {
-            if (!e.message?.includes('schema cache')) {
-              console.error('[OrderExecution] Flash timer check failed:', e.message);
-            }
-          }
-        })();
-      }
-    }
-
-    // ── Step 6: Record Trade ─────────────────────────────────
-    try {
-      await tradeRepo.recordTrade(accountId, orderId, {
-        symbol: orderParams.symbol,
-        token: orderParams.token,
-        segment: orderParams.segment,
-        exchange: orderParams.exchange || orderParams.segment,
-        side: orderParams.side,
-        qty: filledQty,
-        price: fillPrice,
-      });
-    } catch (tradeErr) {
-      // Non-blocking — trade recording may fail if tables don't exist
-      if (!tradeErr.message?.includes('schema cache')) {
-        console.error(`[OrderExecution] Trade record failed for order ${orderId}:`, tradeErr.message);
-      }
-    }
-
-    // ── Step 7: Post-Trade Risk Check ────────────────────────
-    try {
-      // Safe quoteProvider: returns null for invalid/missing LTP, never 0
-      const quoteProvider = (token) => {
-        const q = this.marketDataEngine.getQuote(token);
-        const ltp = q?.ltp;
-        if (!ltp || !Number.isFinite(ltp) || ltp <= 0) return null;
-        return ltp;
-      };
-
-      // ── Flash accounts use FlashRiskEngine; all others use RiskEngine ──
-      let riskResult;
-      if (FlashRiskProfileService.isFlashAccount(account)) {
-        riskResult = await FlashRiskEngine.postTradeCheck(accountId, quoteProvider, account);
-      } else {
-        riskResult = await RiskEngine.postTradeCheck(accountId, quoteProvider);
-      }
-
-      if (riskResult.status === 'locked' || riskResult.status === 'breached' || riskResult.status === 'expired') {
-        console.warn(`[OrderExecution] Post-trade risk: ${riskResult.status} — ${riskResult.reason}`);
-      }
-    } catch (riskErr) {
-      // Non-blocking — if tables don't exist, skip post-trade check
-      if (!riskErr.message?.includes('schema cache')) {
-        console.error(`[OrderExecution] Post-trade risk check failed:`, riskErr.message);
+          }).catch(() => {});
       }
     }
 
     return { orderId, status: 'FILLED', brokerOrderId, avgPrice: fillPrice, filledQty };
+  }
+
+  /**
+   * Post-trade risk check — runs after DB persistence completes.
+   * Non-blocking, fire-and-forget.
+   */
+  async _postTradeRiskCheck(accountId, orderParams, account) {
+    const quoteProvider = (token) => {
+      const q = this.marketDataEngine.getQuote(token);
+      const ltp = q?.ltp;
+      if (!ltp || !Number.isFinite(ltp) || ltp <= 0) return null;
+      return ltp;
+    };
+
+    let riskResult;
+    if (FlashRiskProfileService.isFlashAccount(account)) {
+      riskResult = await FlashRiskEngine.postTradeCheck(accountId, quoteProvider, account);
+    } else {
+      riskResult = await RiskEngine.postTradeCheck(accountId, quoteProvider);
+    }
+
+    if (riskResult.status === 'locked' || riskResult.status === 'breached' || riskResult.status === 'expired') {
+      console.warn(`[OrderExecution] Post-trade risk: ${riskResult.status} — ${riskResult.reason}`);
+    }
   }
 
   /**
