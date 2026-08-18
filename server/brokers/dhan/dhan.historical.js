@@ -316,6 +316,9 @@ export class DhanHistoricalService {
 
       const segMap = { 'E': 'NSE_EQ', 'D': 'NSE_FNO', 'M': 'MCX_COMM', 'C': 'NSE_CURRENCY', 'BE': 'BSE_EQ' };
 
+      // Store raw futures entries for MCX/CDS active contract resolution
+      const futuresEntries = []; // { securityId, segment, symbol, instrument, expiry }
+
       for (let i = 1; i < lines.length; i++) {
         const f = lines[i].split(',');
         if (f.length < 6) continue;
@@ -324,6 +327,7 @@ export class DhanHistoricalService {
         const secId = f[2]?.trim();
         const inst = f[3]?.trim();
         const symbol = f[5]?.trim();
+        const expiry = f.length > 10 ? f[10]?.trim() : null; // SEM_EXPIRY_DATE column
 
         if (!secId || !seg) continue;
 
@@ -344,6 +348,11 @@ export class DhanHistoricalService {
           // Also store without segment for fallback
           bySymbol.set(`${symbol}:E`, entry);
         }
+
+        // Store MCX/CDS futures for active contract resolution
+        if ((seg === 'M' || seg === 'C') && (inst === 'FUTCOM' || inst === 'FUTCUR' || inst === 'FUTIDX')) {
+          futuresEntries.push({ securityId: secId, segment: dhanSeg, symbol, instrument: inst, expiry });
+        }
       }
 
       // Add hardcoded overrides for known mismatches
@@ -354,8 +363,8 @@ export class DhanHistoricalService {
         byId.set(angelToken, dhanEntry);
       }
 
-      console.log(`[DhanHist] Scrip master loaded: ${byId.size} IDs, ${bySymbol.size} symbols`);
-      return { byId, bySymbol };
+      console.log(`[DhanHist] Scrip master loaded: ${byId.size} IDs, ${bySymbol.size} symbols, ${futuresEntries.length} futures contracts`);
+      return { byId, bySymbol, futuresEntries };
     } catch (err) {
       console.error('[DhanHist] Scrip master fetch error:', err.message);
       return null;
