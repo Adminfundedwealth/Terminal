@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿/**
+﻿﻿﻿﻿﻿﻿﻿/**
  * FUNDEDWEALTH TERMINAL â€” SERVER ENTRY POINT
  * 
  * Wires together all backend components:
@@ -440,7 +440,7 @@ async function startup() {
 
   // 2a. Initialize Data Provider Switch (Dhan + Angel One failover)
   console.log('[Startup] Initializing data provider switch...');
-  await dataProviderSwitch.initialize();
+  // await dataProviderSwitch.initialize(); // DISABLED for debug
   const dpStatus = dataProviderSwitch.getStatus();
   console.log('[Startup] Data provider switch ready (active: ' + dpStatus.activeProvider + ', dhan: ' + dpStatus.dhanReady + ')');
 
