@@ -18,6 +18,9 @@ class WebSocketService {
   private exchangeHints: Map<string, string> = new Map();
   private isConnecting = false;
   private _reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  // Throttle account re-fetch to prevent flooding
+  private _lastAccountFetch = 0;
+  private _accountFetchThrottleMs = 5000;
 
   connect(url?: string) {
     if (this.isConnecting || (this.ws && this.ws.readyState === WebSocket.OPEN)) return;
@@ -168,19 +171,19 @@ class WebSocketService {
       }
       case 'account_locked':
       case 'account_breached': {
-        // Force account re-fetch so RiskOverlay fires immediately
+        // Force account re-fetch so RiskOverlay fires immediately (throttled)
         console.warn('[WS] account status event:', data.type, data.data || data);
-        getAccount().then((acc) => useTradingStore.getState().setAccount(acc)).catch(() => {});
+        this._throttledAccountFetch();
         break;
       }
       case 'account_unlocked': {
-        getAccount().then((acc) => useTradingStore.getState().setAccount(acc)).catch(() => {});
+        this._throttledAccountFetch();
         break;
       }
       case 'challenge_update':
       case 'risk_progress': {
-        // Re-fetch account to sync challenge/risk progress — throttled to prevent flooding
-        getAccount().then((acc) => useTradingStore.getState().setAccount(acc)).catch(() => {});
+        // Re-fetch account to sync challenge/risk progress (throttled)
+        this._throttledAccountFetch();
         break;
       }
     }
@@ -196,6 +199,13 @@ class WebSocketService {
     if (wildcardHandlers) {
       wildcardHandlers.forEach((handler) => handler(data));
     }
+  }
+
+  private _throttledAccountFetch() {
+    const now = Date.now();
+    if (now - this._lastAccountFetch < this._accountFetchThrottleMs) return;
+    this._lastAccountFetch = now;
+    getAccount().then((acc) => useTradingStore.getState().setAccount(acc)).catch(() => {});
   }
 
   subscribe(tokens: string[], exchangeHints?: Record<string, string>) {

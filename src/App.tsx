@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, lazy, Suspense } from 'react';
 import { Sidebar } from '@/components/Sidebar';
 import { TopBar } from '@/components/TopBar';
 import { Watchlist } from '@/components/Watchlist';
@@ -6,20 +6,13 @@ import { ChartPanel } from '@/components/ChartPanel';
 import { OrderPanel } from '@/components/OrderPanel';
 import { BottomPanel } from '@/components/BottomPanel';
 import { SearchModal } from '@/components/SearchModal';
-import { OptionChainModal } from '@/components/OptionChainModal';
 import { MarketDepthPanel } from '@/components/MarketDepthPanel';
 import { RiskWidget } from '@/components/RiskWidget';
 import { StatusBar } from '@/components/StatusBar';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { AccessDenied } from '@/components/AccessDenied';
-import { HolidayBanner } from '@/components/HolidayBanner';
-import { RiskOverlay } from '@/components/RiskOverlay';
-import { RiskMonitor } from '@/components/RiskMonitor';
-import { TerminalReadiness } from '@/components/TerminalReadiness';
 import { ToastProvider } from '@/components/ToastProvider';
 import { MobileLayout } from '@/components/MobileLayout';
-import { HomeDashboard } from '@/components/HomeDashboard';
-import { CalendarAnalytics } from '@/components/CalendarAnalytics';
 import { useHotkeys } from '@/hooks/useHotkeys';
 import { useAuth } from '@/hooks/useAuth';
 import { useWatchlistSync } from '@/hooks/useWatchlistSync';
@@ -29,6 +22,15 @@ import { initLayoutObserver } from '@/store/layoutStore';
 import { wsService } from '@/services/websocket';
 import { startSync, stopSync, startPersistence, stopPersistence } from '@/features/chart-trading';
 import { cn } from '@/utils/helpers';
+
+// Lazy-loaded non-critical components
+const OptionChainModal = lazy(() => import('@/components/OptionChainModal').then(m => ({ default: m.OptionChainModal })));
+const HolidayBanner = lazy(() => import('@/components/HolidayBanner').then(m => ({ default: m.HolidayBanner })));
+const RiskOverlay = lazy(() => import('@/components/RiskOverlay').then(m => ({ default: m.RiskOverlay })));
+const RiskMonitor = lazy(() => import('@/components/RiskMonitor').then(m => ({ default: m.RiskMonitor })));
+const TerminalReadiness = lazy(() => import('@/components/TerminalReadiness').then(m => ({ default: m.TerminalReadiness })));
+const HomeDashboard = lazy(() => import('@/components/HomeDashboard').then(m => ({ default: m.HomeDashboard })));
+const CalendarAnalytics = lazy(() => import('@/components/CalendarAnalytics').then(m => ({ default: m.CalendarAnalytics })));
 // Vertical drag divider for resizing panels horizontally
 function VDivider({ onDrag }: { onDrag: (dx: number) => void }) {
   const isDragging = useRef(false);
@@ -171,14 +173,8 @@ export default function App() {
         wl.items.forEach(item => allTokens.add(item.token));
       });
       if (allTokens.size > 0) {
-        // Small delay to ensure WS is connected before subscribing
-        const subTimer = setTimeout(() => {
-          wsService.subscribe(Array.from(allTokens));
-        }, 1000);
-        return () => {
-          clearTimeout(subTimer);
-          wsService.disconnect();
-        };
+        // Subscribe immediately — WS onopen handler will queue if not yet connected
+        wsService.subscribe(Array.from(allTokens));
       }
     }
     return () => wsService.disconnect();
@@ -247,8 +243,8 @@ export default function App() {
     return (
       <ToastProvider>
         <MobileLayout />
-        <RiskOverlay />
-        <RiskMonitor />
+        <Suspense fallback={null}><RiskOverlay /></Suspense>
+        <Suspense fallback={null}><RiskMonitor /></Suspense>
         <SearchModal />
       </ToastProvider>
     );
@@ -263,7 +259,7 @@ export default function App() {
         className="border-l border-fw-border flex flex-col overflow-hidden flex-shrink-0"
       >
         <ErrorBoundary fallbackTitle="Risk Widget Error">
-          <TerminalReadiness />
+          <Suspense fallback={null}><TerminalReadiness /></Suspense>
           <RiskWidget />
         </ErrorBoundary>
         <div className="flex-1 overflow-y-auto min-h-0">
@@ -318,7 +314,7 @@ export default function App() {
 
       {/* Main Terminal Area */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-        <HolidayBanner />
+        <Suspense fallback={null}><HolidayBanner /></Suspense>
         <TopBar />
 
         {/* ── MAIN WORKSPACE AREA ── */}
@@ -333,7 +329,7 @@ export default function App() {
               <div className="flex-1 flex flex-col overflow-hidden min-w-0">
                 <div className="flex-1 overflow-hidden min-h-0">
                   <ErrorBoundary fallbackTitle="Home Dashboard Error">
-                    <HomeDashboard />
+                    <Suspense fallback={null}><HomeDashboard /></Suspense>
                   </ErrorBoundary>
                 </div>
                 {bottomDock}
@@ -357,7 +353,7 @@ export default function App() {
                     <>
                       <VDivider onDrag={() => {}} />
                       <div className="flex-1 overflow-hidden min-w-0">
-                        <ErrorBoundary fallbackTitle="Option Chain Error"><OptionChainModal /></ErrorBoundary>
+                        <ErrorBoundary fallbackTitle="Option Chain Error"><Suspense fallback={null}><OptionChainModal /></Suspense></ErrorBoundary>
                       </div>
                     </>
                   )}
@@ -381,7 +377,7 @@ export default function App() {
               <VDivider onDrag={handleOrderPanelResize} />
               <div style={{ width: orderPanelWidth, minWidth: 240 }} className="border-l border-fw-border flex flex-col overflow-hidden flex-shrink-0">
                 <ErrorBoundary fallbackTitle="Risk Widget Error">
-                  <TerminalReadiness />
+                  <Suspense fallback={null}><TerminalReadiness /></Suspense>
                   <RiskWidget />
                 </ErrorBoundary>
               </div>
@@ -421,7 +417,7 @@ export default function App() {
                     className="border-l border-fw-border flex flex-col overflow-hidden flex-shrink-0"
                   >
                     <ErrorBoundary fallbackTitle="Risk Widget Error">
-                      <TerminalReadiness />
+                      <Suspense fallback={null}><TerminalReadiness /></Suspense>
                       <RiskWidget />
                     </ErrorBoundary>
                     <div className="flex-1 overflow-y-auto min-h-0">
@@ -449,7 +445,7 @@ export default function App() {
           ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
           {isCalendar && (
             <div className="flex-1 overflow-hidden min-h-0">
-              <ErrorBoundary fallbackTitle="Calendar Error"><CalendarAnalytics /></ErrorBoundary>
+              <ErrorBoundary fallbackTitle="Calendar Error"><Suspense fallback={null}><CalendarAnalytics /></Suspense></ErrorBoundary>
             </div>
           )}
 
@@ -459,8 +455,8 @@ export default function App() {
       </div>
 
       <SearchModal />
-      <RiskOverlay />
-      <RiskMonitor />
+      <Suspense fallback={null}><RiskOverlay /></Suspense>
+      <Suspense fallback={null}><RiskMonitor /></Suspense>
     </div>
     </ToastProvider>
   );

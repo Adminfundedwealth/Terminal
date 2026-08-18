@@ -47,12 +47,12 @@ const SEGMENT_MAP = {
 // Intraday: max 5 calendar days per request
 // Historical: unlimited range for daily
 const TF_CONFIG = {
-  '1':   { type: 'intraday', interval: '1',  lookbackDays: 60 },
-  '3':   { type: 'intraday', interval: '5',  lookbackDays: 60 },
-  '5':   { type: 'intraday', interval: '5',  lookbackDays: 60 },
-  '15':  { type: 'intraday', interval: '15', lookbackDays: 90 },
-  '30':  { type: 'intraday', interval: '25', lookbackDays: 90 },
-  '60':  { type: 'intraday', interval: '60', lookbackDays: 90 },
+  '1':   { type: 'intraday', interval: '1',  lookbackDays: 5 },
+  '3':   { type: 'intraday', interval: '5',  lookbackDays: 5 },
+  '5':   { type: 'intraday', interval: '5',  lookbackDays: 5 },
+  '15':  { type: 'intraday', interval: '15', lookbackDays: 10 },
+  '30':  { type: 'intraday', interval: '25', lookbackDays: 15 },
+  '60':  { type: 'intraday', interval: '60', lookbackDays: 30 },
   '240': { type: 'historical', interval: 'DAY', lookbackYears: 2 },
   'D':   { type: 'historical', interval: 'DAY', lookbackYears: 5 },
   'W':   { type: 'historical', interval: 'DAY', lookbackYears: 5 },
@@ -147,6 +147,7 @@ export class DhanHistoricalService {
       try {
         const resp = await this._post(`${DHAN_API_BASE}/charts/intraday`, payload);
         const parsed = this._parse(resp.data);
+        console.log(`[DhanHist] Chunk ${this._fmt(cursor)}→${this._fmt(chunkEnd)}: ${parsed.length} candles`);
         allCandles.push(...parsed);
       } catch (err) {
         // On auth error, try refresh once
@@ -159,10 +160,18 @@ export class DhanHistoricalService {
                 const resp = await this._post(`${DHAN_API_BASE}/charts/intraday`, payload);
                 allCandles.push(...this._parse(resp.data));
               } catch (_) {}
+            } else {
+              // Token refresh failed — stop trying more chunks
+              console.error('[DhanHist] Token refresh failed, aborting intraday fetch');
+              break;
             }
+          } else {
+            console.warn(`[DhanHist] Chunk error (non-auth): ${JSON.stringify(err.response?.data).slice(0, 100)}`);
           }
+        } else {
+          console.warn(`[DhanHist] Chunk network error: ${err.message}`);
         }
-        // Continue with next chunk even on error
+        // Continue with next chunk
       }
 
       cursor.setDate(cursor.getDate() + 5);

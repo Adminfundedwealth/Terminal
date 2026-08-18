@@ -50,12 +50,12 @@ export class DataProviderSwitch {
     if (this._dhanReady) {
       try {
         const candles = await this._dhan.getHistoricalData(token, exchange, timeframe, fromTimestamp, toTimestamp);
+        console.log(`[DataProvider] Dhan returned ${candles?.length || 0} candles for ${token}/${timeframe}/${exchange}`);
         if (candles && candles.length > 0) {
           this._dhanSuccessCount++;
           return { data: candles, provider: 'DHAN' };
         }
         // Empty response — not necessarily an error (market closed, weekend, etc.)
-        console.log(`[DataProvider] Dhan returned 0 candles for ${token}/${timeframe}/${exchange} — trying Angel`);
       } catch (err) {
         this._dhanErrorCount++;
         const errDetail = {
