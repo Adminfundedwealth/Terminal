@@ -161,7 +161,7 @@ body,
 [data-theme='light'] [style*="background: #1"],
 [data-theme='light'] [style*="background:#0"],
 [data-theme='light'] [style*="background:#1"],
-[data-theme='light'] [style*="background: linear-gradient"] {
+[data-theme='light'] [style*="background: linear-gradient"]:not(button) {
   background: #f3f5f8 !important;
 }
 
@@ -202,15 +202,15 @@ body,
 }
 
 /* ── Gradient backgrounds — override ALL dark gradients ───────────────── */
-[data-theme='light'] [class*="bg-gradient"],
-[data-theme='light'] [class*="from-\[#"],
-[data-theme='light'] [class*="to-\[#"] {
+[data-theme='light'] [class*="bg-gradient"]:not([class*="bg-clip-text"]),
+[data-theme='light'] [class*="from-\[#"]:not([class*="bg-clip-text"]),
+[data-theme='light'] [class*="to-\[#"]:not([class*="bg-clip-text"]) {
   background-image: none !important;
   background-color: #f3f5f8 !important;
 }
 
 /* ── Inline style gradients ───────────────────────────────────────────── */
-[data-theme='light'] [style*="linear-gradient"] {
+[data-theme='light'] [style*="linear-gradient"]:not(button) {
   background: #f3f5f8 !important;
 }
 

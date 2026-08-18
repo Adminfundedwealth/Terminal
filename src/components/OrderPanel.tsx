@@ -403,7 +403,7 @@ export function OrderPanel() {
               'transition-all duration-[180ms] ease-out',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent',
               'active:scale-[0.97] active:duration-[120ms]',
-              'disabled:cursor-not-allowed disabled:active:scale-100 disabled:saturate-50 disabled:brightness-75',
+              'disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100',
               !isSubmitting && symbol ? 'hover:scale-[1.02] hover:shadow-[0_4px_20px_rgba(34,197,94,0.35)]' : '',
             )}
             style={{
@@ -445,7 +445,7 @@ export function OrderPanel() {
               'transition-all duration-[180ms] ease-out',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/60 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent',
               'active:scale-[0.97] active:duration-[120ms]',
-              'disabled:cursor-not-allowed disabled:active:scale-100 disabled:saturate-50 disabled:brightness-75',
+              'disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100',
               !isSubmitting && symbol ? 'hover:scale-[1.02] hover:shadow-[0_4px_20px_rgba(239,68,68,0.35)]' : '',
             )}
             style={{
