@@ -688,17 +688,17 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
       'ICICI_FUT': { securityId: '4963', segment: 'NSE_EQ', spotToken: '4963' },
       'TCS_FUT': { securityId: '11536', segment: 'NSE_EQ', spotToken: '11536' },
       'INFY_FUT': { securityId: '1594', segment: 'NSE_EQ', spotToken: '1594' },
-      'GOLD_F': { securityId: null, segment: 'MCX_COMM', scripSymbol: 'GOLD' },
-      'GOLDM_F': { securityId: null, segment: 'MCX_COMM', scripSymbol: 'GOLDM' },
-      'SILVER_F': { securityId: null, segment: 'MCX_COMM', scripSymbol: 'SILVER' },
-      'SILVERM_F': { securityId: null, segment: 'MCX_COMM', scripSymbol: 'SILVERM' },
-      'CRUDE_F': { securityId: null, segment: 'MCX_COMM', scripSymbol: 'CRUDEOIL' },
+      'GOLD_F': { securityId: '483079', segment: 'MCX_COMM', scripSymbol: 'GOLD' },
+      'GOLDM_F': { securityId: '483079', segment: 'MCX_COMM', scripSymbol: 'GOLDM' },
+      'SILVER_F': { securityId: '471725', segment: 'MCX_COMM', scripSymbol: 'SILVER' },
+      'SILVERM_F': { securityId: '471725', segment: 'MCX_COMM', scripSymbol: 'SILVERM' },
+      'CRUDE_F': { securityId: '560977', segment: 'MCX_COMM', scripSymbol: 'CRUDEOIL' },
       'NATGAS_F': { securityId: null, segment: 'MCX_COMM', scripSymbol: 'NATURALGAS' },
       'COPPER_F': { securityId: null, segment: 'MCX_COMM', scripSymbol: 'COPPER' },
-      'USDINR_F': { securityId: null, segment: 'NSE_CURRENCY', scripSymbol: 'USDINR' },
-      'EURINR_F': { securityId: null, segment: 'NSE_CURRENCY', scripSymbol: 'EURINR' },
-      'GBPINR_F': { securityId: null, segment: 'NSE_CURRENCY', scripSymbol: 'GBPINR' },
-      'JPYINR_F': { securityId: null, segment: 'NSE_CURRENCY', scripSymbol: 'JPYINR' },
+      'USDINR_F': { securityId: '2', segment: 'CUR', scripSymbol: 'USDINR' },
+      'EURINR_F': { securityId: '3', segment: 'CUR', scripSymbol: 'EURINR' },
+      'GBPINR_F': { securityId: '4', segment: 'CUR', scripSymbol: 'GBPINR' },
+      'JPYINR_F': { securityId: '5', segment: 'CUR', scripSymbol: 'JPYINR' },
     };
 
     const mapping = PLACEHOLDER_TO_DHAN[token];
@@ -836,19 +836,19 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
       'ICICI_FUT': { securityId: '4963', segment: 'NSE_EQ', spotToken: '4963' },
       'TCS_FUT': { securityId: '11536', segment: 'NSE_EQ', spotToken: '11536' },
       'INFY_FUT': { securityId: '1594', segment: 'NSE_EQ', spotToken: '1594' },
-      // MCX Commodities (MCX_COMM) — dynamic resolution via scrip master preferred
-      'GOLD_F': { securityId: null, segment: 'MCX_COMM', spotToken: null, scripSymbol: 'GOLD' },
-      'GOLDM_F': { securityId: null, segment: 'MCX_COMM', spotToken: null, scripSymbol: 'GOLDM' },
-      'SILVER_F': { securityId: null, segment: 'MCX_COMM', spotToken: null, scripSymbol: 'SILVER' },
-      'SILVERM_F': { securityId: null, segment: 'MCX_COMM', spotToken: null, scripSymbol: 'SILVERM' },
-      'CRUDE_F': { securityId: null, segment: 'MCX_COMM', spotToken: null, scripSymbol: 'CRUDEOIL' },
+      // MCX Commodities (MCX_COMM) — verified active contract IDs
+      'GOLD_F': { securityId: '483079', segment: 'MCX_COMM', spotToken: null, scripSymbol: 'GOLD' },
+      'GOLDM_F': { securityId: '483079', segment: 'MCX_COMM', spotToken: null, scripSymbol: 'GOLDM' },
+      'SILVER_F': { securityId: '471725', segment: 'MCX_COMM', spotToken: null, scripSymbol: 'SILVER' },
+      'SILVERM_F': { securityId: '471725', segment: 'MCX_COMM', spotToken: null, scripSymbol: 'SILVERM' },
+      'CRUDE_F': { securityId: '560977', segment: 'MCX_COMM', spotToken: null, scripSymbol: 'CRUDEOIL' },
       'NATGAS_F': { securityId: null, segment: 'MCX_COMM', spotToken: null, scripSymbol: 'NATURALGAS' },
       'COPPER_F': { securityId: null, segment: 'MCX_COMM', spotToken: null, scripSymbol: 'COPPER' },
-      // CDS Currencies (NSE_CURRENCY) — dynamic resolution
-      'USDINR_F': { securityId: null, segment: 'NSE_CURRENCY', spotToken: null, scripSymbol: 'USDINR' },
-      'EURINR_F': { securityId: null, segment: 'NSE_CURRENCY', spotToken: null, scripSymbol: 'EURINR' },
-      'GBPINR_F': { securityId: null, segment: 'NSE_CURRENCY', spotToken: null, scripSymbol: 'GBPINR' },
-      'JPYINR_F': { securityId: null, segment: 'NSE_CURRENCY', spotToken: null, scripSymbol: 'JPYINR' },
+      // CDS Currencies (CUR) — verified active contract IDs
+      'USDINR_F': { securityId: '2', segment: 'CUR', spotToken: null, scripSymbol: 'USDINR' },
+      'EURINR_F': { securityId: '3', segment: 'CUR', spotToken: null, scripSymbol: 'EURINR' },
+      'GBPINR_F': { securityId: '4', segment: 'CUR', spotToken: null, scripSymbol: 'GBPINR' },
+      'JPYINR_F': { securityId: '5', segment: 'CUR', spotToken: null, scripSymbol: 'JPYINR' },
     };
 
     const mapping = PLACEHOLDER_TO_DHAN[token];
