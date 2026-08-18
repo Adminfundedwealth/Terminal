@@ -88,7 +88,7 @@ export class DhanOptionChainService {
 
   /**
    * Get option chain for symbol + expiry.
-   * Tries multiple expiry date formats since Dhan's API is inconsistent.
+   * If expiry is rejected (Invalid Expiry Date), auto-fallback to next valid expiry.
    */
   async getOptionChain(symbol, expiry) {
     if (!this.auth.isTokenValid) {
@@ -113,7 +113,7 @@ export class DhanOptionChainService {
 
     if (this._loading.has(cacheKey)) return this._loading.get(cacheKey);
 
-    const promise = this._fetchChain(secId, sym, expiry)
+    const promise = this._fetchChainWithFallback(secId, sym, expiry)
       .then(chain => {
         this._loading.delete(cacheKey);
         if (chain.length > 0) {
@@ -128,6 +128,44 @@ export class DhanOptionChainService {
 
     this._loading.set(cacheKey, promise);
     return promise;
+  }
+
+  /**
+   * Fetch chain with auto-fallback: if the requested expiry is rejected,
+   * try the next available expiry from the expiry list.
+   */
+  async _fetchChainWithFallback(secId, symbol, expiry) {
+    try {
+      const chain = await this._fetchChain(secId, symbol, expiry);
+      if (chain.length > 0) return chain;
+    } catch (err) {
+      const errMsg = JSON.stringify(err.response?.data || '');
+      const isInvalidExpiry = errMsg.includes('811') || errMsg.includes('Invalid Expiry');
+      
+      if (isInvalidExpiry) {
+        console.warn(`[DhanOC] Expiry "${expiry}" rejected for ${symbol} — auto-resolving next valid expiry`);
+        try {
+          const expiries = await this.getExpiries(symbol);
+          if (expiries && expiries.length > 0) {
+            // Find the next expiry that is NOT today (today's expiry may be expired post-settlement)
+            const today = new Date().toISOString().slice(0, 10);
+            const validExpiry = expiries.find(e => e > today) || expiries[0];
+            
+            if (validExpiry && validExpiry !== expiry) {
+              console.log(`[DhanOC] Retrying with fallback expiry: ${validExpiry}`);
+              // Wait for rate limit
+              await new Promise(r => setTimeout(r, 3500));
+              return await this._fetchChain(secId, symbol, validExpiry);
+            }
+          }
+        } catch (fallbackErr) {
+          console.error(`[DhanOC] Fallback expiry resolution failed:`, fallbackErr.message);
+        }
+      }
+      throw err;
+    }
+    return [];
+  }
   }
 
   async _fetchChain(secId, symbol, expiry) {

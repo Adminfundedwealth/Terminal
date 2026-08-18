@@ -469,6 +469,10 @@ async function startup() {
   if (accountService.executionService) {
     accountService.executionService.setFallbackServices(dataProviderSwitch, candleService);
     console.log('[Startup] Order execution LTP fallback wired (Dhan + CandleService)');
+    // Recover pending SL/LIMIT orders from database (survives server restarts)
+    accountService.executionService.recoverPendingOrders().catch(e => 
+      console.warn('[Startup] Pending order recovery:', e.message)
+    );
   }
 
   // 2b. Initialize Event Dispatcher (persistence subscriber)

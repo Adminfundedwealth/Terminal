@@ -71,20 +71,11 @@ export class OrderExecutionService {
 
       for (const [orderId, entry] of this._pendingPaperOrders) {
         try {
-          // Multi-source LTP resolution: cache → candle → depth midpoint
-          let ltp = this.marketDataEngine.getQuote(entry.token)?.ltp;
-          if (!ltp || ltp <= 0) {
-            // Try last candle close
-            const candle = this._candleService?.getCurrentCandle(entry.token, '1');
-            ltp = candle?.close;
-          }
-          if (!ltp || ltp <= 0) {
-            // Try depth midpoint
-            const depth = this.marketDataEngine.depthCache?.get(entry.token);
-            if (depth?.bids?.[0]?.price && depth?.asks?.[0]?.price) {
-              ltp = (depth.bids[0].price + depth.asks[0].price) / 2;
-            }
-          }
+          // ── Multi-source LTP resolution ────────────────────────────────────
+          // Orders may have Angel tokens (99926000), Dhan tokens (13), or symbols.
+          // Check all possible token representations against the quote cache.
+          let ltp = this._resolveLtpForOrder(entry);
+
           if (!ltp || ltp <= 0) continue;
 
           let shouldFill = false;
@@ -124,6 +115,59 @@ export class OrderExecutionService {
   }
 
   /**
+   * Resolve LTP for a pending order by checking all possible token representations.
+   * Handles Angel ↔ Dhan token mismatches and symbol-based fallbacks.
+   */
+  _resolveLtpForOrder(entry) {
+    const token = entry.token;
+    
+    // 1. Direct token lookup
+    let ltp = this.marketDataEngine.getQuote(token)?.ltp;
+    if (ltp && ltp > 0) return ltp;
+
+    // 2. Angel ↔ Dhan token alias mapping (indices)
+    const ANGEL_TO_DHAN = { '99926000': '13', '99926009': '25', '99926037': '27', '99926074': '442', '99919000': '51' };
+    const DHAN_TO_ANGEL = { '13': '99926000', '25': '99926009', '27': '99926037', '442': '99926074', '51': '99919000' };
+    const altToken = ANGEL_TO_DHAN[token] || DHAN_TO_ANGEL[token];
+    if (altToken) {
+      ltp = this.marketDataEngine.getQuote(altToken)?.ltp;
+      if (ltp && ltp > 0) return ltp;
+    }
+
+    // 3. Symbol-based lookup: scan all quotes for matching symbol name
+    if (entry.symbol) {
+      const sym = entry.symbol.toUpperCase().trim();
+      for (const [qToken, quote] of this.marketDataEngine.quotes) {
+        if (quote.symbol && quote.symbol.toUpperCase().trim() === sym && quote.ltp > 0) {
+          return quote.ltp;
+        }
+      }
+    }
+
+    // 4. Candle service fallback
+    if (this._candleService) {
+      const candle = this._candleService.getCurrentCandle(token, '1');
+      if (candle?.close > 0) return candle.close;
+      // Also try alt token
+      if (altToken) {
+        const altCandle = this._candleService.getCurrentCandle(altToken, '1');
+        if (altCandle?.close > 0) return altCandle.close;
+      }
+    }
+
+    // 5. Depth midpoint
+    const depth = this.marketDataEngine.depthCache?.get(token) || (altToken ? this.marketDataEngine.depthCache?.get(altToken) : null);
+    if (depth?.bids?.[0]?.price && depth?.asks?.[0]?.price) {
+      return (depth.bids[0].price + depth.asks[0].price) / 2;
+    }
+
+    return null;
+  }
+      }
+    }, 1000);
+  }
+
+  /**
    * Register an open paper SL/LIMIT order for price monitoring.
    */
   _registerPaperOrder(orderId, accountId, orderParams) {
@@ -146,6 +190,54 @@ export class OrderExecutionService {
     }
 
     console.log(`[PaperMonitor] Registered ${orderParams.orderType} ${orderParams.side} ${orderParams.symbol} (trigger=${orderParams.triggerPrice || ''} limit=${orderParams.price || ''})`);
+  }
+
+  /**
+   * Recover pending OPEN SL/LIMIT orders from database on startup.
+   * Ensures orders survive server restarts.
+   */
+  async recoverPendingOrders() {
+    try {
+      if (!supabase) return;
+      const { data: openOrders, error } = await supabase
+        .from('trading_orders')
+        .select('*')
+        .in('status', ['OPEN', 'PENDING'])
+        .in('order_type', ['LIMIT', 'SL', 'SL-M']);
+      if (error || !openOrders || openOrders.length === 0) return;
+      
+      let recovered = 0;
+      for (const order of openOrders) {
+        if (this._pendingPaperOrders.has(order.id)) continue;
+        this._pendingPaperOrders.set(order.id, {
+          accountId: order.trading_account_id,
+          token: order.token,
+          symbol: order.symbol,
+          side: order.side,
+          orderType: order.order_type,
+          triggerPrice: order.trigger_price || 0,
+          price: order.price || 0,
+          orderParams: {
+            symbol: order.symbol,
+            token: order.token,
+            segment: order.segment || 'NSE',
+            exchange: order.segment || 'NSE',
+            side: order.side,
+            orderType: order.order_type,
+            productType: order.product_type || 'MIS',
+            qty: order.qty,
+            price: order.price || 0,
+            triggerPrice: order.trigger_price || 0,
+          },
+        });
+        recovered++;
+      }
+      if (recovered > 0) {
+        console.log(`[PaperMonitor] Recovered ${recovered} pending SL/LIMIT orders from database`);
+      }
+    } catch (e) {
+      console.warn(`[PaperMonitor] Recovery failed: ${e.message}`);
+    }
   }
 
   /**
@@ -371,12 +463,25 @@ export class OrderExecutionService {
     }
 
     // ── Fill price: SYNCHRONOUS cache-only lookup (zero network latency) ──
-    // Priority: live LTP cache > explicit order price
+    // Priority: live LTP cache > Angel/Dhan alias > explicit order price > depth midpoint
     const quote = this.marketDataEngine.getQuote(orderParams.token);
     const rawLtp = quote?.ltp;
     let fillPrice = (rawLtp && Number.isFinite(rawLtp) && rawLtp > 0) ? rawLtp : null;
 
+    // Try Angel ↔ Dhan token alias (indices)
+    if (!fillPrice) {
+      const ANGEL_TO_DHAN = { '99926000': '13', '99926009': '25', '99926037': '27', '99926074': '442', '99919000': '51' };
+      const DHAN_TO_ANGEL = { '13': '99926000', '25': '99926009', '27': '99926037', '442': '99926074', '51': '99919000' };
+      const altToken = ANGEL_TO_DHAN[orderParams.token] || DHAN_TO_ANGEL[orderParams.token];
+      if (altToken) {
+        const altQuote = this.marketDataEngine.getQuote(altToken);
+        if (altQuote?.ltp > 0) fillPrice = altQuote.ltp;
+      }
+    }
+
     // Fallback: use order price (from option chain LTP at order-creation time)
+    // This is the primary fill source for OPTION trades where the option token
+    // is not in the live subscription list.
     if (!fillPrice && orderParams.price > 0) {
       fillPrice = orderParams.price;
     }
