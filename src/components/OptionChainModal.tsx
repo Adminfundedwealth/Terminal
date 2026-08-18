@@ -422,10 +422,12 @@ export function OptionChainModal() {
     }
   }, [underlying, selectedExpiry, activeSymbol, clearAll, startBudget, loadChain, startLoad]);
 
-  const handleStrikeClick = useCallback((strike: number, type: 'CE' | 'PE', ltp?: number) => {
+  const handleStrikeClick = useCallback((strike: number, type: 'CE' | 'PE', ltp?: number, realToken?: string) => {
     if (!activeSymbol) return;
+    // Use real broker token from chain data if available; fall back to synthetic placeholder
+    const token = realToken || `${underlying}_${strike}_${type}`;
     setActiveSymbol({
-      token: `${underlying}_${strike}_${type}`,
+      token,
       symbol: `${underlying} ${strike} ${type}`,
       name: `${underlying} ${selectedExpiry} ${strike} ${type}`,
       segment: 'NFO',
@@ -439,7 +441,7 @@ export function OptionChainModal() {
     });
     setSelectedContract({
       symbol: `${underlying} ${strike} ${type}`,
-      token: `${underlying}_${strike}_${type}`,
+      token,
       underlying,
       strike,
       optionType: type,
@@ -715,11 +717,11 @@ export function OptionChainModal() {
                         <td className="px-1 py-[6px] text-center">
                           <div className="flex gap-0.5 justify-center">
                             <button
-                              onClick={() => { handleStrikeClick(e.strike, 'CE', e.callLtp); setOrderForm({ side: 'BUY' }); }}
+                              onClick={() => { handleStrikeClick(e.strike, 'CE', e.callLtp, e.callToken); setOrderForm({ side: 'BUY' }); }}
                               className="text-[9px] text-emerald-300 font-bold bg-emerald-700/30 hover:bg-emerald-600/50 px-1 py-0.5 rounded transition-colors leading-none"
                             >B</button>
                             <button
-                              onClick={() => { handleStrikeClick(e.strike, 'CE', e.callLtp); setOrderForm({ side: 'SELL' }); }}
+                              onClick={() => { handleStrikeClick(e.strike, 'CE', e.callLtp, e.callToken); setOrderForm({ side: 'SELL' }); }}
                               className="text-[9px] text-red-300 font-bold bg-red-700/30 hover:bg-red-600/50 px-1 py-0.5 rounded transition-colors leading-none"
                             >S</button>
                           </div>
@@ -758,7 +760,7 @@ export function OptionChainModal() {
                             'px-2 py-[6px] text-right font-mono tabular-nums font-bold cursor-pointer hover:underline truncate',
                             isSelCE ? 'text-fw-accent' : e.callLtp > 0 ? 'text-emerald-400' : 'text-fw-text-muted',
                           )}
-                          onClick={() => handleStrikeClick(e.strike, 'CE', e.callLtp)}
+                          onClick={() => handleStrikeClick(e.strike, 'CE', e.callLtp, e.callToken)}
                         >
                           {e.callLtp > 0 ? formatPrice(e.callLtp) : '—'}
                         </td>
@@ -785,7 +787,7 @@ export function OptionChainModal() {
                             'px-2 py-[6px] text-left font-mono tabular-nums font-bold cursor-pointer hover:underline truncate',
                             isSelPE ? 'text-fw-accent' : e.putLtp > 0 ? 'text-red-400' : 'text-fw-text-muted',
                           )}
-                          onClick={() => handleStrikeClick(e.strike, 'PE', e.putLtp)}
+                          onClick={() => handleStrikeClick(e.strike, 'PE', e.putLtp, e.putToken)}
                         >
                           {e.putLtp > 0 ? formatPrice(e.putLtp) : '—'}
                         </td>
@@ -821,11 +823,11 @@ export function OptionChainModal() {
                         <td className="px-1 py-[6px] text-center">
                           <div className="flex gap-0.5 justify-center">
                             <button
-                              onClick={() => { handleStrikeClick(e.strike, 'PE', e.putLtp); setOrderForm({ side: 'BUY' }); }}
+                              onClick={() => { handleStrikeClick(e.strike, 'PE', e.putLtp, e.putToken); setOrderForm({ side: 'BUY' }); }}
                               className="text-[9px] text-emerald-300 font-bold bg-emerald-700/30 hover:bg-emerald-600/50 px-1 py-0.5 rounded transition-colors leading-none"
                             >B</button>
                             <button
-                              onClick={() => { handleStrikeClick(e.strike, 'PE', e.putLtp); setOrderForm({ side: 'SELL' }); }}
+                              onClick={() => { handleStrikeClick(e.strike, 'PE', e.putLtp, e.putToken); setOrderForm({ side: 'SELL' }); }}
                               className="text-[9px] text-red-300 font-bold bg-red-700/30 hover:bg-red-600/50 px-1 py-0.5 rounded transition-colors leading-none"
                             >S</button>
                           </div>

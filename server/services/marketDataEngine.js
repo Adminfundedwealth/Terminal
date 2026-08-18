@@ -145,6 +145,63 @@ export class MarketDataEngine {
   }
 
   /**
+   * Universal LTP resolver — NEVER returns 0 for a valid instrument.
+   * 
+   * Fallback chain:
+   *   1. Live WebSocket cache (Angel One feed)
+   *   2. Dhan quote API (if dataProviderSwitch available)
+   *   3. Last 1m candle close price
+   *   4. Depth bid/ask midpoint
+   * 
+   * Call setLtpFallbacks() to inject dependencies.
+   */
+  async getLivePrice(token, segment) {
+    // 1. WebSocket cache
+    const q = this.quotes.get(token);
+    if (q?.ltp && Number.isFinite(q.ltp) && q.ltp > 0) {
+      return q.ltp;
+    }
+
+    // 2. Dhan quote API
+    if (this._dhanAdapter) {
+      try {
+        const dhanSeg = segment === 'NFO' ? 'NSE_FNO' : segment === 'MCX' ? 'MCX_COMM' : segment === 'CDS' ? 'NSE_CURRENCY' : 'NSE_EQ';
+        const result = await this._dhanAdapter.getQuote(token, dhanSeg);
+        const ltp = result?.ltp || result?.last_price;
+        if (ltp && Number.isFinite(ltp) && ltp > 0) {
+          // Also push into cache so subsequent calls are instant
+          this.pushQuote(token, { ltp, timestamp: Date.now(), symbol: q?.symbol, exchange: q?.exchange });
+          return ltp;
+        }
+      } catch (_) {}
+    }
+
+    // 3. Last candle close
+    if (this._candleService) {
+      const candle = this._candleService.getCurrentCandle(token, '1');
+      if (candle?.close && candle.close > 0) return candle.close;
+    }
+
+    // 4. Depth midpoint
+    const depth = this.depthCache.get(token);
+    if (depth?.bids?.[0]?.price && depth?.asks?.[0]?.price) {
+      const mid = (depth.bids[0].price + depth.asks[0].price) / 2;
+      if (mid > 0) return mid;
+    }
+
+    return null; // All fallbacks exhausted
+  }
+
+  /**
+   * Inject fallback services for getLivePrice.
+   * Called from server/index.js after initialization.
+   */
+  setLtpFallbacks(dhanAdapter, candleService) {
+    this._dhanAdapter = dhanAdapter;
+    this._candleService = candleService;
+  }
+
+  /**
    * Returns the LTP for a token if it is currently valid, otherwise null.
    * Callers must treat null as "data unavailable" — never substitute 0.
    */

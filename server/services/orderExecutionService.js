@@ -327,34 +327,31 @@ export class OrderExecutionService {
    */
   async _handleMarketFill(accountId, orderId, orderParams, brokerOrderId, brokerProvider, latencyMs) {
     // ── Fill price safety guard ──────────────────────────────────────────────
-    // Priority: live LTP > Dhan LTP fetch > explicit order price > last candle close
+    // Priority: live LTP > Dhan LTP fetch > last candle close > order price
     const quote = this.marketDataEngine.getQuote(orderParams.token);
     const rawLtp = quote?.ltp;
     let validLtp = (rawLtp && Number.isFinite(rawLtp) && rawLtp > 0) ? rawLtp : null;
 
-    // Fallback 1: Try Dhan LTP if live feed doesn't have it
-    if (!validLtp && this._dataProviderSwitch?.getDhanAdapter?.()) {
+    // Use universal getLivePrice if direct cache miss
+    if (!validLtp && this.marketDataEngine.getLivePrice) {
       try {
-        const dhan = this._dataProviderSwitch.getDhanAdapter();
-        const dhanQuote = await dhan.getQuote(orderParams.token, orderParams.segment === 'NFO' ? 'NSE_FNO' : 'NSE_EQ');
-        const dhanLtp = dhanQuote?.ltp || dhanQuote?.last_price;
-        if (dhanLtp && Number.isFinite(dhanLtp) && dhanLtp > 0) {
-          validLtp = dhanLtp;
-          console.log(`[OrderExecution] LTP fallback from Dhan: ${orderParams.symbol} = ${validLtp}`);
-        }
-      } catch (_) { /* Dhan fetch failed, continue to next fallback */ }
+        validLtp = await this.marketDataEngine.getLivePrice(orderParams.token, orderParams.segment);
+      } catch (_) {}
     }
 
-    // Fallback 2: Use last candle close price from chart data
-    if (!validLtp && this._candleService) {
-      const lastCandle = this._candleService.getCurrentCandle(orderParams.token, '1');
-      if (lastCandle?.close && lastCandle.close > 0) {
-        validLtp = lastCandle.close;
-        console.log(`[OrderExecution] LTP fallback from last candle: ${orderParams.symbol} = ${validLtp}`);
+    // Fallback (Paper mode): For option orders with synthetic/placeholder tokens
+    // (e.g. "NIFTY_24300_PE") that don't receive live feed ticks, accept the explicit
+    // order price as fill price. This allows paper mode execution when the option chain
+    // provided an LTP at order-creation time which was stored as orderParams.price.
+    if (!validLtp && orderParams.price > 0) {
+      const { ExecutionMode: EMFallback } = await import('./executionMode.js').catch(() => ({ ExecutionMode: { isPaper: false } }));
+      if (EMFallback.isPaper) {
+        validLtp = orderParams.price;
+        console.log(`[OrderExecution] Paper mode LTP fallback from order price: ${orderParams.symbol} = ${validLtp}`);
       }
     }
 
-    // Resolve fill price: live LTP preferred, then explicit order price
+    // Fallback: explicit order price (for LIMIT orders converted to market)
     const candidatePrice = validLtp ?? (orderParams.price > 0 ? orderParams.price : null);
 
     if (!candidatePrice) {

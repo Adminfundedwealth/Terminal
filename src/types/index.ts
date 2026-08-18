@@ -132,6 +132,8 @@ export interface Watchlist {
 
 export interface OptionChainEntry {
   strike: number;
+  callToken?: string;
+  callSymbol?: string;
   callLtp: number;
   callVolume: number;
   callOi: number;
@@ -141,6 +143,8 @@ export interface OptionChainEntry {
   callGamma: number;
   callTheta: number;
   callVega: number;
+  putToken?: string;
+  putSymbol?: string;
   putLtp: number;
   putVolume: number;
   putOi: number;
