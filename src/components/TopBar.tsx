@@ -24,7 +24,9 @@ function applyLightModeForce(enable: boolean) {
       }
       html[data-theme="light"] [class*="bg-"][class*="#0"],
       html[data-theme="light"] [class*="bg-"][class*="#1"],
-      html[data-theme="light"] [class*="bg-"][class*="#2"] {
+      html[data-theme="light"] [class*="bg-"][class*="#2"],
+      html[data-theme="light"] [class*="from-"][class*="#"],
+      html[data-theme="light"] [class*="to-"][class*="#"] {
         background-color: var(--fw-surface-2) !important;
         background-image: none !important;
       }
@@ -78,11 +80,22 @@ function applyLightModeForce(enable: boolean) {
         color: white !important;
       }
       /* BUY/SELL buttons have inline style backgrounds - protect them */
-      html[data-theme="light"] button[style*="linear-gradient(180deg, #166534"] {
+      html[data-theme="light"] button[style*="linear-gradient(180deg, #166534"],
+      html[data-theme="light"] button[style*="linear-gradient(180deg, #16a34a"] {
         background: linear-gradient(180deg, #166534 0%, #16a34a 50%, #15803d 100%) !important;
       }
-      html[data-theme="light"] button[style*="linear-gradient(180deg, #7f1d1d"] {
+      html[data-theme="light"] button[style*="linear-gradient(180deg, #7f1d1d"],
+      html[data-theme="light"] button[style*="linear-gradient(180deg, #dc2626"] {
         background: linear-gradient(180deg, #7f1d1d 0%, #dc2626 50%, #b91c1c 100%) !important;
+      }
+      /* Fix borders */
+      html[data-theme="light"] [class*="border-fw-border"] {
+        border-color: var(--fw-border) !important;
+      }
+      /* Fix the RiskOverlay specific gradient wrapper */
+      html[data-theme="light"] [class*="select-none"][class*="border-b"] {
+        background: var(--fw-surface) !important;
+        background-image: none !important;
       }
     `;
   } else {
