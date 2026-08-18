@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿/**
+﻿﻿﻿﻿﻿﻿﻿﻿/**
  * FUNDEDWEALTH TERMINAL â€” SERVER ENTRY POINT
  * 
  * Wires together all backend components:
@@ -449,14 +449,14 @@ async function startup() {
 
   // 2a. Initialize Data Provider Switch (Dhan + Angel One failover)
   console.log('[Startup] Initializing data provider switch...');
-  // await dataProviderSwitch.initialize(); // DISABLED for debug
+  await dataProviderSwitch.initialize();
   const dpStatus = dataProviderSwitch.getStatus();
   console.log('[Startup] Data provider switch ready (active: ' + dpStatus.activeProvider + ', dhan: ' + dpStatus.dhanReady + ')');
 
   // Wire LTP fallbacks into MarketDataEngine and OrderExecution
   const dhanAdapter = dataProviderSwitch.getDhanAdapter();
   if (dhanAdapter) dhanAdapter.setMarketDataEngine(marketDataEngine);
-  // marketDataEngine.setLtpFallbacks(dhanAdapter, candleService); // DISABLED — causes 502
+  marketDataEngine.setLtpFallbacks(dhanAdapter, candleService);
 
   // Pre-load Dhan scrip master in background (prevents 502 timeout on first MCX/CDS quote)
   if (dhanAdapter?.historical?._getScripMaster) {
@@ -528,7 +528,8 @@ async function startup() {
   console.log('â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');
 
   // 9. Connect Dhan WebSocket Feed (PRIMARY live market data) - fire and forget
-  // connectDhanFeed().catch(e => console.error("[connectDhanFeed] Fatal error:", e.message));
+  // connectDhanFeed disabled — REST poller handles live data
+    // connectDhanFeed().catch(e => console.error("[connectDhanFeed] Fatal error:", e.message));
 
   // 9b. Connect Angel Feed (SECONDARY - broker adapter only, NOT live ticks)
   connectAngelFeedForBroker().catch(e => console.error("[connectAngelFeedForBroker] Error:", e.message));

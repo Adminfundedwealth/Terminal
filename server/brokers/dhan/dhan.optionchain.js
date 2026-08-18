@@ -151,29 +151,43 @@ export class DhanOptionChainService {
       'dhanClientId': this.auth.clientId,
     };
 
-    try {
-      const resp = await axios.post(`${DHAN_API_BASE}/optionchain`, payload, {
-        httpsAgent: IPV4_AGENT,
-        timeout: 12000,
-        headers: ocHeaders,
-      });
+    // Retry with backoff on 429 (Dhan rate limit: 1 unique req per 3s)
+    const MAX_RETRIES = 2;
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const resp = await axios.post(`${DHAN_API_BASE}/optionchain`, payload, {
+          httpsAgent: IPV4_AGENT,
+          timeout: 12000,
+          headers: ocHeaders,
+        });
 
-      const data = resp.data?.data || resp.data;
-      if (Array.isArray(data) && data.length > 0) {
-        console.log(`[DhanOC] Got ${data.length} strikes for ${symbol}/${normalizedExpiry}`);
-        return this._parseChain(data);
+        const data = resp.data?.data || resp.data;
+        if (Array.isArray(data) && data.length > 0) {
+          console.log(`[DhanOC] Got ${data.length} strikes for ${symbol}/${normalizedExpiry}`);
+          return this._parseChain(data);
+        }
+        // Check if response has 'oc' key (alternative Dhan format)
+        if (data && typeof data === 'object' && data.oc) {
+          const parsed = this._parseOCMap(data);
+          console.log(`[DhanOC] Got ${parsed.length} strikes (oc map) for ${symbol}/${normalizedExpiry}`);
+          return parsed;
+        }
+        return [];
+      } catch (err) {
+        const status = err.response?.status;
+        if (status === 429 && attempt < MAX_RETRIES) {
+          // Rate limited — wait and retry
+          const delay = 3500 * (attempt + 1); // 3.5s, 7s
+          console.warn(`[DhanOC] Rate limited (429), retrying in ${delay}ms...`);
+          await new Promise(r => setTimeout(r, delay));
+          continue;
+        }
+        const msg = err.response?.data;
+        console.error(`[DhanOC] Chain failed: HTTP ${status}`, JSON.stringify(msg).slice(0, 150));
+        throw err;
       }
-      // Check if response has 'oc' key (alternative Dhan format)
-      if (data && typeof data === 'object' && data.oc) {
-        return this._parseOCMap(data);
-      }
-      return [];
-    } catch (err) {
-      const status = err.response?.status;
-      const msg = err.response?.data;
-      console.error(`[DhanOC] Chain failed: HTTP ${status}`, JSON.stringify(msg).slice(0, 150));
-      throw err;
     }
+    return [];
   }
 
   /**

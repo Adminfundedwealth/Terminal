@@ -25,6 +25,12 @@ const INDEX_MAP = {
   '99926037': { securityId: '27', segment: 'IDX_I', instrument: 'INDEX' },
   '99926074': { securityId: '442', segment: 'IDX_I', instrument: 'INDEX' },
   '99919000': { securityId: '51', segment: 'IDX_I', instrument: 'INDEX' },
+  // Direct Dhan securityId entries (when token is already resolved)
+  '13': { securityId: '13', segment: 'IDX_I', instrument: 'INDEX' },
+  '25': { securityId: '25', segment: 'IDX_I', instrument: 'INDEX' },
+  '27': { securityId: '27', segment: 'IDX_I', instrument: 'INDEX' },
+  '442': { securityId: '442', segment: 'IDX_I', instrument: 'INDEX' },
+  '51': { securityId: '51', segment: 'IDX_I', instrument: 'INDEX' },
 };
 
 // ─── Exchange segment mapping ─────────────────────────────────────────────────

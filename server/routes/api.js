@@ -745,8 +745,23 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
           token, tf, resolvedExchange, fromTs, toTs
         );
 
-        if (result.data && result.data.length > 0) {
-          return res.json(result.data);
+        let candles = result.data || result;
+        if (!Array.isArray(candles)) candles = [];
+
+        if (candles.length > 0) {
+          // Normalize candle format: ensure flat array with { time, open, high, low, close, volume }
+          const normalized = candles.map(c => ({
+            time: typeof c.time === 'number' ? c.time : Math.floor(new Date(c.timestamp || c.datetime || c.date || 0).getTime() / 1000),
+            open: Number(c.open) || 0,
+            high: Number(c.high) || 0,
+            low: Number(c.low) || 0,
+            close: Number(c.close) || 0,
+            volume: Number(c.volume || 0),
+          })).filter(c => c.time > 0 && c.close > 0 && !isNaN(c.time) && !isNaN(c.close));
+
+          if (normalized.length > 0) {
+            return res.json(normalized);
+          }
         }
 
         // If provider returned empty, try live candle fallback
@@ -932,12 +947,47 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
     if (dataProviderSwitch) {
       try {
         const result = await dataProviderSwitch.getOptionChain(symbol, expiry);
-        if (result.data && result.data.length > 0) {
-          console.log(`[OptionChain] Response via ${result.provider}: ${result.data.length} strikes`);
-          return res.json(result.data);
+        let chain = result.data;
+
+        // If Dhan returned the raw 'oc' map format, normalize it here
+        if (chain && !Array.isArray(chain) && chain.oc) {
+          chain = _normalizeOcMap(chain);
+        }
+
+        if (Array.isArray(chain) && chain.length > 0) {
+          // Ensure every entry has the required fields with correct types
+          const normalized = chain.map(entry => ({
+            strike: Number(entry.strike || entry.strikePrice || entry.strike_price || 0),
+            callToken: String(entry.callToken || entry.ce_security_id || ''),
+            callSymbol: entry.callSymbol || '',
+            callLtp: Number(entry.callLtp || entry.ce_ltp || 0),
+            callVolume: Number(entry.callVolume || entry.ce_volume || 0),
+            callOi: Number(entry.callOi || entry.ce_oi || 0),
+            callOiChange: Number(entry.callOiChange || entry.ce_oi_change || 0),
+            callIv: Number(entry.callIv || entry.ce_iv || 0),
+            callDelta: Number(entry.callDelta || entry.ce_delta || 0),
+            callGamma: Number(entry.callGamma || entry.ce_gamma || 0),
+            callTheta: Number(entry.callTheta || entry.ce_theta || 0),
+            callVega: Number(entry.callVega || entry.ce_vega || 0),
+            putToken: String(entry.putToken || entry.pe_security_id || ''),
+            putSymbol: entry.putSymbol || '',
+            putLtp: Number(entry.putLtp || entry.pe_ltp || 0),
+            putVolume: Number(entry.putVolume || entry.pe_volume || 0),
+            putOi: Number(entry.putOi || entry.pe_oi || 0),
+            putOiChange: Number(entry.putOiChange || entry.pe_oi_change || 0),
+            putIv: Number(entry.putIv || entry.pe_iv || 0),
+            putDelta: Number(entry.putDelta || entry.pe_delta || 0),
+            putGamma: Number(entry.putGamma || entry.pe_gamma || 0),
+            putTheta: Number(entry.putTheta || entry.pe_theta || 0),
+            putVega: Number(entry.putVega || entry.pe_vega || 0),
+          })).filter(e => e.strike > 0)
+            .sort((a, b) => a.strike - b.strike);
+
+          console.log(`[OptionChain] Response via ${result.provider}: ${normalized.length} strikes`);
+          return res.json(normalized);
         }
       } catch (err) {
-        console.warn(`[OptionChain] DataProviderSwitch failed: ${err.message} — falling back to Angel`);
+        console.warn(`[OptionChain] DataProviderSwitch failed: ${err.message}`);
       }
     }
 
@@ -1435,4 +1485,44 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
   });
 
   return router;
+}
+
+/**
+ * Normalize Dhan option chain 'oc' map format into flat OptionChainEntry array.
+ * Dhan returns: { last_price, oc: { "24200.000000": { ce: {...}, pe: {...} }, ... } }
+ */
+function _normalizeOcMap(data) {
+  const oc = data.oc || {};
+  const chain = [];
+  for (const [strikeStr, sides] of Object.entries(oc)) {
+    const strike = parseFloat(strikeStr);
+    if (!strike || isNaN(strike)) continue;
+    const ce = sides.ce || {};
+    const pe = sides.pe || {};
+    chain.push({
+      strike,
+      callToken: String(ce.security_id || ''),
+      callLtp: Number(ce.last_price || 0),
+      callVolume: Number(ce.volume || 0),
+      callOi: Number(ce.oi || 0),
+      callOiChange: Number(ce.previous_oi ? (ce.oi || 0) - ce.previous_oi : 0),
+      callIv: Number(ce.implied_volatility || 0),
+      callDelta: Number(ce.greeks?.delta || 0),
+      callGamma: Number(ce.greeks?.gamma || 0),
+      callTheta: Number(ce.greeks?.theta || 0),
+      callVega: Number(ce.greeks?.vega || 0),
+      putToken: String(pe.security_id || ''),
+      putLtp: Number(pe.last_price || 0),
+      putVolume: Number(pe.volume || 0),
+      putOi: Number(pe.oi || 0),
+      putOiChange: Number(pe.previous_oi ? (pe.oi || 0) - pe.previous_oi : 0),
+      putIv: Number(pe.implied_volatility || 0),
+      putDelta: Number(pe.greeks?.delta || 0),
+      putGamma: Number(pe.greeks?.gamma || 0),
+      putTheta: Number(pe.greeks?.theta || 0),
+      putVega: Number(pe.greeks?.vega || 0),
+    });
+  }
+  chain.sort((a, b) => a.strike - b.strike);
+  return chain;
 }
