@@ -132,12 +132,11 @@ export function ChartDrawingToolbar({
   return (
     <div
       className={cn(
-        'h-full flex-shrink-0 border-r border-white/[0.05]',
+        'h-full flex-shrink-0 border-r border-fw-border/20',
         'select-none transition-all duration-200 overflow-visible',
-        'backdrop-blur-sm',
         isCollapsed ? 'w-0 opacity-0 pointer-events-none' : 'w-[44px] min-w-[44px]',
       )}
-      style={{ background: 'rgba(11, 13, 20, 0.90)' }}
+      style={{ background: 'var(--fw-surface)' }}
     >
       {/* Scrollable inner � hides scrollbar, overflow-x visible so tooltips escape */}
       <div
@@ -285,8 +284,8 @@ export function DrawingToolbarToggle({
       }}
       className={cn(
         'w-[10px] h-[32px] flex items-center justify-center',
-        'bg-fw-bg border-y border-r border-white/[0.05] rounded-r',
-        'text-fw-text-muted hover:text-fw-text-muted transition-colors duration-150',
+        'bg-fw-surface border-y border-r border-fw-border/30 rounded-r',
+        'text-fw-text-muted hover:text-fw-text-secondary transition-colors duration-150',
       )}
     >
       {collapsed
@@ -376,8 +375,8 @@ function ToolBtn({
         !active && !danger && !disabled && [
           'border-transparent',
           'text-fw-text-muted/[0.65]',
-          'hover:text-[#c4c9d4] hover:bg-white/[0.07] hover:border-white/[0.06]',
-          'hover:scale-[1.03] hover:shadow-[0_2px_8px_rgba(0,0,0,0.4)]',
+          'hover:text-fw-text hover:bg-fw-hover hover:border-fw-border/30',
+          'hover:scale-[1.03] hover:shadow-[0_2px_8px_rgba(0,0,0,0.15)]',
         ],
 
         // -- Danger � active (drawings exist) ------------------
@@ -406,14 +405,14 @@ function ToolBtn({
           'z-[500] pointer-events-none',
           'flex items-center gap-2 whitespace-nowrap',
           'px-[8px] py-[5px] rounded-[6px]',
-          'bg-fw-surface-2 border border-white/[0.09]',
+          'bg-fw-surface border border-fw-border',
           'shadow-[0_4px_20px_rgba(0,0,0,0.55)]',
           'opacity-0 group-hover:opacity-100',
           'transition-opacity duration-150 delay-100',
         )}
       >
         <span className="flex flex-col gap-[3px]">
-          <span className="text-[12px] font-medium leading-none text-[#c4c9d4]">
+          <span className="text-[12px] font-medium leading-none text-fw-text-secondary">
             {def.label}
           </span>
           {def.description && (
