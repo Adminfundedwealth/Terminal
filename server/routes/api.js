@@ -296,7 +296,7 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
       const account = await accountService.getAccount(req.user.accountId);
       if (!account) return res.json({ balance: 0, usedMargin: 0, availableMargin: 0 });
       const balance = parseFloat(account.balance) || 0;
-      const marginInfo = await MarginService.getAvailableMargin(req.user.accountId, balance);
+      const marginInfo = await MarginService.getAvailableMargin(req.user.accountId, balance, null, account);
       res.json(marginInfo);
     } catch (err) {
       res.json({ balance: 0, usedMargin: 0, availableMargin: 0 });
