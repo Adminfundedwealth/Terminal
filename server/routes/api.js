@@ -886,8 +886,6 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
 
       return res.json(null);
     }
-      return res.json(null);
-    }
 
     // Non-placeholder token — standard lookup
     const quote = marketDataEngine.getQuote(token);

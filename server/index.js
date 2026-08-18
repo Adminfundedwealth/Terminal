@@ -423,6 +423,15 @@ async function startup() {
   console.log(`  Env:  ${process.env.NODE_ENV || 'development'}`);
   console.log('');
 
+  // ─── LISTEN FIRST — ensures Railway healthcheck passes while services initialize ───
+  await new Promise((resolve) => {
+    server.listen(PORT, () => {
+      console.log(`[Startup] ✓ HTTP server bound to port ${PORT} — healthcheck will pass`);
+      resolve();
+    });
+  });
+
+
   // 1. Test Supabase Connection
   console.log('[Startup] Testing Supabase connection...');
   const dbResult = await testConnection();
@@ -490,42 +499,39 @@ async function startup() {
     console.log('[Startup] âœ“ Provisioning poller active (30s interval)');
   }
 
-  // 6. Start HTTP server
-  server.listen(PORT, () => {
-    // 7. Initialize Socket.IO (needs server to be listening)
-    realtimeServer = new RealtimeServer(server, marketDataEngine, {
-      corsOrigin: corsOrigins,
-    });
-    console.log('[Startup] âœ“ Socket.IO server initialized');
-
-    // 7b. Start Event Bridge (connects eventBus â†’ Socket.IO/WS clients)
-    eventBridge.setRealtimeServer(realtimeServer);
-    eventBridge.setWss(wss);
-    eventBridge.start();
-    console.log('[Startup] âœ“ Event Bridge active (7 channels â†’ client)');
-
-    // 8. Start Broker Health Monitor
-    healthMonitor.start();
-    console.log('[Startup] âœ“ Broker health monitor active');
-
-    console.log('');
-    console.log(`[Startup] âœ“ Server listening on http://localhost:${PORT}`);
-    console.log(`[Startup] âœ“ WebSocket (legacy) on ws://localhost:${PORT}/ws`);
-    console.log(`[Startup] âœ“ Socket.IO on http://localhost:${PORT}/socket.io`);
-    console.log('');
-    console.log('  Broker Status:');
-    const bh = BrokerFactory.getHealthReport();
-    console.log(`    Angel One: configured=${bh._available.angelone.configured}, connected=${bh._available.angelone.status}`);
-    console.log(`    Dhan:      configured=${bh._available.dhan.configured}, status=${bh._available.dhan.status}`);
-    console.log('');
-    console.log('â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');
-
-    // 9. Connect Dhan WebSocket Feed (PRIMARY live market data) - fire and forget
-    // connectDhanFeed().catch(e => console.error("[connectDhanFeed] Fatal error:", e.message));
-
-    // 9b. Connect Angel Feed (SECONDARY - broker adapter only, NOT live ticks)
-    connectAngelFeedForBroker().catch(e => console.error("[connectAngelFeedForBroker] Error:", e.message));
+// 7. Initialize Socket.IO (needs server to be listening)
+  realtimeServer = new RealtimeServer(server, marketDataEngine, {
+    corsOrigin: corsOrigins,
   });
+  console.log('[Startup] âœ“ Socket.IO server initialized');
+
+  // 7b. Start Event Bridge (connects eventBus â†’ Socket.IO/WS clients)
+  eventBridge.setRealtimeServer(realtimeServer);
+  eventBridge.setWss(wss);
+  eventBridge.start();
+  console.log('[Startup] âœ“ Event Bridge active (7 channels â†’ client)');
+
+  // 8. Start Broker Health Monitor
+  healthMonitor.start();
+  console.log('[Startup] âœ“ Broker health monitor active');
+
+  console.log('');
+  console.log(`[Startup] âœ“ Server listening on http://localhost:${PORT}`);
+  console.log(`[Startup] âœ“ WebSocket (legacy) on ws://localhost:${PORT}/ws`);
+  console.log(`[Startup] âœ“ Socket.IO on http://localhost:${PORT}/socket.io`);
+  console.log('');
+  console.log('  Broker Status:');
+  const bh = BrokerFactory.getHealthReport();
+  console.log(`    Angel One: configured=${bh._available.angelone.configured}, connected=${bh._available.angelone.status}`);
+  console.log(`    Dhan:      configured=${bh._available.dhan.configured}, status=${bh._available.dhan.status}`);
+  console.log('');
+  console.log('â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');
+
+  // 9. Connect Dhan WebSocket Feed (PRIMARY live market data) - fire and forget
+  // connectDhanFeed().catch(e => console.error("[connectDhanFeed] Fatal error:", e.message));
+
+  // 9b. Connect Angel Feed (SECONDARY - broker adapter only, NOT live ticks)
+  connectAngelFeedForBroker().catch(e => console.error("[connectAngelFeedForBroker] Error:", e.message));
 }
 
 
