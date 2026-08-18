@@ -163,9 +163,6 @@ export class OrderExecutionService {
 
     return null;
   }
-      }
-    }, 1000);
-  }
 
   /**
    * Register an open paper SL/LIMIT order for price monitoring.

@@ -166,7 +166,6 @@ export class DhanOptionChainService {
     }
     return [];
   }
-  }
 
   async _fetchChain(secId, symbol, expiry) {
     // Dhan requires exact key "Expiry" (capital E, not Expirydate)
