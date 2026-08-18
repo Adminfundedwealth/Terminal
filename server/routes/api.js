@@ -695,10 +695,10 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
       'CRUDE_F': { securityId: '560977', segment: 'MCX_COMM', scripSymbol: 'CRUDEOIL' },
       'NATGAS_F': { securityId: null, segment: 'MCX_COMM', scripSymbol: 'NATURALGAS' },
       'COPPER_F': { securityId: null, segment: 'MCX_COMM', scripSymbol: 'COPPER' },
-      'USDINR_F': { securityId: '2', segment: 'CUR', scripSymbol: 'USDINR' },
-      'EURINR_F': { securityId: '3', segment: 'CUR', scripSymbol: 'EURINR' },
-      'GBPINR_F': { securityId: '4', segment: 'CUR', scripSymbol: 'GBPINR' },
-      'JPYINR_F': { securityId: '5', segment: 'CUR', scripSymbol: 'JPYINR' },
+      'USDINR_F': { securityId: '2', segment: 'NSE_CURRENCY', scripSymbol: 'USDINR' },
+      'EURINR_F': { securityId: '3', segment: 'NSE_CURRENCY', scripSymbol: 'EURINR' },
+      'GBPINR_F': { securityId: '4', segment: 'NSE_CURRENCY', scripSymbol: 'GBPINR' },
+      'JPYINR_F': { securityId: '5', segment: 'NSE_CURRENCY', scripSymbol: 'JPYINR' },
     };
 
     const mapping = PLACEHOLDER_TO_DHAN[token];
