@@ -264,7 +264,18 @@ export const useAppStore = create<AppState>()(
       setActiveWatchlistTab: (activeWatchlistTab) => set({ activeWatchlistTab }),
     }),
     {
-      name: 'fw-terminal-v7',
+      name: 'fw-terminal-v8',
+      version: 3,
+      migrate: (persistedState: any, version: number) => {
+        if (version < 3) {
+          return {
+            ...(persistedState as object),
+            watchlists: defaultWatchlists,
+            activeWatchlistTab: 'index',
+          };
+        }
+        return persistedState;
+      },
       partialize: (state) => ({
         theme: state.theme,
         timeframe: state.timeframe,
