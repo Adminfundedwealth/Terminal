@@ -64,10 +64,18 @@ export class DhanOptionChainService {
       return [];
     }
 
+    const ocHeaders = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'access-token': this.auth.accessToken,
+      'client-id': this.auth.clientId,
+      'dhanClientId': this.auth.clientId,
+    };
+
     const resp = await axios.post(
       `${DHAN_API_BASE}/optionchain/expirylist`,
       { UnderlyingScrip: secId, UnderlyingSeg: 'IDX_I' },
-      { httpsAgent: IPV4_AGENT, timeout: 8000, headers: this.auth.getHeaders() }
+      { httpsAgent: IPV4_AGENT, timeout: 8000, headers: ocHeaders }
     );
 
     const data = resp.data?.data;
@@ -134,17 +142,30 @@ export class DhanOptionChainService {
 
     console.log(`[DhanOC] Fetching chain: ${symbol} Expiry=${normalizedExpiry}`);
 
+    // Option Chain endpoint needs specific header set — different from other endpoints
+    const ocHeaders = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'access-token': this.auth.accessToken,
+      'client-id': this.auth.clientId,
+      'dhanClientId': this.auth.clientId,
+    };
+
     try {
       const resp = await axios.post(`${DHAN_API_BASE}/optionchain`, payload, {
         httpsAgent: IPV4_AGENT,
         timeout: 12000,
-        headers: this.auth.getHeaders(),
+        headers: ocHeaders,
       });
 
       const data = resp.data?.data || resp.data;
       if (Array.isArray(data) && data.length > 0) {
         console.log(`[DhanOC] Got ${data.length} strikes for ${symbol}/${normalizedExpiry}`);
         return this._parseChain(data);
+      }
+      // Check if response has 'oc' key (alternative Dhan format)
+      if (data && typeof data === 'object' && data.oc) {
+        return this._parseOCMap(data);
       }
       return [];
     } catch (err) {
@@ -153,6 +174,49 @@ export class DhanOptionChainService {
       console.error(`[DhanOC] Chain failed: HTTP ${status}`, JSON.stringify(msg).slice(0, 150));
       throw err;
     }
+  }
+
+  /**
+   * Parse Dhan 'oc' map format: { oc: { "24000": { ce: {...}, pe: {...} }, ... } }
+   */
+  _parseOCMap(data) {
+    const oc = data.oc || {};
+    const chain = [];
+    for (const [strikeStr, sides] of Object.entries(oc)) {
+      const strike = parseFloat(strikeStr);
+      if (!strike) continue;
+      const ce = sides.ce || {};
+      const pe = sides.pe || {};
+      chain.push({
+        strike,
+        callToken: String(ce.security_id || ce.securityId || ''),
+        callLtp: parseFloat(ce.ltp || ce.last_price || 0),
+        callVolume: parseInt(ce.volume || 0),
+        callOi: parseInt(ce.oi || ce.open_interest || 0),
+        callOiChange: parseInt(ce.oi_change || 0),
+        callBidPrice: parseFloat(ce.bid || ce.bid_price || 0),
+        callAskPrice: parseFloat(ce.ask || ce.ask_price || 0),
+        callIv: parseFloat(ce.iv || ce.implied_volatility || 0),
+        callDelta: parseFloat(ce.delta || 0),
+        callGamma: parseFloat(ce.gamma || 0),
+        callTheta: parseFloat(ce.theta || 0),
+        callVega: parseFloat(ce.vega || 0),
+        putToken: String(pe.security_id || pe.securityId || ''),
+        putLtp: parseFloat(pe.ltp || pe.last_price || 0),
+        putVolume: parseInt(pe.volume || 0),
+        putOi: parseInt(pe.oi || pe.open_interest || 0),
+        putOiChange: parseInt(pe.oi_change || 0),
+        putBidPrice: parseFloat(pe.bid || pe.bid_price || 0),
+        putAskPrice: parseFloat(pe.ask || pe.ask_price || 0),
+        putIv: parseFloat(pe.iv || pe.implied_volatility || 0),
+        putDelta: parseFloat(pe.delta || 0),
+        putGamma: parseFloat(pe.gamma || 0),
+        putTheta: parseFloat(pe.theta || 0),
+        putVega: parseFloat(pe.vega || 0),
+      });
+    }
+    chain.sort((a, b) => a.strike - b.strike);
+    return chain;
   }
 
   /**

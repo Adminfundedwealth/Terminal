@@ -112,13 +112,15 @@ export class DataProviderSwitch {
       }
     }
 
-    // Fallback: Angel One
+    // Fallback: Angel One — ALWAYS try this if Dhan fails
     if (this._angelOptionChain) {
       try {
         await this._angelOptionChain._ensureToken();
         if (this._angelOptionChain.jwtToken) {
           const chain = await this._angelOptionChain.getOptionChain(symbol, expiry);
-          return { data: chain || [], provider: 'ANGELONE' };
+          if (chain && chain.length > 0) {
+            return { data: chain, provider: 'ANGELONE' };
+          }
         }
       } catch (err) {
         console.error(`[DataProvider] Angel option chain also failed: ${err.message}`);
