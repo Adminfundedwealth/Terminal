@@ -61,6 +61,7 @@ export class OrderExecutionService {
   /**
    * Monitor open SL-M and LIMIT paper orders every second.
    * Fills them when LTP crosses the trigger/limit price.
+   * Uses multiple price sources to ensure triggers fire.
    */
   _startPaperOrderMonitor() {
     this._paperOrderMonitor = setInterval(async () => {
@@ -70,24 +71,39 @@ export class OrderExecutionService {
 
       for (const [orderId, entry] of this._pendingPaperOrders) {
         try {
-          const ltp = this.marketDataEngine.getQuote(entry.token)?.ltp;
-          if (!ltp) continue;
+          // Multi-source LTP resolution: cache → candle → depth midpoint
+          let ltp = this.marketDataEngine.getQuote(entry.token)?.ltp;
+          if (!ltp || ltp <= 0) {
+            // Try last candle close
+            const candle = this._candleService?.getCurrentCandle(entry.token, '1');
+            ltp = candle?.close;
+          }
+          if (!ltp || ltp <= 0) {
+            // Try depth midpoint
+            const depth = this.marketDataEngine.depthCache?.get(entry.token);
+            if (depth?.bids?.[0]?.price && depth?.asks?.[0]?.price) {
+              ltp = (depth.bids[0].price + depth.asks[0].price) / 2;
+            }
+          }
+          if (!ltp || ltp <= 0) continue;
 
           let shouldFill = false;
+          const triggerPrice = Number(entry.triggerPrice) || 0;
+          const limitPrice = Number(entry.price) || 0;
 
           if (entry.orderType === 'SL-M' || entry.orderType === 'SL') {
             // SL SELL fires when LTP ≤ triggerPrice; SL BUY fires when LTP ≥ triggerPrice
-            if (entry.side === 'SELL' && ltp <= entry.triggerPrice) shouldFill = true;
-            if (entry.side === 'BUY'  && ltp >= entry.triggerPrice) shouldFill = true;
+            if (entry.side === 'SELL' && triggerPrice > 0 && ltp <= triggerPrice) shouldFill = true;
+            if (entry.side === 'BUY'  && triggerPrice > 0 && ltp >= triggerPrice) shouldFill = true;
           } else if (entry.orderType === 'LIMIT') {
             // LIMIT SELL fills when LTP ≥ limitPrice; LIMIT BUY fills when LTP ≤ limitPrice
-            if (entry.side === 'SELL' && ltp >= entry.price) shouldFill = true;
-            if (entry.side === 'BUY'  && ltp <= entry.price) shouldFill = true;
+            if (entry.side === 'SELL' && limitPrice > 0 && ltp >= limitPrice) shouldFill = true;
+            if (entry.side === 'BUY'  && limitPrice > 0 && ltp <= limitPrice) shouldFill = true;
           }
 
           if (shouldFill) {
             this._pendingPaperOrders.delete(orderId);
-            console.log(`[PaperMonitor] Triggering ${entry.orderType} ${entry.side} ${entry.symbol} @ LTP ${ltp} (trigger=${entry.triggerPrice || ''} limit=${entry.price || ''})`);
+            console.log(`[PaperMonitor] TRIGGERED: ${entry.orderType} ${entry.side} ${entry.symbol} @ LTP ${ltp} (trigger=${triggerPrice} limit=${limitPrice})`);
             // Resolve account for post-trade risk checks
             let acct = null;
             try { acct = await this._getAccount(entry.accountId); } catch (_) {}
@@ -121,6 +137,15 @@ export class OrderExecutionService {
       price: orderParams.price || 0,
       orderParams,
     });
+
+    // Ensure the token is actively monitored for price updates
+    // Subscribe if not already in the quote cache
+    if (!this.marketDataEngine.getQuote(orderParams.token)?.ltp) {
+      // Push a placeholder so the LTP poller picks it up
+      this.marketDataEngine.subscribe(orderParams.token, () => {});
+    }
+
+    console.log(`[PaperMonitor] Registered ${orderParams.orderType} ${orderParams.side} ${orderParams.symbol} (trigger=${orderParams.triggerPrice || ''} limit=${orderParams.price || ''})`);
   }
 
   /**
