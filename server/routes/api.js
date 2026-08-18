@@ -653,7 +653,7 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
           candleService.registerTokenExchange(String(token), resolvedExchange);
         }
 
-        const fromTs = from ? parseInt(String(from), 10) : Math.floor((Date.now() - 7 * 24 * 60 * 60 * 1000) / 1000);
+        const fromTs = from ? parseInt(String(from), 10) : 0;
         const toTs = to ? parseInt(String(to), 10) : Math.floor(Date.now() / 1000);
 
         const result = await dataProviderSwitch.getHistoricalCandles(

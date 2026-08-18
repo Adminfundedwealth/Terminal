@@ -1,24 +1,15 @@
 /**
  * DHAN HISTORICAL DATA SERVICE
  * 
- * Fetches historical OHLCV candle data from Dhan API v2.
- * 
  * Endpoints:
- *   POST /v2/charts/historical  — Daily candles (multi-day)
- *   POST /v2/charts/intraday    — Intraday candles (1m, 5m, 15m, 25m, 60m)
+ *   POST /v2/charts/intraday    — Up to 5 days per request (1m, 5m, 15m, 25m, 60m)
+ *   POST /v2/charts/historical  — Full multi-year daily data
  * 
- * Key discovery from live testing:
- *   - Dhan uses same security IDs as Angel One for NSE_EQ stocks (e.g. 2885 = RELIANCE)
- *   - Index IDs: NIFTY=13, BANKNIFTY=25, FINNIFTY=27, MIDCPNIFTY=442, SENSEX=51
- *   - Index segment must be 'IDX_I' (not NSE_EQ)
- *   - NSE stocks use 'NSE_EQ' + instrument 'EQUITY'
- *   - NFO futures/options need Dhan-specific security IDs (different from Angel)
- *   - MCX uses 'MCX_COMM' segment
- *   - Header 'dhan-client-id' is required alongside 'client-id'
+ * Date ranges:
+ *   Intraday: 60 trading days back (chunked in 5-day batches)
+ *   Daily/Weekly: 5 years back
  * 
- * Output:
- *   Normalized array of { time, open, high, low, close, volume }
- *   Sorted ascending. Validated. Compatible with TradingView Lightweight Charts.
+ * Headers required: access-token, client-id, dhan-client-id, dhanClientId
  */
 
 import axios from 'axios';
@@ -27,206 +18,341 @@ import https from 'https';
 const DHAN_API_BASE = 'https://api.dhan.co/v2';
 const IPV4_AGENT = new https.Agent({ family: 4 });
 
-// Known index tokens (Angel One token → Dhan securityId + segment)
+// ─── Index token map (Angel → Dhan) ──────────────────────────────────────────
 const INDEX_MAP = {
-  '99926000': { securityId: '13', segment: 'IDX_I', instrument: 'INDEX' },   // NIFTY 50
-  '99926009': { securityId: '25', segment: 'IDX_I', instrument: 'INDEX' },   // BANKNIFTY
-  '99926037': { securityId: '27', segment: 'IDX_I', instrument: 'INDEX' },   // FINNIFTY
-  '99926074': { securityId: '442', segment: 'IDX_I', instrument: 'INDEX' },  // MIDCPNIFTY
-  '99919000': { securityId: '51', segment: 'IDX_I', instrument: 'INDEX' },   // SENSEX
+  '99926000': { securityId: '13', segment: 'IDX_I', instrument: 'INDEX' },
+  '99926009': { securityId: '25', segment: 'IDX_I', instrument: 'INDEX' },
+  '99926037': { securityId: '27', segment: 'IDX_I', instrument: 'INDEX' },
+  '99926074': { securityId: '442', segment: 'IDX_I', instrument: 'INDEX' },
+  '99919000': { securityId: '51', segment: 'IDX_I', instrument: 'INDEX' },
 };
 
-// Exchange → Dhan segment mapping
+// ─── Exchange segment mapping ─────────────────────────────────────────────────
 const SEGMENT_MAP = {
   'NSE': 'NSE_EQ',
   'BSE': 'BSE_EQ',
   'NFO': 'NSE_FNO',
   'BFO': 'BSE_FNO',
   'MCX': 'MCX_COMM',
-  'CDS': 'CUR',
-  // Pass-through
+  'CDS': 'NSE_CURRENCY',
   'NSE_EQ': 'NSE_EQ',
   'BSE_EQ': 'BSE_EQ',
   'NSE_FNO': 'NSE_FNO',
   'IDX_I': 'IDX_I',
   'MCX_COMM': 'MCX_COMM',
+  'NSE_CURRENCY': 'NSE_CURRENCY',
 };
 
-// Instrument type by segment (reference only — actual logic in _resolveInstrument)
-// NSE_EQ → EQUITY, NSE_FNO → FUTIDX, MCX_COMM → FUTCOM, IDX_I → INDEX, CUR → FUTCUR
-
-// Timeframe → endpoint + interval
-const TIMEFRAME_CONFIG = {
-  '1':   { endpoint: 'intraday', interval: '1' },
-  '3':   { endpoint: 'intraday', interval: '5' },   // Dhan has no 3m, use 5m
-  '5':   { endpoint: 'intraday', interval: '5' },
-  '15':  { endpoint: 'intraday', interval: '15' },
-  '30':  { endpoint: 'intraday', interval: '25' },  // Dhan has 25m, closest to 30
-  '60':  { endpoint: 'intraday', interval: '60' },
-  '240': { endpoint: 'historical', interval: 'DAY' },
-  'D':   { endpoint: 'historical', interval: 'DAY' },
-  'W':   { endpoint: 'historical', interval: 'DAY' },
+// ─── Timeframe config ─────────────────────────────────────────────────────────
+// Intraday: max 5 calendar days per request
+// Historical: unlimited range for daily
+const TF_CONFIG = {
+  '1':   { type: 'intraday', interval: '1',  lookbackDays: 60 },
+  '3':   { type: 'intraday', interval: '5',  lookbackDays: 60 },
+  '5':   { type: 'intraday', interval: '5',  lookbackDays: 60 },
+  '15':  { type: 'intraday', interval: '15', lookbackDays: 90 },
+  '30':  { type: 'intraday', interval: '25', lookbackDays: 90 },
+  '60':  { type: 'intraday', interval: '60', lookbackDays: 90 },
+  '240': { type: 'historical', interval: 'DAY', lookbackYears: 2 },
+  'D':   { type: 'historical', interval: 'DAY', lookbackYears: 5 },
+  'W':   { type: 'historical', interval: 'DAY', lookbackYears: 5 },
 };
 
 export class DhanHistoricalService {
   constructor(authService) {
     this.auth = authService;
+    // Scrip master cache: loaded once on first request
+    this._scripMaster = null;
+    this._scripMasterLoading = null;
   }
 
   /**
-   * Fetch historical candles.
-   * 
-   * @param {string} token          — Angel One token / security ID
-   * @param {string} exchange       — Exchange as passed from frontend: NSE, NFO, MCX, etc.
-   * @param {string} timeframe      — '1','5','15','30','60','240','D','W'
-   * @param {number} fromTimestamp  — Unix seconds
-   * @param {number} toTimestamp    — Unix seconds
-   * @returns {Array<{time, open, high, low, close, volume}>}
+   * Main entry point — fetch candles for any instrument.
    */
   async getCandles(token, exchange, timeframe, fromTimestamp, toTimestamp) {
     if (!this.auth.isTokenValid) {
       const refreshed = await this.auth.refreshToken();
       if (!refreshed && !this.auth.isTokenValid) {
-        throw new Error('[DhanHistorical] No valid token');
+        throw new Error('[DhanHist] No valid token');
       }
     }
 
-    const tfConfig = TIMEFRAME_CONFIG[timeframe];
-    if (!tfConfig) {
-      throw new Error(`[DhanHistorical] Unsupported timeframe: ${timeframe}`);
-    }
+    const tf = TF_CONFIG[timeframe];
+    if (!tf) throw new Error(`[DhanHist] Unsupported timeframe: ${timeframe}`);
 
-    // Resolve Dhan-specific params from the Angel token + exchange
-    const { securityId, segment, instrument } = this._resolveInstrument(token, exchange);
+    // Resolve instrument identity
+    const resolved = await this._resolve(token, exchange);
+    if (!resolved) throw new Error(`[DhanHist] Cannot resolve ${token}/${exchange}`);
 
-    // For intraday: Dhan allows max 5 trading days per request.
-    // Split if range > 5 days. For historical (daily): no limit needed.
-    if (tfConfig.endpoint === 'intraday') {
-      return this._fetchIntraday(securityId, segment, instrument, tfConfig.interval, fromTimestamp, toTimestamp);
+    // Calculate proper date range
+    const now = new Date();
+    let fromDate, toDate;
+
+    if (tf.type === 'intraday') {
+      // Use provided timestamps or default to lookbackDays
+      if (fromTimestamp && fromTimestamp > 946684800) {
+        fromDate = this._fmt(new Date(fromTimestamp * 1000));
+      } else {
+        const from = new Date(now);
+        from.setDate(from.getDate() - tf.lookbackDays);
+        fromDate = this._fmt(from);
+      }
+      toDate = toTimestamp ? this._fmt(new Date(toTimestamp * 1000)) : this._fmt(now);
     } else {
-      return this._fetchHistorical(securityId, segment, instrument, timeframe, fromTimestamp, toTimestamp);
-    }
-  }
-
-  async _fetchIntraday(securityId, segment, instrument, interval, fromTs, toTs) {
-    const MAX_DAYS = 5;
-    const allCandles = [];
-    let currentFrom = fromTs;
-
-    while (currentFrom < toTs) {
-      const chunkEnd = Math.min(currentFrom + MAX_DAYS * 24 * 60 * 60, toTs);
-      const fromDate = this._formatDate(new Date(currentFrom * 1000));
-      const toDate = this._formatDate(new Date(chunkEnd * 1000));
-
-      const payload = { securityId, exchangeSegment: segment, instrument, interval, fromDate, toDate };
-      const endpoint = `${DHAN_API_BASE}/charts/intraday`;
-
-      console.log(`[DhanHistorical] intraday ${securityId}/${segment} ${interval} ${fromDate}→${toDate}`);
-
-      try {
-        const resp = await this._request(endpoint, payload);
-        const candles = this._parse(resp.data, interval);
-        allCandles.push(...candles);
-      } catch (err) {
-        if (err.response?.status === 401 || err.response?.status === 403) {
-          const refreshed = await this.auth.refreshToken();
-          if (refreshed) {
-            const resp = await this._request(endpoint, payload);
-            allCandles.push(...this._parse(resp.data, interval));
-          } else { throw err; }
-        } else {
-          console.error(`[DhanHistorical] Intraday chunk failed:`, err.response?.data || err.message);
-          throw err;
-        }
+      // Historical daily/weekly — go years back
+      if (fromTimestamp && fromTimestamp > 946684800) {
+        fromDate = this._fmt(new Date(fromTimestamp * 1000));
+      } else {
+        const from = new Date(now);
+        from.setFullYear(from.getFullYear() - tf.lookbackYears);
+        fromDate = this._fmt(from);
       }
-
-      currentFrom = chunkEnd + 1;
+      toDate = toTimestamp ? this._fmt(new Date(toTimestamp * 1000)) : this._fmt(now);
     }
 
-    // Deduplicate and sort
-    allCandles.sort((a, b) => a.time - b.time);
-    const deduped = [];
-    let prevTime = 0;
-    for (const c of allCandles) {
-      if (c.time !== prevTime) { deduped.push(c); prevTime = c.time; }
-    }
-    return deduped;
-  }
+    console.log(`[DhanHist] ${tf.type} ${resolved.securityId}/${resolved.segment} tf=${timeframe} ${fromDate}→${toDate}`);
 
-  async _fetchHistorical(securityId, segment, instrument, timeframe, fromTs, toTs) {
-    const fromDate = this._formatDate(new Date(fromTs * 1000));
-    const toDate = this._formatDate(new Date(toTs * 1000));
-
-    const payload = { securityId, exchangeSegment: segment, instrument, interval: 'DAY', fromDate, toDate };
-    const endpoint = `${DHAN_API_BASE}/charts/historical`;
-
-    console.log(`[DhanHistorical] historical ${securityId}/${segment} DAY ${fromDate}→${toDate}`);
-
-    try {
-      const resp = await this._request(endpoint, payload);
-      const candles = this._parse(resp.data, timeframe);
+    if (tf.type === 'intraday') {
+      const candles = await this._fetchIntraday(resolved, tf.interval, fromDate, toDate);
+      return candles;
+    } else {
+      const candles = await this._fetchDaily(resolved, fromDate, toDate);
       if (timeframe === 'W') return this._aggregateWeekly(candles);
       return candles;
+    }
+  }
+
+  // ─── Intraday: chunk into 5-day windows ──────────────────────────────────
+
+  async _fetchIntraday(resolved, interval, fromDate, toDate) {
+    const allCandles = [];
+    const startDate = new Date(fromDate);
+    const endDate = new Date(toDate);
+
+    let cursor = new Date(startDate);
+    while (cursor <= endDate) {
+      const chunkEnd = new Date(cursor);
+      chunkEnd.setDate(chunkEnd.getDate() + 4); // 5 days max per request
+      if (chunkEnd > endDate) chunkEnd.setTime(endDate.getTime());
+
+      const payload = {
+        securityId: resolved.securityId,
+        exchangeSegment: resolved.segment,
+        instrument: resolved.instrument,
+        interval,
+        fromDate: this._fmt(cursor),
+        toDate: this._fmt(chunkEnd),
+      };
+
+      try {
+        const resp = await this._post(`${DHAN_API_BASE}/charts/intraday`, payload);
+        const parsed = this._parse(resp.data);
+        allCandles.push(...parsed);
+      } catch (err) {
+        // On auth error, try refresh once
+        if (err.response?.status === 401 || err.response?.status === 400) {
+          const errMsg = err.response?.data?.errorMessage || err.response?.data?.data;
+          if (String(errMsg).includes('Token') || String(errMsg).includes('Authentication')) {
+            const refreshed = await this.auth.refreshToken();
+            if (refreshed) {
+              try {
+                const resp = await this._post(`${DHAN_API_BASE}/charts/intraday`, payload);
+                allCandles.push(...this._parse(resp.data));
+              } catch (_) {}
+            }
+          }
+        }
+        // Continue with next chunk even on error
+      }
+
+      cursor.setDate(cursor.getDate() + 5);
+    }
+
+    return this._dedupe(allCandles);
+  }
+
+  // ─── Historical daily: single request ────────────────────────────────────
+
+  async _fetchDaily(resolved, fromDate, toDate) {
+    const payload = {
+      securityId: resolved.securityId,
+      exchangeSegment: resolved.segment,
+      instrument: resolved.instrument,
+      interval: 'DAY',
+      fromDate,
+      toDate,
+    };
+
+    try {
+      const resp = await this._post(`${DHAN_API_BASE}/charts/historical`, payload);
+      return this._dedupe(this._parse(resp.data));
     } catch (err) {
-      if (err.response?.status === 401 || err.response?.status === 403) {
+      if (err.response?.status === 401 || err.response?.status === 400) {
         const refreshed = await this.auth.refreshToken();
         if (refreshed) {
-          const resp = await this._request(endpoint, payload);
-          const candles = this._parse(resp.data, timeframe);
-          if (timeframe === 'W') return this._aggregateWeekly(candles);
-          return candles;
+          const resp = await this._post(`${DHAN_API_BASE}/charts/historical`, payload);
+          return this._dedupe(this._parse(resp.data));
         }
       }
       throw err;
     }
   }
 
-  /**
-   * Resolve Angel token + exchange into Dhan securityId + segment + instrument.
-   */
-  _resolveInstrument(token, exchange) {
-    // Check if it's a known index token
-    if (INDEX_MAP[token]) {
-      return INDEX_MAP[token];
+  // ─── Instrument resolution ───────────────────────────────────────────────
+
+  async _resolve(token, exchange) {
+    // 1. Known index tokens
+    if (INDEX_MAP[token]) return INDEX_MAP[token];
+
+    // 2. Try scrip master lookup (for MCX, NFO futures, ETFs)
+    const master = await this._getScripMaster();
+    if (master) {
+      const entry = master.get(token);
+      if (entry) return entry;
     }
 
-    // Map exchange to Dhan segment
+    // 3. Default: use token as-is with mapped segment
     const segment = SEGMENT_MAP[exchange] || 'NSE_EQ';
-
-    // Determine instrument type based on segment AND token characteristics
     let instrument;
     switch (segment) {
-      case 'NSE_FNO':
-      case 'BSE_FNO':
-        instrument = 'FUTIDX'; // Futures on index
-        break;
-      case 'MCX_COMM':
-        instrument = 'FUTCOM'; // Commodity futures
-        break;
-      case 'CUR':
-        instrument = 'FUTCUR'; // Currency futures
-        break;
-      case 'IDX_I':
-        instrument = 'INDEX';
-        break;
-      case 'NSE_EQ':
-      case 'BSE_EQ':
-      default:
-        instrument = 'EQUITY';
-        break;
+      case 'NSE_FNO': case 'BSE_FNO': instrument = 'FUTIDX'; break;
+      case 'MCX_COMM': instrument = 'FUTCOM'; break;
+      case 'NSE_CURRENCY': instrument = 'FUTCUR'; break;
+      case 'IDX_I': instrument = 'INDEX'; break;
+      default: instrument = 'EQUITY'; break;
     }
-
-    return {
-      securityId: String(token),
-      segment,
-      instrument,
-    };
+    return { securityId: String(token), segment, instrument };
   }
 
-  /**
-   * Parse Dhan parallel-array response into candle objects.
-   */
-  _parse(data, timeframe) {
+  // ─── Scrip Master Loader ─────────────────────────────────────────────────
+
+  async _getScripMaster() {
+    if (this._scripMaster) return this._scripMaster;
+    if (this._scripMasterLoading) return this._scripMasterLoading;
+
+    this._scripMasterLoading = this._loadScripMaster().then(m => {
+      this._scripMaster = m;
+      this._scripMasterLoading = null;
+      return m;
+    }).catch(err => {
+      console.error('[DhanHist] Scrip master load failed:', err.message);
+      this._scripMasterLoading = null;
+      return null;
+    });
+
+    return this._scripMasterLoading;
+  }
+
+  async _loadScripMaster() {
+    console.log('[DhanHist] Loading Dhan scrip master...');
+    try {
+      const resp = await axios.get('https://images.dhan.co/api-data/api-scrip-master.csv', {
+        httpsAgent: IPV4_AGENT,
+        timeout: 30000,
+        responseType: 'text',
+      });
+
+      const lines = resp.data.split('\n');
+      const header = lines[0].split(',');
+
+      // Find column indices
+      const cols = {};
+      header.forEach((h, i) => {
+        const key = h.trim().replace(/"/g, '');
+        cols[key] = i;
+      });
+
+      // Columns we need: SEM_SMST_SECURITY_ID, SEM_INSTRUMENT_NAME, SEM_TRADING_SYMBOL,
+      // SEM_EXG_SEGMENT, SEM_CUSTOM_SYMBOL, SM_SYMBOL_NAME
+      const secIdCol = cols['SEM_SMST_SECURITY_ID'] ?? cols['SECURITY_ID'];
+      const segCol = cols['SEM_EXG_SEGMENT'] ?? cols['EXCHANGE_SEGMENT'];
+      const symbolCol = cols['SEM_TRADING_SYMBOL'] ?? cols['TRADING_SYMBOL'];
+      const instCol = cols['SEM_INSTRUMENT_NAME'] ?? cols['INSTRUMENT_TYPE'];
+      const customSymCol = cols['SEM_CUSTOM_SYMBOL'] ?? cols['CUSTOM_SYMBOL'];
+
+      if (secIdCol === undefined) {
+        console.warn('[DhanHist] Scrip master: cannot find security ID column');
+        return null;
+      }
+
+      const map = new Map();
+
+      // Build lookup by: Angel-style token → Dhan resolution
+      // For NSE_EQ, Angel token === Dhan securityId
+      // For MCX/NFO, we map by symbol name
+      const symbolToEntry = new Map();
+
+      for (let i = 1; i < lines.length; i++) {
+        const fields = this._parseCSVLine(lines[i]);
+        if (!fields || fields.length < 5) continue;
+
+        const secId = fields[secIdCol]?.trim();
+        const seg = fields[segCol]?.trim();
+        const symbol = fields[symbolCol]?.trim();
+        const inst = fields[instCol]?.trim();
+        const customSym = fields[customSymCol]?.trim();
+
+        if (!secId || !seg) continue;
+
+        const entry = { securityId: secId, segment: seg, instrument: inst || 'EQUITY' };
+
+        // Direct securityId mapping (works for NSE_EQ where Angel token = Dhan securityId)
+        map.set(secId, entry);
+
+        // Also index by trading symbol for cross-reference
+        if (symbol) symbolToEntry.set(`${seg}:${symbol}`, entry);
+        if (customSym) symbolToEntry.set(`${seg}:${customSym}`, entry);
+      }
+
+      // Add well-known hardcoded mappings for common instruments
+      // These cover cases where Angel One tokens differ from Dhan security IDs
+      const HARDCODED = {
+        // ETFs (Angel token → Dhan securityId on NSE_EQ)
+        '16599': { securityId: '10599', segment: 'NSE_EQ', instrument: 'EQUITY' },  // NIFTYBEES
+        '16600': { securityId: '10604', segment: 'NSE_EQ', instrument: 'EQUITY' },  // BANKBEES
+        // MCX commodities (Angel token → Dhan securityId)
+        '429604': { securityId: '429604', segment: 'MCX_COMM', instrument: 'FUTCOM' },  // GOLD
+        '429638': { securityId: '429638', segment: 'MCX_COMM', instrument: 'FUTCOM' },  // SILVER
+        '425475': { securityId: '425475', segment: 'MCX_COMM', instrument: 'FUTCOM' },  // CRUDEOIL
+        '431765': { securityId: '431765', segment: 'MCX_COMM', instrument: 'FUTCOM' },  // NATURALGAS
+        '430596': { securityId: '430596', segment: 'MCX_COMM', instrument: 'FUTCOM' },  // COPPER
+        // CDS currencies
+        '11091': { securityId: '11091', segment: 'NSE_CURRENCY', instrument: 'FUTCUR' }, // USDINR
+        '11363': { securityId: '11363', segment: 'NSE_CURRENCY', instrument: 'FUTCUR' }, // EURINR
+        '11096': { securityId: '11096', segment: 'NSE_CURRENCY', instrument: 'FUTCUR' }, // GBPINR
+        '11098': { securityId: '11098', segment: 'NSE_CURRENCY', instrument: 'FUTCUR' }, // JPYINR
+      };
+
+      for (const [k, v] of Object.entries(HARDCODED)) {
+        map.set(k, v);
+      }
+
+      console.log(`[DhanHist] Scrip master loaded: ${map.size} entries`);
+      return map;
+    } catch (err) {
+      console.error('[DhanHist] Scrip master fetch error:', err.message);
+      return null;
+    }
+  }
+
+  _parseCSVLine(line) {
+    if (!line) return null;
+    const fields = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (c === '"') { inQuotes = !inQuotes; }
+      else if (c === ',' && !inQuotes) { fields.push(current); current = ''; }
+      else { current += c; }
+    }
+    fields.push(current);
+    return fields;
+  }
+
+  // ─── Response parser ─────────────────────────────────────────────────────
+
+  _parse(data) {
     const raw = data?.data || data;
     const timestamps = raw?.timestamp || raw?.start_Time || [];
     const opens = raw?.open || [];
@@ -239,38 +365,32 @@ export class DhanHistoricalService {
 
     const candles = [];
     for (let i = 0; i < timestamps.length; i++) {
-      const time = this._normalizeTimestamp(timestamps[i]);
-      const open = parseFloat(opens[i]) || 0;
-      const high = parseFloat(highs[i]) || 0;
-      const low = parseFloat(lows[i]) || 0;
-      const close = parseFloat(closes[i]) || 0;
-      const volume = parseInt(volumes[i]) || 0;
+      const time = this._normalizeTs(timestamps[i]);
+      const o = parseFloat(opens[i]) || 0;
+      const h = parseFloat(highs[i]) || 0;
+      const l = parseFloat(lows[i]) || 0;
+      const c = parseFloat(closes[i]) || 0;
+      const v = parseInt(volumes[i]) || 0;
 
-      if (!this._isValid(time, open, high, low, close)) continue;
-      candles.push({ time, open, high, low, close, volume });
+      if (time <= 0 || o <= 0 || h <= 0 || l <= 0 || c <= 0) continue;
+      if (h < l || h < o || h < c || l > o || l > c) continue;
+      candles.push({ time, open: o, high: h, low: l, close: c, volume: v });
     }
-
-    // Sort ascending, deduplicate
-    candles.sort((a, b) => a.time - b.time);
-    const deduped = [];
-    let prevTime = 0;
-    for (const c of candles) {
-      if (c.time !== prevTime) { deduped.push(c); prevTime = c.time; }
-    }
-
-    // Aggregate to weekly if needed
-    if (timeframe === 'W') return this._aggregateWeekly(deduped);
-    return deduped;
+    return candles;
   }
 
-  _normalizeTimestamp(ts) {
+  _normalizeTs(ts) {
     if (typeof ts === 'number') return ts > 9999999999 ? Math.floor(ts / 1000) : ts;
     if (typeof ts === 'string') { const d = new Date(ts).getTime(); return isNaN(d) ? 0 : Math.floor(d / 1000); }
     return 0;
   }
 
-  _isValid(time, o, h, l, c) {
-    return time > 0 && o > 0 && h > 0 && l > 0 && c > 0 && h >= l && h >= o && h >= c && l <= o && l <= c;
+  _dedupe(candles) {
+    candles.sort((a, b) => a.time - b.time);
+    const out = [];
+    let prev = 0;
+    for (const c of candles) { if (c.time !== prev) { out.push(c); prev = c.time; } }
+    return out;
   }
 
   _aggregateWeekly(daily) {
@@ -278,26 +398,31 @@ export class DhanHistoricalService {
     const weeks = [];
     let cur = null;
     for (const c of daily) {
-      const ws = this._weekStart(new Date(c.time * 1000));
+      const d = new Date(c.time * 1000);
+      const day = d.getDay();
+      d.setDate(d.getDate() - day + (day === 0 ? -6 : 1));
+      const ws = d.toISOString().slice(0, 10);
       if (!cur || cur._ws !== ws) {
         if (cur) weeks.push(cur);
         cur = { _ws: ws, time: c.time, open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume };
       } else {
-        cur.high = Math.max(cur.high, c.high); cur.low = Math.min(cur.low, c.low);
-        cur.close = c.close; cur.volume += c.volume;
+        cur.high = Math.max(cur.high, c.high);
+        cur.low = Math.min(cur.low, c.low);
+        cur.close = c.close;
+        cur.volume += c.volume;
       }
     }
     if (cur) weeks.push(cur);
     return weeks.map(({ _ws, ...c }) => c);
   }
 
-  _weekStart(d) { const day = d.getDay(); d.setDate(d.getDate() - day + (day === 0 ? -6 : 1)); return d.toISOString().slice(0, 10); }
+  // ─── Helpers ─────────────────────────────────────────────────────────────
 
-  _formatDate(date) {
+  _fmt(date) {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
   }
 
-  async _request(url, payload) {
+  async _post(url, payload) {
     return axios.post(url, payload, {
       httpsAgent: IPV4_AGENT,
       timeout: 12000,
