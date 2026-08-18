@@ -10,6 +10,23 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
   const router = Router();
   const tvDatafeed = new TradingViewDatafeed(instrumentService, marketDataEngine);
 
+  // Helper: parse Dhan marketfeed/quote nested response into LTP number
+  function _parseDhanQuote(result, securityId, segment) {
+    if (!result) return null;
+    if (result.ltp && Number.isFinite(result.ltp)) return result.ltp;
+    if (result.last_price && Number.isFinite(result.last_price)) return result.last_price;
+    if (typeof result === 'object') {
+      // Dhan returns: { "MCX_COMM": { "429604": { "ltp": 72500 } } }
+      const segData = result[segment] || Object.values(result)[0];
+      if (segData && typeof segData === 'object') {
+        const entry = segData[securityId] || segData[parseInt(securityId)] || Object.values(segData)[0];
+        if (entry?.ltp) return entry.ltp;
+        if (entry?.last_price) return entry.last_price;
+      }
+    }
+    return null;
+  }
+
   // === PROTECTED ===
 
   router.get('/account', requireAuth, async (req, res) => {
@@ -821,93 +838,54 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
 
     const mapping = PLACEHOLDER_TO_DHAN[token];
     if (mapping) {
-      // Try spot token from Angel feed first (instant)
+      // FAST PATH: spot token from Angel feed (instant, no network)
       if (mapping.spotToken) {
         const spotQuote = marketDataEngine.getQuote(mapping.spotToken);
         if (spotQuote && spotQuote.ltp > 0) return res.json({ ...spotQuote, token });
       }
-      // Try Dhan REST API with native security ID (with timeout protection)
-      if (dataProviderSwitch && mapping.securityId) {
-        try {
-          const dhan = dataProviderSwitch.getDhanAdapter();
-          if (dhan && dhan.isConnected) {
-            // Use correct Dhan segment key for API call
-            const dhanSegment = mapping.segment === 'NSE_CURRENCY' ? 'CUR' : mapping.segment;
-            const timeoutRace = Promise.race([
-              dhan.getQuote(mapping.securityId, dhanSegment),
-              new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000)),
-            ]);
-            const result = await timeoutRace;
-            // Parse nested Dhan response
-            let ltp = null;
-            if (result) {
-              if (result.ltp) ltp = result.ltp;
-              else if (result.last_price) ltp = result.last_price;
-              else if (typeof result === 'object') {
-                const segData = result[dhanSegment] || Object.values(result)[0];
-                if (segData) {
-                  const entry = segData[mapping.securityId] || segData[parseInt(mapping.securityId)] || Object.values(segData)[0];
-                  if (entry?.ltp) ltp = entry.ltp;
-                  else if (entry?.last_price) ltp = entry.last_price;
-                }
-              }
-            }
-            if (ltp && Number.isFinite(ltp) && ltp > 0) {
-              return res.json({ token, ltp, exchange: mapping.segment, timestamp: Date.now(), symbol: token });
-            }
-          }
-        } catch (e) {
-          // Log but don't crash — fall through to next fallback
-          console.warn(`[Quote] Dhan MCX/CDS quote failed for ${token}: ${e.message}`);
+
+      // SLOW PATH: Dhan API resolution — wrapped in strict 1.5s timeout
+      // If scrip master isn't loaded yet or Dhan is slow, return null immediately
+      const resolveViaDhan = async () => {
+        const dhan = dataProviderSwitch?.getDhanAdapter();
+        if (!dhan?.isConnected) return null;
+
+        // Path A: Static security ID (Index/Stock futures)
+        if (mapping.securityId) {
+          const dhanSeg = mapping.segment === 'NSE_CURRENCY' ? 'CUR' : mapping.segment;
+          const result = await dhan.getQuote(mapping.securityId, dhanSeg);
+          return _parseDhanQuote(result, mapping.securityId, dhanSeg);
         }
+
+        // Path B: Dynamic resolution via pre-loaded scrip master (MCX/CDS)
+        if (mapping.scripSymbol && dhan.historical?._scripMaster) {
+          const master = dhan.historical._scripMaster; // Already loaded — no await
+          if (!master?.bySymbol) return null;
+          const dhanSeg = mapping.segment === 'NSE_CURRENCY' ? 'CUR' : mapping.segment;
+          const entry = master.bySymbol.get(`${mapping.scripSymbol}:${dhanSeg}`) ||
+                       master.bySymbol.get(`${mapping.scripSymbol}:${mapping.segment}`) ||
+                       master.bySymbol.get(`${mapping.scripSymbol}:E`);
+          if (!entry?.securityId) return null;
+          const result = await dhan.getQuote(entry.securityId, dhanSeg);
+          return _parseDhanQuote(result, entry.securityId, dhanSeg);
+        }
+        return null;
+      };
+
+      try {
+        const ltp = await Promise.race([
+          resolveViaDhan(),
+          new Promise(resolve => setTimeout(() => resolve(null), 1500)), // 1.5s max
+        ]);
+        if (ltp && Number.isFinite(ltp) && ltp > 0) {
+          return res.json({ token, ltp, exchange: mapping.segment, timestamp: Date.now(), symbol: mapping.scripSymbol || token });
+        }
+      } catch (e) {
+        console.warn(`[Quote] MCX/CDS resolution failed for ${token}: ${e.message}`);
       }
 
-      // Try dynamic scrip master resolution for MCX/CDS (securityId is null)
-      if (!mapping.securityId && mapping.scripSymbol && dataProviderSwitch) {
-        try {
-          const dhan = dataProviderSwitch.getDhanAdapter();
-          if (dhan?.historical?._getScripMaster) {
-            const master = await Promise.race([
-              dhan.historical._getScripMaster(),
-              new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000)),
-            ]);
-            if (master?.bySymbol) {
-              const dhanSeg = mapping.segment === 'NSE_CURRENCY' ? 'CUR' : mapping.segment;
-              const entry = master.bySymbol.get(`${mapping.scripSymbol}:${dhanSeg}`) || 
-                           master.bySymbol.get(`${mapping.scripSymbol}:${mapping.segment}`);
-              if (entry?.securityId) {
-                const quoteResult = await Promise.race([
-                  dhan.getQuote(entry.securityId, dhanSeg),
-                  new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000)),
-                ]);
-                let ltp = null;
-                if (quoteResult?.ltp) ltp = quoteResult.ltp;
-                else if (quoteResult?.last_price) ltp = quoteResult.last_price;
-                else if (typeof quoteResult === 'object') {
-                  const segData = quoteResult[dhanSeg] || Object.values(quoteResult)[0];
-                  if (segData) {
-                    const qEntry = segData[entry.securityId] || segData[parseInt(entry.securityId)] || Object.values(segData)[0];
-                    if (qEntry?.ltp) ltp = qEntry.ltp;
-                    else if (qEntry?.last_price) ltp = qEntry.last_price;
-                  }
-                }
-                if (ltp && Number.isFinite(ltp) && ltp > 0) {
-                  return res.json({ token, ltp, exchange: mapping.segment, timestamp: Date.now(), symbol: mapping.scripSymbol });
-                }
-              }
-            }
-          }
-        } catch (e) {
-          console.warn(`[Quote] Dynamic scrip resolution failed for ${token}: ${e.message}`);
-        }
-      }
-      // Final fallback: use getLivePrice on the spot token
-      if (mapping.spotToken && marketDataEngine.getLivePrice) {
-        try {
-          const ltp = await marketDataEngine.getLivePrice(mapping.spotToken, exchange || 'NSE');
-          if (ltp && ltp > 0) return res.json({ token, ltp, exchange: exchange || 'NSE', timestamp: Date.now() });
-        } catch (_) {}
-      }
+      return res.json(null);
+    }
       return res.json(null);
     }
 

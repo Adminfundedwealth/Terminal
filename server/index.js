@@ -449,6 +449,13 @@ async function startup() {
   if (dhanAdapter) dhanAdapter.setMarketDataEngine(marketDataEngine);
   marketDataEngine.setLtpFallbacks(dhanAdapter, candleService);
 
+  // Pre-load Dhan scrip master in background (prevents 502 timeout on first MCX/CDS quote)
+  if (dhanAdapter?.historical?._getScripMaster) {
+    dhanAdapter.historical._getScripMaster()
+      .then(m => console.log(`[Startup] ✓ Dhan scrip master pre-loaded: ${m?.byId?.size || 0} instruments`))
+      .catch(e => console.warn(`[Startup] Scrip master pre-load failed (will retry on demand): ${e.message}`));
+  }
+
   // Wire LTP fallback into order execution engine
   if (accountService.executionService) {
     accountService.executionService.setFallbackServices(dataProviderSwitch, candleService);
