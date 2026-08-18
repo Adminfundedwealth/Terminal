@@ -669,7 +669,11 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
 
   router.get('/market/history', async (req, res) => {
     let { token, from, to, exchange } = req.query;
+    const rawSymbol = req.query.symbol; // Support ?symbol= as alternative to ?token=
     const tf = req.query.tf || req.query.timeframe || req.query.resolution;
+    
+    // Support both ?token= and ?symbol= interchangeably
+    if (!token && rawSymbol) token = rawSymbol;
     if (!token || !tf) return res.status(400).json({ message: 'token and tf required' });
 
     // Native Dhan mapping for placeholder tokens
@@ -680,55 +684,276 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
       'BNF_FUT': { securityId: '25', segment: 'IDX_I', spotToken: '99926009' },
       'BNF_FUT_N': { securityId: '25', segment: 'IDX_I', spotToken: '99926009' },
       'FNF_FUT': { securityId: '27', segment: 'IDX_I', spotToken: '99926037' },
+      'MNF_FUT': { securityId: '442', segment: 'IDX_I', spotToken: '99926074' },
+      'SNX_FUT': { securityId: '51', segment: 'IDX_I', spotToken: '99919000' },
       'MCN_FUT': { securityId: '442', segment: 'IDX_I', spotToken: '99926074' },
       'SEN_FUT': { securityId: '51', segment: 'IDX_I', spotToken: '99919000' },
+      // Stock Futures — all 30 F&O stocks (resolve via spot equity token)
       'REL_FUT': { securityId: '2885', segment: 'NSE_EQ', spotToken: '2885' },
-      'SBIN_FUT': { securityId: '3045', segment: 'NSE_EQ', spotToken: '3045' },
       'HDFC_FUT': { securityId: '1333', segment: 'NSE_EQ', spotToken: '1333' },
       'ICICI_FUT': { securityId: '4963', segment: 'NSE_EQ', spotToken: '4963' },
+      'SBIN_FUT': { securityId: '3045', segment: 'NSE_EQ', spotToken: '3045' },
       'TCS_FUT': { securityId: '11536', segment: 'NSE_EQ', spotToken: '11536' },
       'INFY_FUT': { securityId: '1594', segment: 'NSE_EQ', spotToken: '1594' },
-      'GOLD_F': { securityId: '483079', segment: 'MCX_COMM', scripSymbol: 'GOLD' },
-      'GOLDM_F': { securityId: '483079', segment: 'MCX_COMM', scripSymbol: 'GOLDM' },
-      'SILVER_F': { securityId: '471725', segment: 'MCX_COMM', scripSymbol: 'SILVER' },
-      'SILVERM_F': { securityId: '471725', segment: 'MCX_COMM', scripSymbol: 'SILVERM' },
-      'CRUDE_F': { securityId: '560977', segment: 'MCX_COMM', scripSymbol: 'CRUDEOIL' },
+      'ITC_FUT': { securityId: '1660', segment: 'NSE_EQ', spotToken: '1660' },
+      'LT_FUT': { securityId: '11483', segment: 'NSE_EQ', spotToken: '11483' },
+      'AXIS_FUT': { securityId: '5900', segment: 'NSE_EQ', spotToken: '5900' },
+      'HCL_FUT': { securityId: '7229', segment: 'NSE_EQ', spotToken: '7229' },
+      'BAJF_FUT': { securityId: '317', segment: 'NSE_EQ', spotToken: '317' },
+      'KOTAK_FUT': { securityId: '1922', segment: 'NSE_EQ', spotToken: '1922' },
+      'TATAM_FUT': { securityId: '3456', segment: 'NSE_EQ', spotToken: '3456' },
+      'TATAS_FUT': { securityId: '3499', segment: 'NSE_EQ', spotToken: '3499' },
+      'MARUTI_FUT': { securityId: '10999', segment: 'NSE_EQ', spotToken: '10999' },
+      'TITAN_FUT': { securityId: '3506', segment: 'NSE_EQ', spotToken: '3506' },
+      'ADANIE_FUT': { securityId: '25', segment: 'NSE_EQ', spotToken: '25' },
+      'ADANIP_FUT': { securityId: '15083', segment: 'NSE_EQ', spotToken: '15083' },
+      'BEL_FUT': { securityId: '383', segment: 'NSE_EQ', spotToken: '383' },
+      'HAL_FUT': { securityId: '2303', segment: 'NSE_EQ', spotToken: '2303' },
+      'ZOMATO_FUT': { securityId: '5097', segment: 'NSE_EQ', spotToken: '5097' },
+      'DLF_FUT': { securityId: '14732', segment: 'NSE_EQ', spotToken: '14732' },
+      'SUNP_FUT': { securityId: '881', segment: 'NSE_EQ', spotToken: '881' },
+      'PWRGRD_FUT': { securityId: '14977', segment: 'NSE_EQ', spotToken: '14977' },
+      'NTPC_FUT': { securityId: '11630', segment: 'NSE_EQ', spotToken: '11630' },
+      'COAL_FUT': { securityId: '694', segment: 'NSE_EQ', spotToken: '694' },
+      'BHARTI_FUT': { securityId: '467', segment: 'NSE_EQ', spotToken: '467' },
+      'TIIN_FUT': { securityId: '1410', segment: 'NSE_EQ', spotToken: '1410' },
+      'VOLTAS_FUT': { securityId: '3718', segment: 'NSE_EQ', spotToken: '3718' },
+      'WIPRO_FUT': { securityId: '3787', segment: 'NSE_EQ', spotToken: '3787' },
+      // MCX Commodities
+      'GOLD_F': { securityId: null, segment: 'MCX_COMM', scripSymbol: 'GOLD' },
+      'GOLDM_F': { securityId: null, segment: 'MCX_COMM', scripSymbol: 'GOLDM' },
+      'SILVER_F': { securityId: null, segment: 'MCX_COMM', scripSymbol: 'SILVER' },
+      'SILVERM_F': { securityId: null, segment: 'MCX_COMM', scripSymbol: 'SILVERM' },
+      'CRUDE_F': { securityId: null, segment: 'MCX_COMM', scripSymbol: 'CRUDEOIL' },
       'NATGAS_F': { securityId: null, segment: 'MCX_COMM', scripSymbol: 'NATURALGAS' },
       'COPPER_F': { securityId: null, segment: 'MCX_COMM', scripSymbol: 'COPPER' },
-      'USDINR_F': { securityId: '2', segment: 'NSE_CURRENCY', scripSymbol: 'USDINR' },
-      'EURINR_F': { securityId: '3', segment: 'NSE_CURRENCY', scripSymbol: 'EURINR' },
-      'GBPINR_F': { securityId: '4', segment: 'NSE_CURRENCY', scripSymbol: 'GBPINR' },
-      'JPYINR_F': { securityId: '5', segment: 'NSE_CURRENCY', scripSymbol: 'JPYINR' },
+      // CDS Currency
+      'USDINR_F': { securityId: null, segment: 'NSE_CURRENCY', scripSymbol: 'USDINR' },
+      'EURINR_F': { securityId: null, segment: 'NSE_CURRENCY', scripSymbol: 'EURINR' },
+      'GBPINR_F': { securityId: null, segment: 'NSE_CURRENCY', scripSymbol: 'GBPINR' },
+      'JPYINR_F': { securityId: null, segment: 'NSE_CURRENCY', scripSymbol: 'JPYINR' },
     };
 
+    // ─── Numeric token → segment mapping for MCX/CDS/ETF direct tokens ───
+    // When the frontend passes numeric tokens with MCX/CDS exchange, map them
+    // to the correct Dhan segment and resolve active contracts if needed.
+    const NUMERIC_TOKEN_MAP = {
+      // MCX tokens
+      '429604': { segment: 'MCX_COMM', scripSymbol: 'GOLD' },
+      '429638': { segment: 'MCX_COMM', scripSymbol: 'SILVER' },
+      '425475': { segment: 'MCX_COMM', scripSymbol: 'CRUDEOIL' },
+      '431765': { segment: 'MCX_COMM', scripSymbol: 'NATURALGAS' },
+      '430596': { segment: 'MCX_COMM', scripSymbol: 'COPPER' },
+      // CDS tokens
+      '11091': { segment: 'NSE_CURRENCY', scripSymbol: 'USDINR' },
+      '11363': { segment: 'NSE_CURRENCY', scripSymbol: 'EURINR' },
+      '11096': { segment: 'NSE_CURRENCY', scripSymbol: 'GBPINR' },
+      '11098': { segment: 'NSE_CURRENCY', scripSymbol: 'JPYINR' },
+      // ETF tokens (NSE equity)
+      '2150': { segment: 'NSE_EQ', scripSymbol: 'NIFTYBEES' },
+      '15068': { segment: 'NSE_EQ', scripSymbol: 'BANKBEES' },
+      '13751': { segment: 'NSE_EQ', scripSymbol: 'JUNIORBEES' },
+      '22536': { segment: 'NSE_EQ', scripSymbol: 'SILVERBEES' },
+      '14428': { segment: 'NSE_EQ', scripSymbol: 'ITBEES' },
+      '14423': { segment: 'NSE_EQ', scripSymbol: 'PHARMABEES' },
+    };
+
+    // ─── Symbol name mapping (frontend may pass "NIFTY FUT", "GOLD", "USDINR", etc.) ───
+    const SYMBOL_NAME_MAP = {
+      // Index Futures
+      'NIFTY FUT': { securityId: '13', segment: 'IDX_I', scripSymbol: 'NIFTY', futSegment: 'NSE_FNO' },
+      'BANKNIFTY FUT': { securityId: '25', segment: 'IDX_I', scripSymbol: 'BANKNIFTY', futSegment: 'NSE_FNO' },
+      'FINNIFTY FUT': { securityId: '27', segment: 'IDX_I', scripSymbol: 'FINNIFTY', futSegment: 'NSE_FNO' },
+      'MIDCPNIFTY FUT': { securityId: '442', segment: 'IDX_I', scripSymbol: 'MIDCPNIFTY', futSegment: 'NSE_FNO' },
+      'SENSEX FUT': { securityId: '51', segment: 'IDX_I', scripSymbol: 'SENSEX', futSegment: 'BSE_FNO' },
+      // Stock Futures (all 30 — resolve to spot equity for charting)
+      'RELIANCE FUT': { securityId: '2885', segment: 'NSE_EQ' },
+      'HDFCBANK FUT': { securityId: '1333', segment: 'NSE_EQ' },
+      'ICICIBANK FUT': { securityId: '4963', segment: 'NSE_EQ' },
+      'SBIN FUT': { securityId: '3045', segment: 'NSE_EQ' },
+      'TCS FUT': { securityId: '11536', segment: 'NSE_EQ' },
+      'INFY FUT': { securityId: '1594', segment: 'NSE_EQ' },
+      'ITC FUT': { securityId: '1660', segment: 'NSE_EQ' },
+      'LT FUT': { securityId: '11483', segment: 'NSE_EQ' },
+      'AXISBANK FUT': { securityId: '5900', segment: 'NSE_EQ' },
+      'HCLTECH FUT': { securityId: '7229', segment: 'NSE_EQ' },
+      'BAJFINANCE FUT': { securityId: '317', segment: 'NSE_EQ' },
+      'KOTAKBANK FUT': { securityId: '1922', segment: 'NSE_EQ' },
+      'TATAMOTORS FUT': { securityId: '3456', segment: 'NSE_EQ' },
+      'TATASTEEL FUT': { securityId: '3499', segment: 'NSE_EQ' },
+      'MARUTI FUT': { securityId: '10999', segment: 'NSE_EQ' },
+      'TITAN FUT': { securityId: '3506', segment: 'NSE_EQ' },
+      'ADANIENT FUT': { securityId: '25', segment: 'NSE_EQ' },
+      'ADANIPORTS FUT': { securityId: '15083', segment: 'NSE_EQ' },
+      'BEL FUT': { securityId: '383', segment: 'NSE_EQ' },
+      'HAL FUT': { securityId: '2303', segment: 'NSE_EQ' },
+      'ZOMATO FUT': { securityId: '5097', segment: 'NSE_EQ' },
+      'DLF FUT': { securityId: '14732', segment: 'NSE_EQ' },
+      'SUNPHARMA FUT': { securityId: '881', segment: 'NSE_EQ' },
+      'POWERGRID FUT': { securityId: '14977', segment: 'NSE_EQ' },
+      'NTPC FUT': { securityId: '11630', segment: 'NSE_EQ' },
+      'COALINDIA FUT': { securityId: '694', segment: 'NSE_EQ' },
+      'BHARTIARTL FUT': { securityId: '467', segment: 'NSE_EQ' },
+      'TIINDIA FUT': { securityId: '1410', segment: 'NSE_EQ' },
+      'VOLTAS FUT': { securityId: '3718', segment: 'NSE_EQ' },
+      'WIPRO FUT': { securityId: '3787', segment: 'NSE_EQ' },
+      // Index names
+      'NIFTY': { securityId: '13', segment: 'IDX_I' },
+      'NIFTY 50': { securityId: '13', segment: 'IDX_I' },
+      'BANKNIFTY': { securityId: '25', segment: 'IDX_I' },
+      'FINNIFTY': { securityId: '27', segment: 'IDX_I' },
+      'MIDCPNIFTY': { securityId: '442', segment: 'IDX_I' },
+      'SENSEX': { securityId: '51', segment: 'IDX_I' },
+      // MCX Commodity names
+      'GOLD': { securityId: '483079', segment: 'MCX_COMM', scripSymbol: 'GOLD' },
+      'SILVER': { securityId: '471725', segment: 'MCX_COMM', scripSymbol: 'SILVER' },
+      'CRUDEOIL': { securityId: '560977', segment: 'MCX_COMM', scripSymbol: 'CRUDEOIL' },
+      'NATURALGAS': { securityId: '431765', segment: 'MCX_COMM', scripSymbol: 'NATURALGAS' },
+      'COPPER': { securityId: '430596', segment: 'MCX_COMM', scripSymbol: 'COPPER' },
+      // CDS Currency names
+      'USDINR': { securityId: '11091', segment: 'NSE_CURRENCY', scripSymbol: 'USDINR' },
+      'EURINR': { securityId: '11363', segment: 'NSE_CURRENCY', scripSymbol: 'EURINR' },
+      'GBPINR': { securityId: '11096', segment: 'NSE_CURRENCY', scripSymbol: 'GBPINR' },
+      'JPYINR': { securityId: '11098', segment: 'NSE_CURRENCY', scripSymbol: 'JPYINR' },
+      // ETF names
+      'NIFTYBEES': { securityId: '2150', segment: 'NSE_EQ' },
+      'BANKBEES': { securityId: '15068', segment: 'NSE_EQ' },
+      'JUNIORBEES': { securityId: '13751', segment: 'NSE_EQ' },
+      'GOLDBEES': { securityId: '1660', segment: 'NSE_EQ' },
+      'SILVERBEES': { securityId: '22536', segment: 'NSE_EQ' },
+      'ITBEES': { securityId: '14428', segment: 'NSE_EQ' },
+      'PHARMABEES': { securityId: '14423', segment: 'NSE_EQ' },
+    };
+
+    // Helper: resolve active contract via scrip master for MCX/CDS
+    const resolveActiveContract = (scripSymbol, segment) => {
+      try {
+        const dhan = dataProviderSwitch?.getDhanAdapter();
+        if (dhan?.historical) {
+          const activeId = dhan.historical.getActiveContract(scripSymbol, segment);
+          if (activeId) return activeId;
+          // Also check bySymbol in scrip master
+          if (dhan.historical._scripMaster?.bySymbol) {
+            const entry = dhan.historical._scripMaster.bySymbol.get(`${scripSymbol}:${segment}`) ||
+                         dhan.historical._scripMaster.bySymbol.get(`${scripSymbol}:E`);
+            if (entry?.securityId) return entry.securityId;
+          }
+        }
+      } catch (e) {
+        console.warn(`[History] Active contract resolution failed for ${scripSymbol}/${segment}: ${e.message}`);
+      }
+      return null;
+    };
+
+    // Step 1: Check placeholder token map
     const mapping = PLACEHOLDER_TO_DHAN[token];
     if (mapping) {
       if (mapping.securityId) {
-        // Static resolution (Index/Stock futures → use securityId directly)
         token = mapping.securityId;
         exchange = mapping.segment;
-      } else if (mapping.scripSymbol && dataProviderSwitch) {
-        // Dynamic resolution via getActiveContract for MCX/CDS
+      } else if (mapping.scripSymbol) {
+        const activeId = resolveActiveContract(mapping.scripSymbol, mapping.segment);
+        if (activeId) {
+          token = activeId;
+          exchange = mapping.segment;
+        } else {
+          // Fallback: use known static IDs for popular MCX/CDS contracts
+          const STATIC_FALLBACK = {
+            'GOLD': '483079', 'GOLDM': '483079', 'SILVER': '471725', 'SILVERM': '471725',
+            'CRUDEOIL': '560977', 'NATURALGAS': '431765', 'COPPER': '430596',
+            'USDINR': '11091', 'EURINR': '11363', 'GBPINR': '11096', 'JPYINR': '11098',
+          };
+          if (STATIC_FALLBACK[mapping.scripSymbol]) {
+            token = STATIC_FALLBACK[mapping.scripSymbol];
+            exchange = mapping.segment;
+          }
+        }
+      }
+    }
+    // Step 2: Check if token is a symbol name (non-numeric, not a known placeholder)
+    else if (!/^\d+$/.test(token)) {
+      const upper = token.toUpperCase().trim();
+      const symMapping = SYMBOL_NAME_MAP[upper];
+      if (symMapping) {
+        token = symMapping.securityId;
+        exchange = symMapping.segment;
+      } else {
+        // Try to resolve via scrip master as equity/ETF
         try {
-          const dhan = dataProviderSwitch.getDhanAdapter();
-          if (dhan?.historical) {
-            const activeId = dhan.historical.getActiveContract(mapping.scripSymbol, mapping.segment);
-            if (activeId) {
-              token = activeId;
-              exchange = mapping.segment;
-            } else if (dhan.historical._scripMaster?.bySymbol) {
-              const dhanSeg = mapping.segment === 'CUR' ? 'CUR' : mapping.segment;
-              const entry = dhan.historical._scripMaster.bySymbol.get(`${mapping.scripSymbol}:${dhanSeg}`) ||
-                           dhan.historical._scripMaster.bySymbol.get(`${mapping.scripSymbol}:${mapping.segment}`);
-              if (entry?.securityId) {
-                token = entry.securityId;
-                exchange = mapping.segment;
+          const dhan = dataProviderSwitch?.getDhanAdapter();
+          if (dhan?.historical?._scripMaster?.bySymbol) {
+            const seg = exchange === 'MCX' ? 'MCX_COMM' : exchange === 'CDS' ? 'NSE_CURRENCY' : exchange === 'NFO' ? 'NSE_FNO' : 'NSE_EQ';
+            const entry = dhan.historical._scripMaster.bySymbol.get(`${upper}:${seg}`) ||
+                         dhan.historical._scripMaster.bySymbol.get(`${upper}:NSE_EQ`) ||
+                         dhan.historical._scripMaster.bySymbol.get(`${upper}:E`);
+            if (entry?.securityId) {
+              token = entry.securityId;
+              exchange = entry.segment;
+            }
+          }
+        } catch (_) {}
+      }
+    }
+    // Step 3: Numeric token with MCX/CDS exchange — verify it's valid or resolve active contract
+    else if (/^\d+$/.test(token) && (exchange === 'MCX' || exchange === 'CDS' || exchange === 'MCX_COMM' || exchange === 'NSE_CURRENCY')) {
+      // Map exchange to Dhan segment format
+      const dhanSegment = exchange === 'MCX' ? 'MCX_COMM' : exchange === 'CDS' ? 'NSE_CURRENCY' : exchange;
+      exchange = dhanSegment;
+
+      // Check if this is a known numeric token with a symbol we can resolve
+      const numMapping = NUMERIC_TOKEN_MAP[token];
+      if (numMapping && numMapping.scripSymbol) {
+        const activeId = resolveActiveContract(numMapping.scripSymbol, numMapping.segment);
+        if (activeId) {
+          console.log(`[History] Numeric token ${token} (${numMapping.scripSymbol}) → active contract ${activeId}`);
+          token = activeId;
+          exchange = numMapping.segment;
+        } else {
+          // Use static fallback IDs for known MCX/CDS contracts
+          const STATIC_MCX_CDS = {
+            'GOLD': '483079', 'SILVER': '471725', 'CRUDEOIL': '560977',
+            'NATURALGAS': '431765', 'COPPER': '430596',
+            'USDINR': '11091', 'EURINR': '11363', 'GBPINR': '11096', 'JPYINR': '11098',
+          };
+          if (STATIC_MCX_CDS[numMapping.scripSymbol]) {
+            token = STATIC_MCX_CDS[numMapping.scripSymbol];
+            exchange = numMapping.segment;
+          }
+        }
+      } else {
+        // Not in our known map — try scrip master lookup
+        try {
+          const dhan = dataProviderSwitch?.getDhanAdapter();
+          if (dhan?.historical?._scripMaster) {
+            const scripEntry = dhan.historical._scripMaster.byId.get(token);
+            if (scripEntry) {
+              exchange = scripEntry.segment;
+            } else {
+              const quote = marketDataEngine.getQuote(token);
+              const symbolName = quote?.symbol;
+              if (symbolName) {
+                const baseSymbol = symbolName.replace(/\s*(FUT|FUTURES?)\s*/i, '').trim().toUpperCase();
+                const activeId = dhan.historical.getActiveContract(baseSymbol, dhanSegment);
+                if (activeId) {
+                  console.log(`[History] MCX/CDS token ${token} (${symbolName}) → active contract ${activeId}`);
+                  token = activeId;
+                }
               }
             }
           }
-        } catch (e) {
-          console.warn(`[History] Active contract resolution failed for ${token}: ${e.message}`);
-        }
+        } catch (_) {}
+      }
+    }
+    // Step 4: Numeric token with NFO exchange — it's a futures/options contract ID
+    else if (/^\d+$/.test(token) && (exchange === 'NFO' || exchange === 'NSE_FNO')) {
+      exchange = 'NSE_FNO';
+    }
+    // Step 5: Numeric token with NSE/BSE/no exchange — equities & ETFs
+    else if (/^\d+$/.test(token)) {
+      // Ensure exchange is mapped to Dhan segment format
+      if (exchange === 'NSE' || exchange === 'BSE' || !exchange) {
+        // Check if this is an NSE_EQ token (stocks, ETFs)
+        exchange = exchange === 'BSE' ? 'BSE_EQ' : 'NSE_EQ';
       }
     }
 
@@ -744,12 +969,35 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
         const fromTs = from ? parseInt(String(from), 10) : 0;
         const toTs = to ? parseInt(String(to), 10) : Math.floor(Date.now() / 1000);
 
-        const result = await dataProviderSwitch.getHistoricalCandles(
+        let result = await dataProviderSwitch.getHistoricalCandles(
           token, tf, resolvedExchange, fromTs, toTs
         );
 
         let candles = result.data || result;
         if (!Array.isArray(candles)) candles = [];
+
+        // ─── MCX/CDS/NFO empty-data retry: the token may be an expired contract ───
+        // Try resolving the active contract by looking up the symbol name from the quote cache
+        if (candles.length === 0 && (resolvedExchange === 'MCX_COMM' || resolvedExchange === 'NSE_CURRENCY' || resolvedExchange === 'NSE_FNO')) {
+          const dhan = dataProviderSwitch.getDhanAdapter();
+          if (dhan?.historical) {
+            // Get symbol name from quote cache to identify the underlying
+            const quote = marketDataEngine.getQuote(token);
+            const symbolName = quote?.symbol;
+            if (symbolName) {
+              const baseSymbol = symbolName.replace(/\s*(FUT|FUTURES?)\s*/i, '').trim().toUpperCase();
+              const activeId = dhan.historical.getActiveContract(baseSymbol, resolvedExchange);
+              if (activeId && activeId !== token) {
+                console.log(`[History] Retrying with active contract: ${token} → ${activeId} for ${baseSymbol}/${resolvedExchange}`);
+                const retryResult = await dataProviderSwitch.getHistoricalCandles(
+                  activeId, tf, resolvedExchange, fromTs, toTs
+                );
+                candles = retryResult.data || retryResult;
+                if (!Array.isArray(candles)) candles = [];
+              }
+            }
+          }
+        }
 
         if (candles.length > 0) {
           // Normalize candle format: ensure flat array with { time, open, high, low, close, volume }

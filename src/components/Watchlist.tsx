@@ -20,6 +20,136 @@ import { searchInstruments, getInstruments } from '@/services/api';
 import { SymbolLogo } from '@/components/SymbolLogo';
 import type { WatchlistItem, Instrument } from '@/types';
 
+// --- Master Instrument Catalogs -----------------------------------------------
+// These are the authoritative lists used to ensure the UI always renders
+// the full set of F&O instruments regardless of stale localStorage state.
+
+const MASTER_INDEX: WatchlistItem[] = [
+  { token: '99926000', symbol: 'NIFTY 50', segment: 'NSE' },
+  { token: '99926009', symbol: 'BANKNIFTY', segment: 'NSE' },
+  { token: '99926037', symbol: 'FINNIFTY', segment: 'NSE' },
+  { token: '99926074', symbol: 'MIDCPNIFTY', segment: 'NSE' },
+  { token: '99919000', symbol: 'SENSEX', segment: 'BSE' },
+];
+
+const MASTER_STOCKS: WatchlistItem[] = [
+  { token: '2885', symbol: 'RELIANCE', segment: 'NSE' },
+  { token: '1333', symbol: 'HDFCBANK', segment: 'NSE' },
+  { token: '4963', symbol: 'ICICIBANK', segment: 'NSE' },
+  { token: '3045', symbol: 'SBIN', segment: 'NSE' },
+  { token: '11536', symbol: 'TCS', segment: 'NSE' },
+  { token: '1594', symbol: 'INFY', segment: 'NSE' },
+  { token: '1660', symbol: 'ITC', segment: 'NSE' },
+  { token: '11483', symbol: 'LT', segment: 'NSE' },
+  { token: '5900', symbol: 'AXISBANK', segment: 'NSE' },
+  { token: '7229', symbol: 'HCLTECH', segment: 'NSE' },
+  { token: '317', symbol: 'BAJFINANCE', segment: 'NSE' },
+  { token: '1922', symbol: 'KOTAKBANK', segment: 'NSE' },
+  { token: '3456', symbol: 'TATAMOTORS', segment: 'NSE' },
+  { token: '3499', symbol: 'TATASTEEL', segment: 'NSE' },
+  { token: '10999', symbol: 'MARUTI', segment: 'NSE' },
+  { token: '3506', symbol: 'TITAN', segment: 'NSE' },
+  { token: '25', symbol: 'ADANIENT', segment: 'NSE' },
+  { token: '15083', symbol: 'ADANIPORTS', segment: 'NSE' },
+  { token: '383', symbol: 'BEL', segment: 'NSE' },
+  { token: '2303', symbol: 'HAL', segment: 'NSE' },
+  { token: '5097', symbol: 'ZOMATO', segment: 'NSE' },
+  { token: '14732', symbol: 'DLF', segment: 'NSE' },
+  { token: '881', symbol: 'SUNPHARMA', segment: 'NSE' },
+  { token: '14977', symbol: 'POWERGRID', segment: 'NSE' },
+  { token: '11630', symbol: 'NTPC', segment: 'NSE' },
+  { token: '694', symbol: 'COALINDIA', segment: 'NSE' },
+  { token: '467', symbol: 'BHARTIARTL', segment: 'NSE' },
+  { token: '1410', symbol: 'TIINDIA', segment: 'NSE' },
+  { token: '3718', symbol: 'VOLTAS', segment: 'NSE' },
+  { token: '3787', symbol: 'WIPRO', segment: 'NSE' },
+];
+
+const MASTER_FUTURES: WatchlistItem[] = [
+  // Index Futures
+  { token: 'NF_FUT', symbol: 'NIFTY FUT', segment: 'NFO' },
+  { token: 'BNF_FUT', symbol: 'BANKNIFTY FUT', segment: 'NFO' },
+  { token: 'FNF_FUT', symbol: 'FINNIFTY FUT', segment: 'NFO' },
+  { token: 'MNF_FUT', symbol: 'MIDCPNIFTY FUT', segment: 'NFO' },
+  { token: 'SNX_FUT', symbol: 'SENSEX FUT', segment: 'NFO' },
+  // Stock Futures
+  { token: 'REL_FUT', symbol: 'RELIANCE FUT', segment: 'NFO' },
+  { token: 'HDFC_FUT', symbol: 'HDFCBANK FUT', segment: 'NFO' },
+  { token: 'ICICI_FUT', symbol: 'ICICIBANK FUT', segment: 'NFO' },
+  { token: 'SBIN_FUT', symbol: 'SBIN FUT', segment: 'NFO' },
+  { token: 'TCS_FUT', symbol: 'TCS FUT', segment: 'NFO' },
+  { token: 'INFY_FUT', symbol: 'INFY FUT', segment: 'NFO' },
+  { token: 'ITC_FUT', symbol: 'ITC FUT', segment: 'NFO' },
+  { token: 'LT_FUT', symbol: 'LT FUT', segment: 'NFO' },
+  { token: 'AXIS_FUT', symbol: 'AXISBANK FUT', segment: 'NFO' },
+  { token: 'HCL_FUT', symbol: 'HCLTECH FUT', segment: 'NFO' },
+  { token: 'BAJF_FUT', symbol: 'BAJFINANCE FUT', segment: 'NFO' },
+  { token: 'KOTAK_FUT', symbol: 'KOTAKBANK FUT', segment: 'NFO' },
+  { token: 'TATAM_FUT', symbol: 'TATAMOTORS FUT', segment: 'NFO' },
+  { token: 'TATAS_FUT', symbol: 'TATASTEEL FUT', segment: 'NFO' },
+  { token: 'MARUTI_FUT', symbol: 'MARUTI FUT', segment: 'NFO' },
+  { token: 'TITAN_FUT', symbol: 'TITAN FUT', segment: 'NFO' },
+  { token: 'ADANIE_FUT', symbol: 'ADANIENT FUT', segment: 'NFO' },
+  { token: 'ADANIP_FUT', symbol: 'ADANIPORTS FUT', segment: 'NFO' },
+  { token: 'BEL_FUT', symbol: 'BEL FUT', segment: 'NFO' },
+  { token: 'HAL_FUT', symbol: 'HAL FUT', segment: 'NFO' },
+  { token: 'ZOMATO_FUT', symbol: 'ZOMATO FUT', segment: 'NFO' },
+  { token: 'DLF_FUT', symbol: 'DLF FUT', segment: 'NFO' },
+  { token: 'SUNP_FUT', symbol: 'SUNPHARMA FUT', segment: 'NFO' },
+  { token: 'PWRGRD_FUT', symbol: 'POWERGRID FUT', segment: 'NFO' },
+  { token: 'NTPC_FUT', symbol: 'NTPC FUT', segment: 'NFO' },
+  { token: 'COAL_FUT', symbol: 'COALINDIA FUT', segment: 'NFO' },
+  { token: 'BHARTI_FUT', symbol: 'BHARTIARTL FUT', segment: 'NFO' },
+  { token: 'TIIN_FUT', symbol: 'TIINDIA FUT', segment: 'NFO' },
+  { token: 'VOLTAS_FUT', symbol: 'VOLTAS FUT', segment: 'NFO' },
+  { token: 'WIPRO_FUT', symbol: 'WIPRO FUT', segment: 'NFO' },
+];
+
+const MASTER_OPTIONS: WatchlistItem[] = [
+  // Index Options
+  { token: '99926000', symbol: 'NIFTY', segment: 'NSE' },
+  { token: '99926009', symbol: 'BANKNIFTY', segment: 'NSE' },
+  { token: '99926037', symbol: 'FINNIFTY', segment: 'NSE' },
+  { token: '99926074', symbol: 'MIDCPNIFTY', segment: 'NSE' },
+  // Top Stock Options
+  { token: '2885', symbol: 'RELIANCE', segment: 'NSE' },
+  { token: '1333', symbol: 'HDFCBANK', segment: 'NSE' },
+  { token: '4963', symbol: 'ICICIBANK', segment: 'NSE' },
+  { token: '3045', symbol: 'SBIN', segment: 'NSE' },
+  { token: '11536', symbol: 'TCS', segment: 'NSE' },
+  { token: '1594', symbol: 'INFY', segment: 'NSE' },
+  { token: '3456', symbol: 'TATAMOTORS', segment: 'NSE' },
+  { token: '3499', symbol: 'TATASTEEL', segment: 'NSE' },
+  { token: '317', symbol: 'BAJFINANCE', segment: 'NSE' },
+  { token: '5900', symbol: 'AXISBANK', segment: 'NSE' },
+  { token: '1660', symbol: 'ITC', segment: 'NSE' },
+  { token: '11483', symbol: 'LT', segment: 'NSE' },
+  { token: '7229', symbol: 'HCLTECH', segment: 'NSE' },
+  { token: '1922', symbol: 'KOTAKBANK', segment: 'NSE' },
+  { token: '10999', symbol: 'MARUTI', segment: 'NSE' },
+  { token: '3506', symbol: 'TITAN', segment: 'NSE' },
+  { token: '25', symbol: 'ADANIENT', segment: 'NSE' },
+  { token: '15083', symbol: 'ADANIPORTS', segment: 'NSE' },
+  { token: '383', symbol: 'BEL', segment: 'NSE' },
+  { token: '2303', symbol: 'HAL', segment: 'NSE' },
+  { token: '5097', symbol: 'ZOMATO', segment: 'NSE' },
+  { token: '14732', symbol: 'DLF', segment: 'NSE' },
+  { token: '881', symbol: 'SUNPHARMA', segment: 'NSE' },
+  { token: '14977', symbol: 'POWERGRID', segment: 'NSE' },
+  { token: '11630', symbol: 'NTPC', segment: 'NSE' },
+  { token: '694', symbol: 'COALINDIA', segment: 'NSE' },
+  { token: '467', symbol: 'BHARTIARTL', segment: 'NSE' },
+  { token: '3787', symbol: 'WIPRO', segment: 'NSE' },
+];
+
+/** Map of watchlist tab id → master catalog for fallback rendering */
+const MASTER_CATALOG: Record<string, WatchlistItem[]> = {
+  index: MASTER_INDEX,
+  stocks: MASTER_STOCKS,
+  futures: MASTER_FUTURES,
+  options: MASTER_OPTIONS,
+};
+
 // --- Types --------------------------------------------------------------------
 
 /** Panel mode: watchlist, instrument browser, news feed, or favourites */
@@ -1106,10 +1236,28 @@ export function Watchlist() {
     doInlineSearch(inlineQuery, segFilter);
   }, [inlineQuery, segFilter]);
 
-  // Filtered items for watchlist view
+  // Filtered items for watchlist view — with master catalog fallback
   const filteredItems = useMemo(() => {
-    if (!activeWatchlist) return [];
-    let items = [...activeWatchlist.items];
+    const tabId = (activeWatchlistTab || activeWorkspace || '').toLowerCase();
+    const masterList = MASTER_CATALOG[tabId];
+
+    // Use store items if available, otherwise fall back to master catalog
+    let items: WatchlistItem[] = [];
+    if (activeWatchlist && activeWatchlist.items.length > 0) {
+      items = [...activeWatchlist.items];
+      // If the store has fewer items than the master catalog (stale localStorage),
+      // merge in missing items from the master list
+      if (masterList && items.length < masterList.length) {
+        const existingTokens = new Set(items.map(i => i.token));
+        for (const mi of masterList) {
+          if (!existingTokens.has(mi.token)) {
+            items.push(mi);
+          }
+        }
+      }
+    } else if (masterList) {
+      items = [...masterList];
+    }
 
     // Apply inline filter
     if (inlineQuery.trim()) {
@@ -1129,7 +1277,7 @@ export function Watchlist() {
       return aP - bP;
     });
     return items;
-  }, [activeWatchlist, inlineQuery, segFilter, pinnedTokens]);
+  }, [activeWatchlist, activeWatchlistTab, activeWorkspace, inlineQuery, segFilter, pinnedTokens]);
 
   // handleSelectItem — enhanced with dynamic option linking
   const handleSelectItem = useCallback((item: WatchlistItem) => {

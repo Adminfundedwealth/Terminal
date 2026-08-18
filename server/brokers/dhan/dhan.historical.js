@@ -41,6 +41,7 @@ const SEGMENT_MAP = {
   'BFO': 'BSE_FNO',
   'MCX': 'MCX_COMM',
   'CDS': 'NSE_CURRENCY',
+  'CUR': 'NSE_CURRENCY',
   'NSE_EQ': 'NSE_EQ',
   'BSE_EQ': 'BSE_EQ',
   'NSE_FNO': 'NSE_FNO',
@@ -220,10 +221,13 @@ export class DhanHistoricalService {
     // 1. Known index tokens
     if (INDEX_MAP[token]) return INDEX_MAP[token];
 
-    // 2. Try scrip master lookup
+    // 2. Map exchange to Dhan segment early (needed for lookups)
+    const segment = SEGMENT_MAP[exchange] || 'NSE_EQ';
+
+    // 3. Try scrip master lookup
     const master = await this._getScripMaster();
     if (master) {
-      // Direct token lookup (works when Angel token = Dhan securityId)
+      // Direct token lookup (works when token = Dhan securityId)
       const entry = master.byId.get(token);
       if (entry) return entry;
 
@@ -233,18 +237,31 @@ export class DhanHistoricalService {
         const quote = this._marketDataEngine.getQuote(token);
         const symbol = quote?.symbol;
         if (symbol) {
-          const seg = exchange === 'NFO' ? 'NSE_FNO' : exchange === 'MCX' ? 'MCX_COMM' : exchange === 'CDS' ? 'NSE_CURRENCY' : 'NSE_EQ';
+          const seg = exchange === 'NFO' ? 'NSE_FNO' : exchange === 'MCX' ? 'MCX_COMM' : exchange === 'CDS' ? 'NSE_CURRENCY' : segment;
           const symEntry = master.bySymbol.get(`${symbol}:${seg}`) || master.bySymbol.get(`${symbol}:E`);
           if (symEntry) {
-            console.log(`[DhanHist] Resolved ${symbol} (Angel ${token}) → Dhan ${symEntry.securityId}`);
+            console.log(`[DhanHist] Resolved ${symbol} (token ${token}) → Dhan ${symEntry.securityId}/${symEntry.segment}`);
             return symEntry;
+          }
+          
+          // For MCX/CDS, try active contract resolution if symbol-based lookup fails
+          if (seg === 'MCX_COMM' || seg === 'NSE_CURRENCY') {
+            const baseSymbol = symbol.replace(/\s*(FUT|FUTURES?|MINI|MICRO)\s*/i, '').trim().toUpperCase();
+            const activeId = this.getActiveContract(baseSymbol, seg);
+            if (activeId) {
+              const activeEntry = master.byId.get(activeId);
+              if (activeEntry) {
+                console.log(`[DhanHist] Active contract: ${symbol} → ${activeId}/${seg}`);
+                return activeEntry;
+              }
+              return { securityId: activeId, segment: seg, instrument: seg === 'MCX_COMM' ? 'FUTCOM' : 'FUTCUR' };
+            }
           }
         }
       }
     }
 
-    // 3. Default: use token as-is with mapped segment
-    const segment = SEGMENT_MAP[exchange] || 'NSE_EQ';
+    // 4. Default: use token as-is with mapped segment
     let instrument;
 
     // Try to infer instrument type from the market data engine's cached quote
