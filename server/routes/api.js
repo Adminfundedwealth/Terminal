@@ -904,6 +904,22 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
     }
   });
 
+  // Direct Dhan test endpoint — bypasses all caching/fallback
+  router.get('/provider/test-dhan', async (req, res) => {
+    if (!dataProviderSwitch) return res.json({ error: 'not initialized' });
+    const dhan = dataProviderSwitch.getDhanAdapter();
+    if (!dhan) return res.json({ error: 'no dhan adapter' });
+    try {
+      const token = req.query.token || '2885';
+      const exchange = req.query.exchange || 'NSE';
+      const tf = req.query.tf || '5';
+      const result = await dhan.getHistoricalData(token, exchange, tf, 0, Math.floor(Date.now() / 1000));
+      res.json({ success: true, candles: result?.length || 0, sample: result?.slice(0, 2) || [] });
+    } catch (err) {
+      res.json({ success: false, error: err.message, response: err.response?.data });
+    }
+  });
+
   // ═══════════════════════════════════════════════════════════
   // SCANNER
   // ═══════════════════════════════════════════════════════════
