@@ -135,51 +135,83 @@ export class DhanAdapter {
 
   /**
    * Get real-time quotes for multiple tokens.
+   * Uses scrip master to resolve correct Dhan security IDs.
    */
   async getQuotes(tokens) {
     if (!this.auth.isTokenValid) {
       throw new Error('[Dhan] Token invalid for quotes');
     }
 
-    // Dhan quote endpoint: POST /v2/marketfeed/ltp
+    // Resolve tokens through historical service's scrip master
+    const resolvedTokens = [];
+    for (const token of tokens) {
+      // Use the historical service's resolve method if scrip master is loaded
+      if (this.historical._scripMaster) {
+        const entry = this.historical._scripMaster.byId.get(token);
+        if (entry) {
+          resolvedTokens.push({ original: token, dhanId: entry.securityId, segment: entry.segment });
+          continue;
+        }
+        // Symbol-based lookup
+        if (this.historical._marketDataEngine) {
+          const quote = this.historical._marketDataEngine.getQuote(token);
+          if (quote?.symbol) {
+            const symEntry = this.historical._scripMaster.bySymbol.get(`${quote.symbol}:E`);
+            if (symEntry) {
+              resolvedTokens.push({ original: token, dhanId: symEntry.securityId, segment: symEntry.segment });
+              continue;
+            }
+          }
+        }
+      }
+      // Default: use token as-is
+      resolvedTokens.push({ original: token, dhanId: token, segment: 'NSE_EQ' });
+    }
+
     const results = [];
     const batchSize = 50;
 
-    for (let i = 0; i < tokens.length; i += batchSize) {
-      const batch = tokens.slice(i, i + batchSize);
+    // Group by segment
+    const bySegment = {};
+    for (const t of resolvedTokens) {
+      const seg = t.segment || 'NSE_EQ';
+      if (!bySegment[seg]) bySegment[seg] = [];
+      bySegment[seg].push(t);
+    }
 
-      try {
-        const resp = await axios.post(
-          `${DHAN_API_BASE}/marketfeed/ltp`,
-          {
-            NSE_EQ: batch.filter(t => !t.includes(':')).map(t => parseInt(t)),
-            NSE_FNO: [],
-          },
-          {
-            httpsAgent: IPV4_AGENT,
-            timeout: 6000,
-            headers: this.auth.getHeaders(),
-          }
-        );
+    for (const [segment, entries] of Object.entries(bySegment)) {
+      for (let i = 0; i < entries.length; i += batchSize) {
+        const batch = entries.slice(i, i + batchSize);
+        const ids = batch.map(t => parseInt(t.dhanId));
 
-        const data = resp.data?.data || resp.data;
-        if (data && typeof data === 'object') {
-          for (const [token, quote] of Object.entries(data)) {
-            results.push({
-              token: String(token),
-              ltp: parseFloat(quote.last_price || quote.ltp || 0),
-              volume: parseInt(quote.volume || 0),
-              oi: parseInt(quote.oi || 0),
-            });
+        try {
+          const resp = await axios.post(
+            `${DHAN_API_BASE}/marketfeed/ltp`,
+            { [segment]: ids },
+            { httpsAgent: IPV4_AGENT, timeout: 6000, headers: this.auth.getHeaders() }
+          );
+
+          const data = resp.data?.data || resp.data;
+          if (data && typeof data === 'object') {
+            for (const [dhanId, quote] of Object.entries(data)) {
+              // Find the original token for this dhanId
+              const entry = batch.find(b => b.dhanId === dhanId || b.dhanId === String(dhanId));
+              const originalToken = entry?.original || dhanId;
+              results.push({
+                token: originalToken,
+                ltp: parseFloat(quote.last_price || quote.ltp || 0),
+                volume: parseInt(quote.volume || 0),
+                oi: parseInt(quote.oi || 0),
+              });
+            }
           }
+        } catch (err) {
+          // Silent — don't break the poller
         }
-      } catch (err) {
-        console.error(`[Dhan] Quote batch error:`, err.response?.data?.message || err.message);
-      }
 
-      // Small delay between batches
-      if (i + batchSize < tokens.length) {
-        await new Promise(r => setTimeout(r, 100));
+        if (i + batchSize < entries.length) {
+          await new Promise(r => setTimeout(r, 100));
+        }
       }
     }
 

@@ -17,8 +17,9 @@ import { AuditLogger } from '../services/auditLogger.js';
 const WS_MAX_MESSAGES_PER_SECOND = 30;
 const WS_MAX_SUBSCRIPTIONS = 200;
 
-export function setupWebSocket(wss, marketDataEngine, angelFeed = null) {
+export function setupWebSocket(wss, marketDataEngine, angelFeed = null, dhanFeed = null) {
   console.log('[WebSocket] Server initialized (production mode — auth enforced)');
+  console.log('[WebSocket] On-demand subscriptions via:', dhanFeed ? 'Dhan WebSocket' : (angelFeed ? 'Angel SmartStream' : 'NONE'));
 
   wss.on('connection', (ws, request) => {
     // PRODUCTION: Always validate auth. No bypasses.
@@ -60,7 +61,7 @@ export function setupWebSocket(wss, marketDataEngine, angelFeed = null) {
 
       try {
         const data = JSON.parse(message.toString());
-        handleMessage(ws, data, subscriptions, depthSubscriptions, marketDataEngine, angelFeed);
+        handleMessage(ws, data, subscriptions, depthSubscriptions, marketDataEngine, angelFeed, dhanFeed);
       } catch (err) {
         // Don't log parse errors to console in production (DoS via log spam)
       }

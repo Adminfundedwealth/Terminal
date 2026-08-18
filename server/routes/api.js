@@ -655,19 +655,41 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
     const tf = req.query.tf || req.query.timeframe || req.query.resolution;
     if (!token || !tf) return res.status(400).json({ message: 'token and tf required' });
 
-    // Resolve placeholder futures/commodity tokens to spot underlying
-    const PLACEHOLDER_TO_SPOT = {
-      'NF_FUT': '99926000', 'NF_FUT_N': '99926000', 'NF_FUT_F': '99926000',
-      'BNF_FUT': '99926009', 'BNF_FUT_N': '99926009',
-      'FNF_FUT': '99926037', 'MCN_FUT': '99926074', 'SEN_FUT': '99919000',
-      'REL_FUT': '2885', 'SBIN_FUT': '3045', 'HDFC_FUT': '1333',
-      'ICICI_FUT': '4963', 'TCS_FUT': '11536', 'INFY_FUT': '1594',
-      'GOLD_F': '99926000', 'GOLDM_F': '99926000', 'SILVER_F': '99926000',
-      'SILVERM_F': '99926000', 'CRUDE_F': '99926000', 'NATGAS_F': '99926000',
-      'COPPER_F': '99926000', 'USDINR_F': '99926000', 'EURINR_F': '99926000',
-      'GBPINR_F': '99926000', 'JPYINR_F': '99926000',
+    // Native Dhan mapping for placeholder tokens
+    const PLACEHOLDER_TO_DHAN = {
+      'NF_FUT': { securityId: '13', segment: 'IDX_I', spotToken: '99926000' },
+      'NF_FUT_N': { securityId: '13', segment: 'IDX_I', spotToken: '99926000' },
+      'NF_FUT_F': { securityId: '13', segment: 'IDX_I', spotToken: '99926000' },
+      'BNF_FUT': { securityId: '25', segment: 'IDX_I', spotToken: '99926009' },
+      'BNF_FUT_N': { securityId: '25', segment: 'IDX_I', spotToken: '99926009' },
+      'FNF_FUT': { securityId: '27', segment: 'IDX_I', spotToken: '99926037' },
+      'MCN_FUT': { securityId: '442', segment: 'IDX_I', spotToken: '99926074' },
+      'SEN_FUT': { securityId: '51', segment: 'IDX_I', spotToken: '99919000' },
+      'REL_FUT': { securityId: '2885', segment: 'NSE_EQ', spotToken: '2885' },
+      'SBIN_FUT': { securityId: '3045', segment: 'NSE_EQ', spotToken: '3045' },
+      'HDFC_FUT': { securityId: '1333', segment: 'NSE_EQ', spotToken: '1333' },
+      'ICICI_FUT': { securityId: '4963', segment: 'NSE_EQ', spotToken: '4963' },
+      'TCS_FUT': { securityId: '11536', segment: 'NSE_EQ', spotToken: '11536' },
+      'INFY_FUT': { securityId: '1594', segment: 'NSE_EQ', spotToken: '1594' },
+      'GOLD_F': { securityId: '429604', segment: 'MCX_COMM', spotToken: null },
+      'GOLDM_F': { securityId: '429604', segment: 'MCX_COMM', spotToken: null },
+      'SILVER_F': { securityId: '429605', segment: 'MCX_COMM', spotToken: null },
+      'SILVERM_F': { securityId: '429605', segment: 'MCX_COMM', spotToken: null },
+      'CRUDE_F': { securityId: '429606', segment: 'MCX_COMM', spotToken: null },
+      'NATGAS_F': { securityId: '429607', segment: 'MCX_COMM', spotToken: null },
+      'COPPER_F': { securityId: '429608', segment: 'MCX_COMM', spotToken: null },
+      'USDINR_F': { securityId: '2', segment: 'NSE_CURRENCY', spotToken: null },
+      'EURINR_F': { securityId: '3', segment: 'NSE_CURRENCY', spotToken: null },
+      'GBPINR_F': { securityId: '4', segment: 'NSE_CURRENCY', spotToken: null },
+      'JPYINR_F': { securityId: '5', segment: 'NSE_CURRENCY', spotToken: null },
     };
-    token = PLACEHOLDER_TO_SPOT[token] || token;
+
+    const mapping = PLACEHOLDER_TO_DHAN[token];
+    if (mapping) {
+      // Route directly to Dhan with correct security ID and segment
+      token = mapping.securityId;
+      exchange = mapping.segment;
+    }
 
     // Use DataProviderSwitch for historical data (routes to Dhan or Angel One with failover)
     if (dataProviderSwitch) {
@@ -743,25 +765,79 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
     let { token, exchange } = req.query;
     if (!token) return res.status(400).json({ message: 'token required' });
 
-    // Resolve placeholder tokens to their underlying spot index for display
-    const PLACEHOLDER_TO_SPOT = {
-      'NF_FUT': '99926000', 'NF_FUT_N': '99926000', 'NF_FUT_F': '99926000',
-      'BNF_FUT': '99926009', 'BNF_FUT_N': '99926009',
-      'FNF_FUT': '99926037', 'MCN_FUT': '99926074', 'SEN_FUT': '99919000',
-      'REL_FUT': '2885', 'SBIN_FUT': '3045', 'HDFC_FUT': '1333',
-      'ICICI_FUT': '4963', 'TCS_FUT': '11536', 'INFY_FUT': '1594',
+    // Native Dhan mapping for Futures, Commodities & Currencies
+    const PLACEHOLDER_TO_DHAN = {
+      // Index Futures (NSE_FNO)
+      'NF_FUT': { securityId: '13', segment: 'IDX_I', spotToken: '99926000' },
+      'NF_FUT_N': { securityId: '13', segment: 'IDX_I', spotToken: '99926000' },
+      'NF_FUT_F': { securityId: '13', segment: 'IDX_I', spotToken: '99926000' },
+      'BNF_FUT': { securityId: '25', segment: 'IDX_I', spotToken: '99926009' },
+      'BNF_FUT_N': { securityId: '25', segment: 'IDX_I', spotToken: '99926009' },
+      'FNF_FUT': { securityId: '27', segment: 'IDX_I', spotToken: '99926037' },
+      'MCN_FUT': { securityId: '442', segment: 'IDX_I', spotToken: '99926074' },
+      'SEN_FUT': { securityId: '51', segment: 'IDX_I', spotToken: '99919000' },
+      // Stock Futures (NSE_FNO)
+      'REL_FUT': { securityId: '2885', segment: 'NSE_EQ', spotToken: '2885' },
+      'SBIN_FUT': { securityId: '3045', segment: 'NSE_EQ', spotToken: '3045' },
+      'HDFC_FUT': { securityId: '1333', segment: 'NSE_EQ', spotToken: '1333' },
+      'ICICI_FUT': { securityId: '4963', segment: 'NSE_EQ', spotToken: '4963' },
+      'TCS_FUT': { securityId: '11536', segment: 'NSE_EQ', spotToken: '11536' },
+      'INFY_FUT': { securityId: '1594', segment: 'NSE_EQ', spotToken: '1594' },
+      // MCX Commodities (MCX_COMM)
+      'GOLD_F': { securityId: '429604', segment: 'MCX_COMM', spotToken: null },
+      'GOLDM_F': { securityId: '429604', segment: 'MCX_COMM', spotToken: null },
+      'SILVER_F': { securityId: '429605', segment: 'MCX_COMM', spotToken: null },
+      'SILVERM_F': { securityId: '429605', segment: 'MCX_COMM', spotToken: null },
+      'CRUDE_F': { securityId: '429606', segment: 'MCX_COMM', spotToken: null },
+      'NATGAS_F': { securityId: '429607', segment: 'MCX_COMM', spotToken: null },
+      'COPPER_F': { securityId: '429608', segment: 'MCX_COMM', spotToken: null },
+      // CDS Currencies (NSE_CURRENCY)
+      'USDINR_F': { securityId: '2', segment: 'NSE_CURRENCY', spotToken: null },
+      'EURINR_F': { securityId: '3', segment: 'NSE_CURRENCY', spotToken: null },
+      'GBPINR_F': { securityId: '4', segment: 'NSE_CURRENCY', spotToken: null },
+      'JPYINR_F': { securityId: '5', segment: 'NSE_CURRENCY', spotToken: null },
     };
-    const resolvedToken = PLACEHOLDER_TO_SPOT[token] || token;
 
-    const quote = marketDataEngine.getQuote(resolvedToken);
+    const mapping = PLACEHOLDER_TO_DHAN[token];
+    if (mapping) {
+      // Try spot token from Angel feed first (instant)
+      if (mapping.spotToken) {
+        const spotQuote = marketDataEngine.getQuote(mapping.spotToken);
+        if (spotQuote && spotQuote.ltp > 0) return res.json(spotQuote);
+      }
+      // Try Dhan REST API with native security ID
+      if (dataProviderSwitch) {
+        try {
+          const dhan = dataProviderSwitch.getDhanAdapter();
+          if (dhan && dhan.isConnected) {
+            const result = await dhan.getQuote(mapping.securityId, mapping.segment);
+            const ltp = result?.ltp || result?.last_price;
+            if (ltp && ltp > 0) {
+              return res.json({ token, ltp, exchange: mapping.segment, timestamp: Date.now(), symbol: token });
+            }
+          }
+        } catch (_) {}
+      }
+      // Final fallback: use getLivePrice on the spot token
+      if (mapping.spotToken && marketDataEngine.getLivePrice) {
+        try {
+          const ltp = await marketDataEngine.getLivePrice(mapping.spotToken, exchange || 'NSE');
+          if (ltp && ltp > 0) return res.json({ token, ltp, exchange: exchange || 'NSE', timestamp: Date.now() });
+        } catch (_) {}
+      }
+      return res.json(null);
+    }
+
+    // Non-placeholder token — standard lookup
+    const quote = marketDataEngine.getQuote(token);
     if (quote && quote.ltp > 0) return res.json(quote);
 
     // No cached quote — try getLivePrice fallback (Dhan API, candle close, depth midpoint)
     if (marketDataEngine.getLivePrice) {
       try {
-        const ltp = await marketDataEngine.getLivePrice(resolvedToken, exchange || 'NSE');
+        const ltp = await marketDataEngine.getLivePrice(token, exchange || 'NSE');
         if (ltp && ltp > 0) {
-          const fallbackQuote = { token: resolvedToken, ltp, exchange: exchange || 'NSE', timestamp: Date.now() };
+          const fallbackQuote = { token, ltp, exchange: exchange || 'NSE', timestamp: Date.now() };
           return res.json(fallbackQuote);
         }
       } catch (_) {}

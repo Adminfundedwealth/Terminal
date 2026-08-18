@@ -57,6 +57,7 @@ import { TradingViewDatafeed } from './realtime/tradingview.datafeed.js';
 import { BrokerFactory } from './brokers/broker.factory.js';
 import { HealthMonitor } from './brokers/health.monitor.js';
 import { AngelFeedConnector } from './brokers/angelone/angel.feed.connector.js';
+import { DhanWebSocketFeed } from './brokers/dhan/dhan.websocket.js';
 import { eventBus, EventBridge } from './events/index.js';
 import { eventDispatcher } from './services/eventDispatcher.js';
 import { DataProviderSwitch } from './services/dataProviderSwitch.js';
@@ -76,6 +77,7 @@ const healthMonitor = new HealthMonitor({ interval: 30000 });
 const angelFeed = new AngelFeedConnector(marketDataEngine);
 const eventBridge = new EventBridge();
 const dataProviderSwitch = new DataProviderSwitch(candleService, optionChainService);
+let dhanFeed = null; // Dhan WebSocket — primary real-time feed
 let tradingViewDatafeed = null;
 let realtimeServer = null;
 
@@ -510,25 +512,178 @@ async function startup() {
     console.log('');
     console.log('â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');
 
-    // 9. Connect Angel Feed (live market data) â€” fire and forget
-    connectAngelFeed().catch(e => console.error("[connectAngelFeed] Fatal error:", e.message));
+    // 9. Connect Dhan WebSocket Feed (PRIMARY live market data) - fire and forget
+    connectDhanFeed().catch(e => console.error("[connectDhanFeed] Fatal error:", e.message));
+
+    // 9b. Connect Angel Feed (SECONDARY - broker adapter only, NOT live ticks)
+    connectAngelFeedForBroker().catch(e => console.error("[connectAngelFeedForBroker] Error:", e.message));
   });
 }
 
-async function connectAngelFeed() {
+
+/**
+ * Connect Dhan WebSocket Feed as PRIMARY real-time market data source.
+ * Pipes all tick data directly into MarketDataEngine.
+ */
+async function connectDhanFeed() {
+  const dhanAdapter = dataProviderSwitch.getDhanAdapter();
+  if (!dhanAdapter || !dhanAdapter.auth || !dhanAdapter.auth.isTokenValid) {
+    console.warn('[DhanFeed] Dhan adapter not ready — cannot connect WebSocket feed');
+    console.warn('[DhanFeed] Historical/REST data still available via DataProviderSwitch');
+    return;
+  }
+
+  try {
+    dhanFeed = new DhanWebSocketFeed(dhanAdapter.auth);
+    await dhanFeed.connect();
+    marketDataEngine.connectAdapter('dhan-websocket');
+    console.log('[DhanFeed] ✓ Connected — PRIMARY real-time feed active');
+
+    // Pipe tick events into MarketDataEngine
+    dhanFeed.on('tick', (tick) => {
+      if (tick.token && tick.ltp > 0) {
+        const existing = marketDataEngine.getQuote(tick.token);
+        marketDataEngine.pushQuote(tick.token, {
+          ltp: tick.ltp,
+          open: tick.open || existing?.open,
+          high: tick.high || existing?.high,
+          low: tick.low || existing?.low,
+          close: tick.close || existing?.close,
+          volume: tick.volume || existing?.volume,
+          timestamp: Date.now(),
+          symbol: existing?.symbol,
+          exchange: existing?.exchange,
+          segment: existing?.segment,
+        });
+      }
+    });
+
+    // Pipe depth events
+    dhanFeed.on('depth', (depth) => {
+      if (depth.token) {
+        marketDataEngine.pushDepth(depth.token, depth);
+      }
+    });
+
+    // Handle disconnection — mark feed as stale
+    dhanFeed.on('disconnected', () => {
+      console.warn('[DhanFeed] WebSocket disconnected — feed stale');
+      marketDataEngine.setFeedStale(true);
+    });
+
+    dhanFeed.on('connected', () => {
+      marketDataEngine.setFeedStale(false);
+    });
+
+    // Default token subscriptions
+    const defaultTokens = [
+      // Indices (IDX_I)
+      { securityId: '13', segment: 'IDX_I', symbol: 'NIFTY 50' },
+      { securityId: '25', segment: 'IDX_I', symbol: 'BANKNIFTY' },
+      { securityId: '27', segment: 'IDX_I', symbol: 'FINNIFTY' },
+      { securityId: '442', segment: 'IDX_I', symbol: 'MIDCPNIFTY' },
+      { securityId: '51', segment: 'IDX_I', symbol: 'SENSEX' },
+      // NIFTY 50 constituents (NSE_EQ)
+      { securityId: '2885', segment: 'NSE_EQ', symbol: 'RELIANCE' },
+      { securityId: '3045', segment: 'NSE_EQ', symbol: 'SBIN' },
+      { securityId: '1333', segment: 'NSE_EQ', symbol: 'HDFCBANK' },
+      { securityId: '11536', segment: 'NSE_EQ', symbol: 'TCS' },
+      { securityId: '1594', segment: 'NSE_EQ', symbol: 'INFY' },
+      { securityId: '317', segment: 'NSE_EQ', symbol: 'BAJFINANCE' },
+      { securityId: '5633', segment: 'NSE_EQ', symbol: 'MARUTI' },
+      { securityId: '11483', segment: 'NSE_EQ', symbol: 'NTPC' },
+      { securityId: '3787', segment: 'NSE_EQ', symbol: 'TECHM' },
+      { securityId: '2031', segment: 'NSE_EQ', symbol: 'KOTAKBANK' },
+      { securityId: '1660', segment: 'NSE_EQ', symbol: 'ITC' },
+      { securityId: '10999', segment: 'NSE_EQ', symbol: 'WIPRO' },
+      { securityId: '236', segment: 'NSE_EQ', symbol: 'ASIANPAINT' },
+      { securityId: '16669', segment: 'NSE_EQ', symbol: 'BAJAJFINSV' },
+      { securityId: '1363', segment: 'NSE_EQ', symbol: 'HINDUNILVR' },
+      { securityId: '3506', segment: 'NSE_EQ', symbol: 'TATAMOTORS' },
+      { securityId: '3499', segment: 'NSE_EQ', symbol: 'TATASTEEL' },
+      { securityId: '5900', segment: 'NSE_EQ', symbol: 'ADANIENT' },
+      { securityId: '11630', segment: 'NSE_EQ', symbol: 'TITAN' },
+      { securityId: '694', segment: 'NSE_EQ', symbol: 'COALINDIA' },
+      { securityId: '547', segment: 'NSE_EQ', symbol: 'BRITANNIA' },
+      { securityId: '11532', segment: 'NSE_EQ', symbol: 'ULTRACEMCO' },
+      { securityId: '2475', segment: 'NSE_EQ', symbol: 'ONGC' },
+      { securityId: '20374', segment: 'NSE_EQ', symbol: 'BHARTIARTL' },
+      { securityId: '3432', segment: 'NSE_EQ', symbol: 'TATACONSUM' },
+      { securityId: '2181', segment: 'NSE_EQ', symbol: 'M&M' },
+      { securityId: '15083', segment: 'NSE_EQ', symbol: 'ADANIPORTS' },
+      { securityId: '11723', segment: 'NSE_EQ', symbol: 'HCLTECH' },
+      { securityId: '14418', segment: 'NSE_EQ', symbol: 'JSWSTEEL' },
+      { securityId: '4963', segment: 'NSE_EQ', symbol: 'IOC' },
+      { securityId: '1922', segment: 'NSE_EQ', symbol: 'ICICIBANK' },
+      { securityId: '288', segment: 'NSE_EQ', symbol: 'AXISBANK' },
+      { securityId: '2303', segment: 'NSE_EQ', symbol: 'LT' },
+      { securityId: '881', segment: 'NSE_EQ', symbol: 'DRREDDY' },
+      { securityId: '3456', segment: 'NSE_EQ', symbol: 'SUNPHARMA' },
+      { securityId: '6191', segment: 'NSE_EQ', symbol: 'CIPLA' },
+      { securityId: '4717', segment: 'NSE_EQ', symbol: 'APOLLOHOSP' },
+      { securityId: '910', segment: 'NSE_EQ', symbol: 'EICHERMOT' },
+      { securityId: '14977', segment: 'NSE_EQ', symbol: 'POWERGRID' },
+    ];
+
+    // MCX commodity tokens
+    const mcxTokens = [
+      { securityId: '429604', segment: 'MCX_COMM', symbol: 'GOLD' },
+      { securityId: '429638', segment: 'MCX_COMM', symbol: 'SILVER' },
+      { securityId: '425475', segment: 'MCX_COMM', symbol: 'CRUDEOIL' },
+      { securityId: '431765', segment: 'MCX_COMM', symbol: 'NATURALGAS' },
+      { securityId: '430596', segment: 'MCX_COMM', symbol: 'COPPER' },
+      { securityId: '438629', segment: 'MCX_COMM', symbol: 'ALUMINIUM' },
+      { securityId: '437561', segment: 'MCX_COMM', symbol: 'ZINC' },
+      { securityId: '431659', segment: 'MCX_COMM', symbol: 'LEAD' },
+      { securityId: '432468', segment: 'MCX_COMM', symbol: 'NICKEL' },
+    ];
+
+    // CDS currency tokens
+    const cdsTokens = [
+      { securityId: '11091', segment: 'CUR', symbol: 'USDINR' },
+      { securityId: '11363', segment: 'CUR', symbol: 'EURINR' },
+      { securityId: '11096', segment: 'CUR', symbol: 'GBPINR' },
+      { securityId: '11098', segment: 'CUR', symbol: 'JPYINR' },
+    ];
+
+    const allTokens = [...defaultTokens, ...mcxTokens, ...cdsTokens];
+
+    // Seed symbol names into MarketDataEngine
+    allTokens.forEach(t => {
+      const exchange = t.segment === 'MCX_COMM' ? 'MCX' : t.segment === 'CUR' ? 'CDS' : t.segment === 'IDX_I' ? 'NSE' : 'NSE';
+      marketDataEngine.pushQuote(t.securityId, { symbol: t.symbol, exchange, segment: t.segment });
+      candleService.registerTokenExchange(t.securityId, exchange);
+    });
+
+    // Subscribe all in Quote mode (17) for OHLC + volume
+    dhanFeed.subscribe(allTokens.map(t => ({ securityId: t.securityId, segment: t.segment })), 17);
+    console.log('[DhanFeed] Subscribed ' + allTokens.length + ' instruments (mode 17 Quote)');
+
+    // Hook live ticks into candle aggregation
+    dhanFeed.on('tick', (tick) => {
+      if (tick.ltp > 0) {
+        candleService.processLiveTick(tick.token, tick.ltp, tick.volume, Date.now());
+      }
+    });
+
+  } catch (err) {
+    console.error('[DhanFeed] Connection failed:', err.message);
+    console.error('[DhanFeed]   Live ticks unavailable — historical/REST still works via DataProviderSwitch');
+  }
+}
+
+async function connectAngelFeedForBroker() {
   try {
     angelFeed.setEventBus(eventBus);
     await angelFeed.connect();
-    marketDataEngine.connectAdapter('angelone-smartstream');
+    // NOTE: Angel feed is SECONDARY — only used for broker adapter registration (order execution).
+    // Dhan WebSocket is the PRIMARY live tick source.
+    console.log('[AngelFeed] Connected (broker adapter only — NOT used for live ticks)');
 
-    // Wire token propagation via callback (replaces old 60-second setInterval)
+    // Wire token propagation for Angel-based services (still needed for order execution)
     const propagateToken = (session) => {
       if (session) {
-        candleService.setAuthToken(session.jwtToken);
-        depthService.setAuthToken(session.jwtToken);
-        optionChainService.setAuthToken(session.jwtToken);
-
-        // Also update the shared broker adapter session
+        // Update the shared broker adapter session
         const clientId = session.clientId || process.env.ANGEL_CLIENT_ID || 'default';
         const existing = BrokerFactory.get('angelone', clientId);
         if (existing) {
@@ -540,46 +695,8 @@ async function connectAngelFeed() {
       }
     };
 
-    // Register callback for immediate token propagation on refresh/reconnect
     angelFeed.onTokenRefresh(propagateToken);
-
-    // Initial propagation
     propagateToken(angelFeed.session);
-
-    // Pre-warm option chains for all index pairs in the background.
-    // SEQUENTIAL with 2s gap between symbols — parallel warmup fires 75+
-    // concurrent Angel One searchScrip requests which triggers 403 rate
-    // limiting, causing expiry discovery to fail and the bad
-    // instrumentService fallback (discontinued weekly dates) to activate.
-    // SENSEX excluded — no option contracts available on Angel One NFO.
-    const WARMUP_SYMBOLS = ['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'MIDCPNIFTY'];
-    (async () => {
-      console.log('[OptionChain] Starting startup warmup (sequential, 2s gap)...');
-      for (const sym of WARMUP_SYMBOLS) {
-        try {
-          const expiries = await optionChainService.getExpiries(sym);
-          if (expiries && expiries.length > 0) {
-            await optionChainService.getOptionChain(sym, expiries[0]);
-            console.log(`[OptionChain] Warmup done: ${sym} ${expiries[0]}`);
-          } else {
-            console.warn(`[OptionChain] Warmup: no expiries for ${sym}`);
-          }
-        } catch (e) {
-          console.warn(`[OptionChain] Warmup failed for ${sym}:`, e.message);
-        }
-        await new Promise(r => setTimeout(r, 2000)); // 2s gap — prevent rate limit
-      }
-      console.log('[OptionChain] Startup warmup complete.');
-    })().catch(e => console.warn('[OptionChain] Warmup error:', e.message));
-
-    // Wire refresh callbacks so services can self-heal on 403
-    const refreshFn = async () => {
-      const token = await angelFeed.ensureValidToken();
-      return token;
-    };
-    candleService.setRefreshCallback(refreshFn);
-    depthService.setRefreshCallback(refreshFn);
-    optionChainService.setRefreshCallback(refreshFn);
 
     // Register a shared AngelOneAdapter instance for order execution
     const { AngelOneAdapter } = await import('./brokers/angelone/angelone.adapter.js');
@@ -595,130 +712,14 @@ async function connectAngelFeed() {
     sharedAdapter._isConnected = true;
     sharedAdapter.feedToken = angelFeed.session.feedToken;
     BrokerFactory.registerInstance('angelone', sharedAdapter, angelFeed.session.clientId);
+    console.log('[AngelFeed] ✓ Broker adapter registered for order execution');
 
-    const defaultTokens = [
-      // Indices (mode 1 â€” LTP only)
-      { token: '99926000', exchange: 'NSE', symbol: 'NIFTY 50' },
-      { token: '99926009', exchange: 'NSE', symbol: 'BANKNIFTY' },
-      { token: '99926037', exchange: 'NSE', symbol: 'FINNIFTY' },
-      { token: '99926074', exchange: 'NSE', symbol: 'MIDCPNIFTY' },
-      { token: '99919000', exchange: 'BSE', symbol: 'SENSEX' },
-      // NIFTY 50 constituents (mode 2 â€” Quote with OHLC + volume)
-      { token: '2885', exchange: 'NSE', symbol: 'RELIANCE' },
-      { token: '3045', exchange: 'NSE', symbol: 'SBIN' },
-      { token: '1333', exchange: 'NSE', symbol: 'HDFCBANK' },
-      { token: '11536', exchange: 'NSE', symbol: 'TCS' },
-      { token: '1594', exchange: 'NSE', symbol: 'INFY' },
-      { token: '317', exchange: 'NSE', symbol: 'BAJFINANCE' },
-      { token: '5633', exchange: 'NSE', symbol: 'MARUTI' },
-      { token: '11483', exchange: 'NSE', symbol: 'NTPC' },
-      { token: '3787', exchange: 'NSE', symbol: 'TECHM' },
-      { token: '2031', exchange: 'NSE', symbol: 'KOTAKBANK' },
-      { token: '1660', exchange: 'NSE', symbol: 'ITC' },
-      { token: '10999', exchange: 'NSE', symbol: 'WIPRO' },
-      { token: '236', exchange: 'NSE', symbol: 'ASIANPAINT' },
-      { token: '16669', exchange: 'NSE', symbol: 'BAJAJFINSV' },
-      { token: '1363', exchange: 'NSE', symbol: 'HINDUNILVR' },
-      { token: '3506', exchange: 'NSE', symbol: 'TATAMOTORS' },
-      { token: '3499', exchange: 'NSE', symbol: 'TATASTEEL' },
-      { token: '5900', exchange: 'NSE', symbol: 'ADANIENT' },
-      { token: '11630', exchange: 'NSE', symbol: 'TITAN' },
-      { token: '694', exchange: 'NSE', symbol: 'COALINDIA' },
-      { token: '547', exchange: 'NSE', symbol: 'BRITANNIA' },
-      { token: '11532', exchange: 'NSE', symbol: 'ULTRACEMCO' },
-      { token: '2475', exchange: 'NSE', symbol: 'ONGC' },
-      { token: '467', exchange: 'NSE', symbol: 'HINDUNILVR' },
-      { token: '20374', exchange: 'NSE', symbol: 'BHARTIARTL' },
-      { token: '3432', exchange: 'NSE', symbol: 'TATACONSUM' },
-      { token: '2181', exchange: 'NSE', symbol: 'M&M' },
-      { token: '15083', exchange: 'NSE', symbol: 'ADANIPORTS' },
-      { token: '11723', exchange: 'NSE', symbol: 'HCLTECH' },
-      { token: '14418', exchange: 'NSE', symbol: 'JSWSTEEL' },
-      { token: '4963', exchange: 'NSE', symbol: 'IOC' },
-      { token: '1922', exchange: 'NSE', symbol: 'ICICIBANK' },
-      { token: '288', exchange: 'NSE', symbol: 'AXISBANK' },
-      { token: '2303', exchange: 'NSE', symbol: 'LT' },
-      { token: '881', exchange: 'NSE', symbol: 'DRREDDY' },
-      { token: '3456', exchange: 'NSE', symbol: 'SUNPHARMA' },
-      { token: '6191', exchange: 'NSE', symbol: 'CIPLA' },
-      { token: '4717', exchange: 'NSE', symbol: 'APOLLOHOSP' },
-      { token: '910', exchange: 'NSE', symbol: 'EICHERMOT' },
-      { token: '14977', exchange: 'NSE', symbol: 'POWERGRID' },
-    ];
-
-    // Seed symbol names into MarketDataEngine so scanner can return them
-    defaultTokens.forEach(t => {
-      marketDataEngine.pushQuote(t.token, { symbol: t.symbol, exchange: t.exchange, segment: t.exchange });
-    });
-
-    // MCX commodity tokens (mode 2 -- Quote with OHLC + volume)
-    const mcxTokens = [
-      { token: '429604', exchange: 'MCX', symbol: 'GOLD' },
-      { token: '429638', exchange: 'MCX', symbol: 'SILVER' },
-      { token: '425475', exchange: 'MCX', symbol: 'CRUDEOIL' },
-      { token: '431765', exchange: 'MCX', symbol: 'NATURALGAS' },
-      { token: '430596', exchange: 'MCX', symbol: 'COPPER' },
-      { token: '438629', exchange: 'MCX', symbol: 'ALUMINIUM' },
-      { token: '437561', exchange: 'MCX', symbol: 'ZINC' },
-      { token: '431659', exchange: 'MCX', symbol: 'LEAD' },
-      { token: '432468', exchange: 'MCX', symbol: 'NICKEL' },
-    ];
-
-    // CDS currency tokens (mode 2 -- Quote)
-    const cdsTokens = [
-      { token: '11091', exchange: 'CDS', symbol: 'USDINR' },
-      { token: '11363', exchange: 'CDS', symbol: 'EURINR' },
-      { token: '11096', exchange: 'CDS', symbol: 'GBPINR' },
-      { token: '11098', exchange: 'CDS', symbol: 'JPYINR' },
-    ];
-
-    // Seed MCX + CDS symbols into engine
-    [...mcxTokens, ...cdsTokens].forEach(t => {
-      marketDataEngine.pushQuote(t.token, { symbol: t.symbol, exchange: t.exchange, segment: t.exchange });
-    });
-
-    // Register token exchanges for candle service
-    defaultTokens.forEach(t => candleService.registerTokenExchange(t.token, t.exchange));
-    [...mcxTokens, ...cdsTokens].forEach(t => candleService.registerTokenExchange(t.token, t.exchange));
-
-    // Split tokens: indices (mode 1 LTP) vs stocks (mode 2 Quote)
-    const indexTokens = defaultTokens.filter(t => t.token.startsWith('999'));
-    const stockTokens = defaultTokens.filter(t => !t.token.startsWith('999'));
-
-    // Subscribe ALL tokens in mode 2 (Quote) to get OHLC + volume data
-    // Mode 1 (LTP only) skips volume — we need mode 2 for all symbols including indices
-    if (indexTokens.length > 0) {
-      angelFeed.subscribe(indexTokens, 2); // Quote mode for indices (includes volume)
-    }
-    if (stockTokens.length > 0) {
-      angelFeed.subscribe(stockTokens, 2); // Quote mode for stocks (OHLC + volume + change)
-    }
-    if (mcxTokens.length > 0) {
-      angelFeed.subscribe(mcxTokens, 2); // Quote mode for MCX commodities
-    }
-    if (cdsTokens.length > 0) {
-      angelFeed.subscribe(cdsTokens, 2); // Quote mode for CDS currencies
-    }
-    console.log(`[AngelFeed] subscribed: ${indexTokens.length} indices + ${stockTokens.length} stocks + ${mcxTokens.length} MCX + ${cdsTokens.length} CDS`);
-
-    const allFeedTokens = [...defaultTokens, ...mcxTokens, ...cdsTokens];
-
-    // Hook live ticks into candle aggregation
-    for (const t of allFeedTokens) {
-      marketDataEngine.subscribe(t.token, (event) => {
-        if (event.data?.ltp) {
-          candleService.processLiveTick(t.token, event.data.ltp, event.data.volume, event.data.timestamp);
-        }
-      });
-    }
-
-    // Position P&L tracking starts when authenticated sessions are active
-    // (no dev bypass -- sessions drive tracking)
   } catch (err) {
-    console.warn(`[AngelFeed] Connection failed: ${err.message}`);
-    console.warn('[AngelFeed]   Market data will be empty until feed connects');
+    console.warn('[AngelFeed] Connection failed:', err.message);
+    console.warn('[AngelFeed]   Order execution via Angel One will be unavailable');
   }
 }
+
 
 startup().catch((err) => {
   console.error('[Startup] FATAL:', err.message);

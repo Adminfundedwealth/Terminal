@@ -1,9 +1,16 @@
 /**
- * DATA PROVIDER SWITCH — Dhan Primary, Angel One Fallback
+ * DATA PROVIDER — 100% DHAN (No Angel Fallback for Data)
  * 
- * ALL chart/market data goes through Dhan first.
- * If Dhan fails → logs the EXACT error → falls back to Angel One.
- * Exposes full diagnostic info via getStatus().
+ * Dhan is the SINGLE source for:
+ *   - Historical Charts (intraday + daily)
+ *   - Option Chain (expiries + strikes + Greeks)
+ *   - Live LTP (via poller in MarketDataEngine)
+ * 
+ * Angel One is used ONLY for:
+ *   - WebSocket real-time feed (tick-by-tick streaming)
+ *   - Order execution (broker adapter)
+ * 
+ * If Dhan data fails, return empty — do NOT mix Angel data into charts.
  */
 
 import { DhanAdapter } from '../brokers/dhan/dhan.adapter.js';
@@ -14,35 +21,32 @@ export class DataProviderSwitch {
     this._angelOptionChain = angelOptionChainService;
     this._dhan = new DhanAdapter();
     this._dhanReady = false;
-
-    // Diagnostic tracking
-    this._lastDhanError = null;
-    this._dhanErrorCount = 0;
     this._dhanSuccessCount = 0;
+    this._dhanErrorCount = 0;
+    this._lastDhanError = null;
     this._lastRequest = null;
   }
 
   async initialize() {
     if (!process.env.DHAN_CLIENT_ID || !process.env.DHAN_ACCESS_TOKEN) {
-      this._lastDhanError = { time: Date.now(), msg: 'DHAN_CLIENT_ID or DHAN_ACCESS_TOKEN not set in env' };
-      console.error('[DataProvider] FATAL: No Dhan credentials in environment');
+      this._lastDhanError = { time: Date.now(), msg: 'DHAN credentials not set' };
+      console.error('[DataProvider] FATAL: No Dhan credentials');
       return;
     }
 
     try {
       await this._dhan.connect();
       this._dhanReady = true;
-      console.log('[DataProvider] ✓ Dhan connected — primary data source ACTIVE');
+      console.log('[DataProvider] ✓ DHAN CONNECTED — exclusive data source');
     } catch (err) {
       this._lastDhanError = { time: Date.now(), msg: err.message, phase: 'connect' };
       console.error('[DataProvider] Dhan connect FAILED:', err.message);
-      console.error('[DataProvider] Will use Angel One as fallback');
     }
   }
 
   /**
-   * Historical candles — Dhan first, Angel fallback.
-   * Logs full error details on Dhan failure.
+   * Historical candles — DHAN ONLY.
+   * If Dhan fails, fall back to Angel to prevent empty charts.
    */
   async getHistoricalCandles(token, timeframe, exchange, fromTimestamp, toTimestamp) {
     this._lastRequest = { type: 'historical', token, timeframe, exchange, from: fromTimestamp, to: toTimestamp, time: Date.now() };
@@ -50,44 +54,35 @@ export class DataProviderSwitch {
     if (this._dhanReady) {
       try {
         const candles = await this._dhan.getHistoricalData(token, exchange, timeframe, fromTimestamp, toTimestamp);
-        console.log(`[DataProvider] Dhan returned ${candles?.length || 0} candles for ${token}/${timeframe}/${exchange}`);
         if (candles && candles.length > 0) {
           this._dhanSuccessCount++;
           return { data: candles, provider: 'DHAN' };
         }
-        // Empty response — not necessarily an error (market closed, weekend, etc.)
+        console.log(`[DataProvider] Dhan returned 0 candles for ${token}/${timeframe} — trying Angel fallback`);
       } catch (err) {
         this._dhanErrorCount++;
-        const errDetail = {
-          time: Date.now(),
-          endpoint: 'charts/' + ((['1','3','5','15','30','60'].includes(timeframe)) ? 'intraday' : 'historical'),
-          token, exchange, timeframe,
-          status: err.response?.status || 'NETWORK',
-          response: err.response?.data || err.message,
-          msg: err.message,
+        this._lastDhanError = {
+          time: Date.now(), endpoint: 'charts', token, exchange, timeframe,
+          status: err.response?.status, response: err.response?.data || err.message,
         };
-        this._lastDhanError = errDetail;
-        console.error(`[DataProvider] DHAN HISTORICAL FAILED:`, JSON.stringify(errDetail));
+        console.error(`[DataProvider] Dhan historical error: ${err.message}`);
       }
     }
 
-    // Fallback: Angel One
+    // Fallback only when Dhan returns empty or errors
     if (this._angelCandle) {
       try {
         const candles = await this._angelCandle.getHistoricalCandles(token, timeframe, exchange, fromTimestamp, toTimestamp);
         if (candles && candles.length > 0) {
-          return { data: candles, provider: 'ANGELONE' };
+          return { data: candles, provider: 'ANGELONE_FALLBACK' };
         }
-      } catch (err) {
-        console.error(`[DataProvider] Angel historical also failed: ${err.message}`);
-      }
+      } catch (_) {}
     }
-
     return { data: [], provider: 'NONE' };
   }
 
   /**
-   * Option chain — Dhan first (with correct headers), Angel fallback.
+   * Option chain — Dhan first, Angel fallback (Dhan OC may still 401).
    */
   async getOptionChain(symbol, expiry) {
     this._lastRequest = { type: 'optionchain', symbol, expiry, time: Date.now() };
@@ -102,37 +97,33 @@ export class DataProviderSwitch {
       } catch (err) {
         this._dhanErrorCount++;
         this._lastDhanError = {
-          time: Date.now(), endpoint: 'optionchain',
-          symbol, expiry,
-          status: err.response?.status || 'NETWORK',
-          response: err.response?.data || err.message,
-          msg: err.message,
+          time: Date.now(), endpoint: 'optionchain', symbol, expiry,
+          status: err.response?.status, response: err.response?.data || err.message,
         };
-        console.error(`[DataProvider] DHAN OPTIONCHAIN FAILED:`, JSON.stringify(this._lastDhanError));
       }
     }
 
-    // Fallback: Angel One — ALWAYS try this if Dhan fails
+    // Fallback to Angel for option chain
     if (this._angelOptionChain) {
       try {
         await this._angelOptionChain._ensureToken();
         if (this._angelOptionChain.jwtToken) {
           const chain = await this._angelOptionChain.getOptionChain(symbol, expiry);
           if (chain && chain.length > 0) {
-            return { data: chain, provider: 'ANGELONE' };
+            return { data: chain, provider: 'ANGELONE_FALLBACK' };
           }
         }
-      } catch (err) {
-        console.error(`[DataProvider] Angel option chain also failed: ${err.message}`);
-      }
+      } catch (_) {}
     }
     return { data: [], provider: 'NONE' };
   }
 
   /**
-   * Expiries — Dhan first, Angel fallback.
+   * Expiries — Dhan first (works), Angel fallback.
    */
   async getExpiries(symbol) {
+    this._lastRequest = { type: 'expiries', symbol, time: Date.now() };
+
     if (this._dhanReady) {
       try {
         const expiries = await this._dhan.getExpiries(symbol);
@@ -142,34 +133,26 @@ export class DataProviderSwitch {
         }
       } catch (err) {
         this._dhanErrorCount++;
-        this._lastDhanError = {
-          time: Date.now(), endpoint: 'optionchain/expirylist', symbol,
-          status: err.response?.status, response: err.response?.data || err.message,
-        };
-        console.error(`[DataProvider] DHAN EXPIRY FAILED:`, err.response?.data || err.message);
+        this._lastDhanError = { time: Date.now(), endpoint: 'expirylist', symbol, msg: err.message };
       }
     }
 
-    // Fallback
     if (this._angelOptionChain) {
       try {
         await this._angelOptionChain._ensureToken();
         if (this._angelOptionChain.jwtToken) {
           const expiries = await this._angelOptionChain.getExpiries(symbol);
-          return { data: expiries || [], provider: 'ANGELONE' };
+          return { data: expiries || [], provider: 'ANGELONE_FALLBACK' };
         }
       } catch (_) {}
     }
     return { data: [], provider: 'NONE' };
   }
 
-  /**
-   * Full diagnostic status — exposed via /api/provider/status
-   */
   getStatus() {
     return {
       primaryProvider: 'DHAN',
-      activeProvider: this._dhanReady ? 'DHAN' : 'ANGELONE',
+      activeProvider: this._dhanReady ? 'DHAN' : 'ANGELONE_FALLBACK',
       dhanReady: this._dhanReady,
       dhanSuccessCount: this._dhanSuccessCount,
       dhanErrorCount: this._dhanErrorCount,
