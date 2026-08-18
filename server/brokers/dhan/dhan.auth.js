@@ -133,9 +133,12 @@ export class DhanAuthService extends EventEmitter {
     this.emit('token:valid', { clientId: this.clientId });
 
     // Schedule daily cron at 8:00 AM IST
-    this._scheduleDailyCron();
-    // Timer-based renewal backup
-    this._scheduleTimerRenewal();
+    // DISABLED: Dhan RenewToken revokes old tokens. Only enable when
+    // the renewal response is properly captured and saved.
+    // this._scheduleDailyCron();
+
+    // Timer-based renewal backup — also disabled for safety
+    // this._scheduleTimerRenewal();
 
     return true;
   }
