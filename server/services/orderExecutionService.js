@@ -39,14 +39,23 @@ const orderRepo = new OrderRepository();
 export class OrderExecutionService {
   constructor(marketDataEngine) {
     this.marketDataEngine = marketDataEngine;
+    this._dataProviderSwitch = null;
+    this._candleService = null;
     this._paperOrderMonitor = null;
     // Track pending paper SL/LIMIT orders: orderId → { accountId, orderParams, triggerPrice, limitPrice }
     this._pendingPaperOrders = new Map();
     // Concurrency guard for exitPosition: positionId → Promise
-    // Prevents two simultaneous exit calls for the same position from both
-    // reading the position as "open" and sending two broker exit orders.
     this._exitInFlight = new Map();
     this._startPaperOrderMonitor();
+  }
+
+  /**
+   * Inject DataProviderSwitch and CandleService for LTP fallback.
+   * Called from server/index.js after services are initialized.
+   */
+  setFallbackServices(dataProviderSwitch, candleService) {
+    this._dataProviderSwitch = dataProviderSwitch;
+    this._candleService = candleService;
   }
 
   /**
@@ -318,24 +327,39 @@ export class OrderExecutionService {
    */
   async _handleMarketFill(accountId, orderId, orderParams, brokerOrderId, brokerProvider, latencyMs) {
     // ── Fill price safety guard ──────────────────────────────────────────────
-    // A market order MUST have a valid live LTP to fill against.
-    // Using fillPrice = 0 creates a position with avg_price = 0, which then
-    // generates a fake MTM loss of (0 - realPrice) × qty on every subsequent
-    // tick — the direct cause of the Aug-10 incident.
-    //
-    // Priority: validated live LTP > explicit order price (for LIMIT fills).
-    // For MARKET orders, orderParams.price is always 0 — so if LTP is also
-    // missing, we reject rather than persist a zero-price position.
+    // Priority: live LTP > Dhan LTP fetch > explicit order price > last candle close
     const quote = this.marketDataEngine.getQuote(orderParams.token);
     const rawLtp = quote?.ltp;
-    const validLtp = (rawLtp && Number.isFinite(rawLtp) && rawLtp > 0) ? rawLtp : null;
+    let validLtp = (rawLtp && Number.isFinite(rawLtp) && rawLtp > 0) ? rawLtp : null;
+
+    // Fallback 1: Try Dhan LTP if live feed doesn't have it
+    if (!validLtp && this._dataProviderSwitch?.getDhanAdapter?.()) {
+      try {
+        const dhan = this._dataProviderSwitch.getDhanAdapter();
+        const dhanQuote = await dhan.getQuote(orderParams.token, orderParams.segment === 'NFO' ? 'NSE_FNO' : 'NSE_EQ');
+        const dhanLtp = dhanQuote?.ltp || dhanQuote?.last_price;
+        if (dhanLtp && Number.isFinite(dhanLtp) && dhanLtp > 0) {
+          validLtp = dhanLtp;
+          console.log(`[OrderExecution] LTP fallback from Dhan: ${orderParams.symbol} = ${validLtp}`);
+        }
+      } catch (_) { /* Dhan fetch failed, continue to next fallback */ }
+    }
+
+    // Fallback 2: Use last candle close price from chart data
+    if (!validLtp && this._candleService) {
+      const lastCandle = this._candleService.getCurrentCandle(orderParams.token, '1');
+      if (lastCandle?.close && lastCandle.close > 0) {
+        validLtp = lastCandle.close;
+        console.log(`[OrderExecution] LTP fallback from last candle: ${orderParams.symbol} = ${validLtp}`);
+      }
+    }
 
     // Resolve fill price: live LTP preferred, then explicit order price
     const candidatePrice = validLtp ?? (orderParams.price > 0 ? orderParams.price : null);
 
     if (!candidatePrice) {
-      // Market data unavailable — reject order rather than record at price 0
-      const reason = 'Market data unavailable — LTP is zero or missing. Order not executed.';
+      // ALL fallbacks exhausted — reject order rather than record at price 0
+      const reason = 'Market data unavailable — LTP is zero or missing. Order not executed. Please retry.';
       console.error(`[OrderExecution] REJECTED fill for order ${orderId} (${orderParams.symbol}): ${reason}`);
       try {
         await orderRepo.markRejected(orderId, reason);

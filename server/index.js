@@ -1,4 +1,4 @@
-﻿/**
+﻿﻿/**
  * FUNDEDWEALTH TERMINAL â€” SERVER ENTRY POINT
  * 
  * Wires together all backend components:
@@ -440,6 +440,12 @@ async function startup() {
   await dataProviderSwitch.initialize();
   const dpStatus = dataProviderSwitch.getStatus();
   console.log('[Startup] Data provider switch ready (active: ' + dpStatus.activeProvider + ', dhan: ' + dpStatus.dhanReady + ')');
+
+  // Wire LTP fallback into order execution engine
+  if (accountService.executionService) {
+    accountService.executionService.setFallbackServices(dataProviderSwitch, candleService);
+    console.log('[Startup] Order execution LTP fallback wired (Dhan + CandleService)');
+  }
 
   // 2b. Initialize Event Dispatcher (persistence subscriber)
   console.log('[Startup] Initializing event dispatcher (persistence layer)...');
