@@ -34,8 +34,15 @@ export class DhanAdapter {
 
     // Sub-services
     this.auth = new DhanAuthService();
-    this.historical = new DhanHistoricalService(this.auth);
+    this.historical = new DhanHistoricalService(this.auth, null);
     this.optionChain = new DhanOptionChainService(this.auth);
+  }
+
+  /**
+   * Inject MarketDataEngine for symbol resolution in historical service.
+   */
+  setMarketDataEngine(mde) {
+    this.historical._marketDataEngine = mde;
   }
 
   get isConnected() {

@@ -59,8 +59,9 @@ const TF_CONFIG = {
 };
 
 export class DhanHistoricalService {
-  constructor(authService) {
+  constructor(authService, marketDataEngine) {
     this.auth = authService;
+    this._marketDataEngine = marketDataEngine || null;
     // Scrip master cache: loaded once on first request
     this._scripMaster = null;
     this._scripMasterLoading = null;
@@ -213,19 +214,58 @@ export class DhanHistoricalService {
     // 1. Known index tokens
     if (INDEX_MAP[token]) return INDEX_MAP[token];
 
-    // 2. Try scrip master lookup (for MCX, NFO futures, ETFs)
+    // 2. Try scrip master lookup
     const master = await this._getScripMaster();
     if (master) {
-      const entry = master.get(token);
+      // Direct token lookup (works when Angel token = Dhan securityId)
+      const entry = master.byId.get(token);
       if (entry) return entry;
+
+      // Symbol-based lookup: get symbol name from marketDataEngine cache
+      // then find by symbol in the master
+      if (this._marketDataEngine) {
+        const quote = this._marketDataEngine.getQuote(token);
+        const symbol = quote?.symbol;
+        if (symbol) {
+          const seg = exchange === 'NFO' ? 'NSE_FNO' : exchange === 'MCX' ? 'MCX_COMM' : exchange === 'CDS' ? 'NSE_CURRENCY' : 'NSE_EQ';
+          const symEntry = master.bySymbol.get(`${symbol}:${seg}`) || master.bySymbol.get(`${symbol}:E`);
+          if (symEntry) {
+            console.log(`[DhanHist] Resolved ${symbol} (Angel ${token}) → Dhan ${symEntry.securityId}`);
+            return symEntry;
+          }
+        }
+      }
     }
 
     // 3. Default: use token as-is with mapped segment
     const segment = SEGMENT_MAP[exchange] || 'NSE_EQ';
     let instrument;
+
+    // Try to infer instrument type from the market data engine's cached quote
+    let inferredSymbol = null;
+    if (this._marketDataEngine) {
+      const q = this._marketDataEngine.getQuote(token);
+      if (q) inferredSymbol = q.symbol || q.tradingSymbol;
+    }
+
     switch (segment) {
-      case 'NSE_FNO': case 'BSE_FNO': instrument = 'FUTIDX'; break;
-      case 'MCX_COMM': instrument = 'FUTCOM'; break;
+      case 'NSE_FNO': case 'BSE_FNO':
+        // Detect option vs future: options have CE/PE in their symbol or a strike pattern
+        if (inferredSymbol && /\d+(CE|PE)$/i.test(inferredSymbol.replace(/[\s\-]/g, ''))) {
+          const upper = inferredSymbol.toUpperCase();
+          instrument = (upper.includes('NIFTY') || upper.includes('BANKNIFTY') || upper.includes('FINNIFTY') || upper.includes('MIDCPNIFTY') || upper.includes('SENSEX'))
+            ? 'OPTIDX' : 'OPTSTK';
+        } else {
+          instrument = 'FUTIDX';
+        }
+        break;
+      case 'MCX_COMM':
+        if (inferredSymbol && /\d+(CE|PE)$/i.test(inferredSymbol.replace(/[\s\-]/g, ''))) {
+          instrument = 'OPTFUT';
+        } else {
+          instrument = 'FUTCOM';
+        }
+        break;
       case 'NSE_CURRENCY': instrument = 'FUTCUR'; break;
       case 'IDX_I': instrument = 'INDEX'; break;
       default: instrument = 'EQUITY'; break;
@@ -257,107 +297,66 @@ export class DhanHistoricalService {
     try {
       const resp = await axios.get('https://images.dhan.co/api-data/api-scrip-master.csv', {
         httpsAgent: IPV4_AGENT,
-        timeout: 30000,
+        timeout: 45000,
         responseType: 'text',
       });
 
       const lines = resp.data.split('\n');
       const header = lines[0].split(',');
 
-      // Find column indices
-      const cols = {};
-      header.forEach((h, i) => {
-        const key = h.trim().replace(/"/g, '');
-        cols[key] = i;
-      });
+      // Column indices: SEM_SEGMENT(1), SEM_SMST_SECURITY_ID(2), SEM_INSTRUMENT_NAME(3), SEM_TRADING_SYMBOL(5)
+      const byId = new Map();      // securityId → { securityId, segment, instrument }
+      const bySymbol = new Map();  // "SYMBOL:SEGMENT" → { securityId, segment, instrument }
 
-      // Columns we need: SEM_SMST_SECURITY_ID, SEM_INSTRUMENT_NAME, SEM_TRADING_SYMBOL,
-      // SEM_EXG_SEGMENT, SEM_CUSTOM_SYMBOL, SM_SYMBOL_NAME
-      const secIdCol = cols['SEM_SMST_SECURITY_ID'] ?? cols['SECURITY_ID'];
-      const segCol = cols['SEM_EXG_SEGMENT'] ?? cols['EXCHANGE_SEGMENT'];
-      const symbolCol = cols['SEM_TRADING_SYMBOL'] ?? cols['TRADING_SYMBOL'];
-      const instCol = cols['SEM_INSTRUMENT_NAME'] ?? cols['INSTRUMENT_TYPE'];
-      const customSymCol = cols['SEM_CUSTOM_SYMBOL'] ?? cols['CUSTOM_SYMBOL'];
-
-      if (secIdCol === undefined) {
-        console.warn('[DhanHist] Scrip master: cannot find security ID column');
-        return null;
-      }
-
-      const map = new Map();
-
-      // Build lookup by: Angel-style token → Dhan resolution
-      // For NSE_EQ, Angel token === Dhan securityId
-      // For MCX/NFO, we map by symbol name
-      const symbolToEntry = new Map();
+      const segMap = { 'E': 'NSE_EQ', 'D': 'NSE_FNO', 'M': 'MCX_COMM', 'C': 'NSE_CURRENCY', 'BE': 'BSE_EQ' };
 
       for (let i = 1; i < lines.length; i++) {
-        const fields = this._parseCSVLine(lines[i]);
-        if (!fields || fields.length < 5) continue;
+        const f = lines[i].split(',');
+        if (f.length < 6) continue;
 
-        const secId = fields[secIdCol]?.trim();
-        const seg = fields[segCol]?.trim();
-        const symbol = fields[symbolCol]?.trim();
-        const inst = fields[instCol]?.trim();
-        const customSym = fields[customSymCol]?.trim();
+        const seg = f[1]?.trim();
+        const secId = f[2]?.trim();
+        const inst = f[3]?.trim();
+        const symbol = f[5]?.trim();
 
         if (!secId || !seg) continue;
 
-        const entry = { securityId: secId, segment: seg, instrument: inst || 'EQUITY' };
+        const dhanSeg = segMap[seg] || 'NSE_EQ';
+        const entry = { securityId: secId, segment: dhanSeg, instrument: inst || 'EQUITY' };
 
-        // Direct securityId mapping (works for NSE_EQ where Angel token = Dhan securityId)
-        map.set(secId, entry);
+        // Store by security ID
+        byId.set(secId, entry);
 
-        // Also index by trading symbol for cross-reference
-        if (symbol) symbolToEntry.set(`${seg}:${symbol}`, entry);
-        if (customSym) symbolToEntry.set(`${seg}:${customSym}`, entry);
+        // Store by symbol + segment (for reverse lookup)
+        if (symbol && (inst === 'EQUITY' || inst === 'INDEX')) {
+          const key = `${symbol}:${dhanSeg}`;
+          // Prefer NSE over BSE (shorter secId is typically NSE)
+          const existing = bySymbol.get(key);
+          if (!existing || secId.length < existing.securityId.length) {
+            bySymbol.set(key, entry);
+          }
+          // Also store without segment for fallback
+          bySymbol.set(`${symbol}:E`, entry);
+        }
       }
 
-      // Add well-known hardcoded mappings for common instruments
-      // These cover cases where Angel One tokens differ from Dhan security IDs
-      const HARDCODED = {
-        // ETFs (Angel token → Dhan securityId on NSE_EQ)
-        '16599': { securityId: '10599', segment: 'NSE_EQ', instrument: 'EQUITY' },  // NIFTYBEES
-        '16600': { securityId: '10604', segment: 'NSE_EQ', instrument: 'EQUITY' },  // BANKBEES
-        // MCX commodities (Angel token → Dhan securityId)
-        '429604': { securityId: '429604', segment: 'MCX_COMM', instrument: 'FUTCOM' },  // GOLD
-        '429638': { securityId: '429638', segment: 'MCX_COMM', instrument: 'FUTCOM' },  // SILVER
-        '425475': { securityId: '425475', segment: 'MCX_COMM', instrument: 'FUTCOM' },  // CRUDEOIL
-        '431765': { securityId: '431765', segment: 'MCX_COMM', instrument: 'FUTCOM' },  // NATURALGAS
-        '430596': { securityId: '430596', segment: 'MCX_COMM', instrument: 'FUTCOM' },  // COPPER
-        // CDS currencies
-        '11091': { securityId: '11091', segment: 'NSE_CURRENCY', instrument: 'FUTCUR' }, // USDINR
-        '11363': { securityId: '11363', segment: 'NSE_CURRENCY', instrument: 'FUTCUR' }, // EURINR
-        '11096': { securityId: '11096', segment: 'NSE_CURRENCY', instrument: 'FUTCUR' }, // GBPINR
-        '11098': { securityId: '11098', segment: 'NSE_CURRENCY', instrument: 'FUTCUR' }, // JPYINR
+      // Add hardcoded overrides for known mismatches
+      const OVERRIDES = {
+        '11723': { securityId: '7229', segment: 'NSE_EQ', instrument: 'EQUITY' },  // HCLTECH
       };
-
-      for (const [k, v] of Object.entries(HARDCODED)) {
-        map.set(k, v);
+      for (const [angelToken, dhanEntry] of Object.entries(OVERRIDES)) {
+        byId.set(angelToken, dhanEntry);
       }
 
-      console.log(`[DhanHist] Scrip master loaded: ${map.size} entries`);
-      return map;
+      console.log(`[DhanHist] Scrip master loaded: ${byId.size} IDs, ${bySymbol.size} symbols`);
+      return { byId, bySymbol };
     } catch (err) {
       console.error('[DhanHist] Scrip master fetch error:', err.message);
       return null;
     }
   }
 
-  _parseCSVLine(line) {
-    if (!line) return null;
-    const fields = [];
-    let current = '';
-    let inQuotes = false;
-    for (let i = 0; i < line.length; i++) {
-      const c = line[i];
-      if (c === '"') { inQuotes = !inQuotes; }
-      else if (c === ',' && !inQuotes) { fields.push(current); current = ''; }
-      else { current += c; }
-    }
-    fields.push(current);
-    return fields;
-  }
+  // (CSV parsing handled inline in _loadScripMaster)
 
   // ─── Response parser ─────────────────────────────────────────────────────
 

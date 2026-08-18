@@ -450,7 +450,7 @@ export function OptionChainModal() {
       ltp: ltp || undefined,
     });
     if (ltp && ltp > 0) setOrderForm({ price: ltp, orderType: 'LIMIT', qty: lotSize });
-    else setOrderForm({ qty: lotSize });
+    else setOrderForm({ qty: lotSize, price: 0 });
   }, [underlying, selectedExpiry, lotSize, optExchange, activeSymbol, setActiveSymbol, setSelectedContract, setOrderForm]);
 
   // ── Render helpers ────────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-﻿﻿﻿/**
+﻿﻿﻿﻿/**
  * FUNDEDWEALTH TERMINAL â€” SERVER ENTRY POINT
  * 
  * Wires together all backend components:
@@ -443,6 +443,7 @@ async function startup() {
 
   // Wire LTP fallbacks into MarketDataEngine and OrderExecution
   const dhanAdapter = dataProviderSwitch.getDhanAdapter();
+  if (dhanAdapter) dhanAdapter.setMarketDataEngine(marketDataEngine);
   marketDataEngine.setLtpFallbacks(dhanAdapter, candleService);
 
   // Wire LTP fallback into order execution engine
