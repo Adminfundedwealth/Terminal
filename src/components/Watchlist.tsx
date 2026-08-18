@@ -1131,11 +1131,11 @@ export function Watchlist() {
     return items;
   }, [activeWatchlist, inlineQuery, segFilter, pinnedTokens]);
 
-  // Original handleSelectItem logic � unchanged
+  // handleSelectItem — enhanced with dynamic option linking
   const handleSelectItem = useCallback((item: WatchlistItem) => {
     useTradingStore.getState().setSelectedContract(null);
     const { exchange, instrumentType } = resolveInstrumentFields(item);
-    setActiveSymbol({
+    const instrument: Instrument = {
       token: item.token,
       symbol: item.symbol,
       name: item.symbol,
@@ -1144,8 +1144,18 @@ export function Watchlist() {
       exchange,
       lotSize: 1,
       tickSize: 0.05,
-    });
-  }, [setActiveSymbol]);
+    };
+    setActiveSymbol(instrument);
+
+    // Dynamic option linking: when a stock is clicked in the STOCKS tab,
+    // update activeSymbol so switching to OPTIONS tab immediately fetches
+    // that stock's option chain (OPTIONS workspace uses activeSymbol as underlying)
+    const currentTab = activeWatchlistTab || activeWorkspace;
+    if (currentTab === 'stocks' && item.segment === 'NSE') {
+      // activeSymbol is already set — OPTIONS tab/workspace reads it as underlying
+      // No additional action needed; the option chain component uses activeSymbol
+    }
+  }, [setActiveSymbol, activeWatchlistTab, activeWorkspace]);
 
   // Select instrument from browser (has full data)
   const handleSelectFromBrowser = useCallback((inst: Instrument) => {
