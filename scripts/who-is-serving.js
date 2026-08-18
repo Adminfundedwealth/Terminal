@@ -665,10 +665,8 @@ async function testMCX() {
 // RESULTS TABLE
 // ═══════════════════════════════════════════════════════════════════════
 function determineProvider(r) {
-  if (r.dhan?.status === 'OK' && r.angel?.status === 'OK') return 'DHAN (primary, Angel fallback ready)';
   if (r.dhan?.status === 'OK') return 'DHAN';
-  if (r.angel?.status === 'OK') return 'ANGEL ONE';
-  return 'NONE — BOTH FAILING';
+  return 'NONE — DHAN FAILING';
 }
 
 function printTable(allResults) {
@@ -696,7 +694,7 @@ function printTable(allResults) {
     const angelSummary = r.angel?.status === 'OK'
       ? `OK (${r.angel.candles || r.angel.strikes || 'data'})`
       : `${r.angel?.status}: ${(r.angel?.error || '').slice(0, 20)}`;
-    const fallback = (r.dhan?.status !== 'OK' && r.angel?.status === 'OK') ? 'YES' : 'NO';
+    const fallback = 'NO (disabled)';
 
     let row = '│ ';
     row += (r.asset || '').padEnd(widths[0]) + '│ ';

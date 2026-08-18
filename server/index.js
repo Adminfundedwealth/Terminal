@@ -411,7 +411,8 @@ app.use((err, req, res, next) => {
 
 // â”€â”€â”€ WebSocket Server â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const wss = new WebSocketServer({ server, path: '/ws' });
-setupWebSocket(wss, marketDataEngine, angelFeed);
+// Pass a getter so that websocket handler always gets the current dhanFeed reference
+setupWebSocket(wss, marketDataEngine, angelFeed, { get feed() { return dhanFeed; } });
 
 // â”€â”€â”€ Startup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function startup() {
@@ -748,6 +749,7 @@ process.on('SIGTERM', async () => {
   eventDispatcher.destroy();
   healthMonitor.stop();
   eventBridge.stop();
+  if (dhanFeed) dhanFeed.disconnect();
   angelFeed.disconnect();
   marketDataEngine.destroy();
   eventBus.destroy();
@@ -766,6 +768,7 @@ process.on('SIGINT', async () => {
   eventDispatcher.destroy();
   healthMonitor.stop();
   eventBridge.stop();
+  if (dhanFeed) dhanFeed.disconnect();
   angelFeed.disconnect();
   marketDataEngine.destroy();
   eventBus.destroy();

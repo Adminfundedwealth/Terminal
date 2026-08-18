@@ -17,9 +17,11 @@ import { AuditLogger } from '../services/auditLogger.js';
 const WS_MAX_MESSAGES_PER_SECOND = 30;
 const WS_MAX_SUBSCRIPTIONS = 200;
 
-export function setupWebSocket(wss, marketDataEngine, angelFeed = null, dhanFeed = null) {
+export function setupWebSocket(wss, marketDataEngine, angelFeed = null, dhanFeedRef = null) {
+  // dhanFeedRef may be a getter object { feed } or direct reference
+  const getDhanFeed = () => dhanFeedRef?.feed || dhanFeedRef;
   console.log('[WebSocket] Server initialized (production mode — auth enforced)');
-  console.log('[WebSocket] On-demand subscriptions via:', dhanFeed ? 'Dhan WebSocket' : (angelFeed ? 'Angel SmartStream' : 'NONE'));
+  console.log('[WebSocket] On-demand subscriptions via: Dhan WebSocket (primary)');
 
   wss.on('connection', (ws, request) => {
     // PRODUCTION: Always validate auth. No bypasses.
@@ -61,7 +63,7 @@ export function setupWebSocket(wss, marketDataEngine, angelFeed = null, dhanFeed
 
       try {
         const data = JSON.parse(message.toString());
-        handleMessage(ws, data, subscriptions, depthSubscriptions, marketDataEngine, angelFeed, dhanFeed);
+        handleMessage(ws, data, subscriptions, depthSubscriptions, marketDataEngine, angelFeed, getDhanFeed());
       } catch (err) {
         // Don't log parse errors to console in production (DoS via log spam)
       }
@@ -96,7 +98,7 @@ export function setupWebSocket(wss, marketDataEngine, angelFeed = null, dhanFeed
   }, 30000);
 }
 
-function handleMessage(ws, data, subscriptions, depthSubscriptions, marketDataEngine, angelFeed = null) {
+function handleMessage(ws, data, subscriptions, depthSubscriptions, marketDataEngine, angelFeed = null, dhanFeed = null) {
   switch (data.type) {
     case 'subscribe': {
       const tokens = data.tokens || [];
@@ -128,11 +130,37 @@ function handleMessage(ws, data, subscriptions, depthSubscriptions, marketDataEn
         }
       });
 
-      // Subscribe new tokens to Angel One feed in Quote mode (mode 2) so we get OHLC + changePercent.
-      // SAFETY: Never forward placeholder tokens (non-numeric) to the feed — they will never
-      // match a real SmartStream tick and waste subscription slots.
-      // Exchange resolution order: client hint → cached quote exchange → instrument master → reject
-      if (angelFeed && newTokens.length > 0) {
+      // Subscribe new tokens via Dhan WebSocket (PRIMARY) or Angel One (fallback for orders only)
+      // Dhan uses securityId + segment format
+      if (dhanFeed && dhanFeed.isConnected && newTokens.length > 0) {
+        try {
+          const feedInstruments = [];
+          for (const token of newTokens) {
+            if (!/^\d+$/.test(token)) {
+              console.warn(`[WebSocket] Skipping non-numeric placeholder token: ${token}`);
+              continue;
+            }
+            // Resolve segment from exchange hint or quote cache
+            let exchange = exchangeHints[token];
+            if (!exchange) {
+              exchange = marketDataEngine.getQuote(token)?.exchange;
+            }
+            if (!exchange) exchange = 'NSE';
+
+            // Map exchange to Dhan segment
+            const segmentMap = { 'NSE': 'NSE_EQ', 'NFO': 'NSE_FNO', 'MCX': 'MCX_COMM', 'CDS': 'CUR', 'BSE': 'BSE_EQ', 'IDX': 'IDX_I' };
+            const segment = segmentMap[exchange] || 'NSE_EQ';
+            feedInstruments.push({ securityId: token, segment });
+          }
+
+          if (feedInstruments.length > 0) {
+            dhanFeed.subscribe(feedInstruments, 17); // mode 17 = Quote
+            console.log(`[WebSocket] Forwarded ${feedInstruments.length} new token(s) to DhanFeed (mode 17):`, feedInstruments.map(t => `${t.securityId}/${t.segment}`).join(', '));
+          }
+        } catch (e) {
+          console.warn('[WebSocket] DhanFeed subscribe failed:', e.message);
+        }
+      } else if (angelFeed && newTokens.length > 0) {
         try {
           const feedTokens = [];
           for (const token of newTokens) {
@@ -204,10 +232,22 @@ function handleMessage(ws, data, subscriptions, depthSubscriptions, marketDataEn
         newDepthTokens.push(token);
       });
 
-      // Upgrade to mode 3 (SnapQuote) for depth — skip indices and placeholder tokens.
-      // Indices (token starts with '999') have no order book.
-      // Placeholder non-numeric tokens have no live feed.
-      if (angelFeed && newDepthTokens.length > 0) {
+      // Upgrade to mode 21 (Depth) on Dhan — skip indices and placeholder tokens.
+      if (dhanFeed && dhanFeed.isConnected && newDepthTokens.length > 0) {
+        const depthEligible = newDepthTokens
+          .filter(t => !t.startsWith('999') && /^\d+$/.test(t))
+          .map(t => {
+            const quote = marketDataEngine.getQuote(t);
+            const exchange = quote?.exchange || 'NSE';
+            const segmentMap = { 'NSE': 'NSE_EQ', 'NFO': 'NSE_FNO', 'MCX': 'MCX_COMM', 'CDS': 'CUR', 'BSE': 'BSE_EQ' };
+            return { securityId: t, segment: segmentMap[exchange] || 'NSE_EQ' };
+          });
+        if (depthEligible.length > 0) {
+          try { dhanFeed.subscribe(depthEligible, 21); } catch (e) {
+            console.warn('[WebSocket] DhanFeed depth subscribe failed:', e.message);
+          }
+        }
+      } else if (angelFeed && newDepthTokens.length > 0) {
         const depthEligible = newDepthTokens
           .filter(t => !t.startsWith('999') && /^\d+$/.test(t))
           .map(t => {
