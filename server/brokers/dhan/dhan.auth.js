@@ -35,19 +35,34 @@ const TOKEN_VALIDITY_MS = 24 * 60 * 60 * 1000;
 export class DhanAuthService extends EventEmitter {
   constructor() {
     super();
-    this.clientId = process.env.DHAN_CLIENT_ID || null;
-    this.accessToken = process.env.DHAN_ACCESS_TOKEN || null;
-    this.apiKey = process.env.DHAN_API_KEY || null;
-    this.apiSecret = process.env.DHAN_API_SECRET || null;
+    // Trim whitespace/newlines that may sneak in from env vars
+    this.clientId = (process.env.DHAN_CLIENT_ID || '').trim() || null;
+    this.accessToken = (process.env.DHAN_ACCESS_TOKEN || '').trim() || null;
+    this.apiKey = (process.env.DHAN_API_KEY || '').trim() || null;
+    this.apiSecret = (process.env.DHAN_API_SECRET || '').trim() || null;
 
-    // Token metadata
-    this._tokenIssuedAt = Date.now(); // Assume current token was just issued
-    this._tokenExpiresAt = Date.now() + TOKEN_VALIDITY_MS;
+    // Token metadata — parse exp from JWT if possible
+    this._tokenIssuedAt = Date.now();
+    this._tokenExpiresAt = this._parseJwtExpiry() || (Date.now() + TOKEN_VALIDITY_MS);
     this._refreshTimer = null;
     this._cronTimer = null;
     this._isRefreshing = false;
     this._consecutiveFailures = 0;
     this._maxConsecutiveFailures = 3;
+  }
+
+  /**
+   * Parse expiry from JWT token (Dhan JWTs have standard exp claim).
+   */
+  _parseJwtExpiry() {
+    try {
+      if (!this.accessToken) return null;
+      const parts = this.accessToken.split('.');
+      if (parts.length !== 3) return null;
+      const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
+      if (payload.exp) return payload.exp * 1000; // Convert to ms
+      return null;
+    } catch { return null; }
   }
 
   /**
@@ -104,21 +119,22 @@ export class DhanAuthService extends EventEmitter {
       return false;
     }
 
-    // Validate current token by calling profile
-    const valid = await this._validateToken();
-    if (!valid) {
-      console.error('[DhanAuth] Token is invalid or expired. Generate a fresh token from https://dhanhq.co/app/developer');
+    // Check JWT expiry claim first — if expired, no point trying
+    if (this._tokenExpiresAt && Date.now() >= this._tokenExpiresAt) {
+      console.error('[DhanAuth] Token JWT has expired (exp claim). Generate a new one from dhanhq.co/app/developer');
       this.emit('token:invalid');
       return false;
     }
 
-    console.log(`[DhanAuth] Token valid. Client: ${this.clientId}`);
+    // Trust the JWT exp claim — skip profile validation.
+    // The first actual API call will reveal if the token is server-side revoked.
+    // This prevents false negatives from profile endpoint quirks.
+    console.log(`[DhanAuth] Token accepted (JWT exp: ${new Date(this._tokenExpiresAt).toISOString()}). Client: ${this.clientId}`);
     this.emit('token:valid', { clientId: this.clientId });
 
-    // Schedule daily cron at 8:00 AM IST (2:30 AM UTC)
+    // Schedule daily cron at 8:00 AM IST
     this._scheduleDailyCron();
-
-    // Also schedule timer-based renewal as backup (1h before expiry)
+    // Timer-based renewal backup
     this._scheduleTimerRenewal();
 
     return true;
