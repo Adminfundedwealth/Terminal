@@ -535,7 +535,10 @@ async function startup() {
   // connectDhanFeed disabled — REST poller handles live data
     // connectDhanFeed().catch(e => console.error("[connectDhanFeed] Fatal error:", e.message));
 
-  // 9b. Connect Angel Feed (SECONDARY - broker adapter only, NOT live ticks)
+  // 9a. Register Dhan adapter for order execution (PRIMARY broker)
+  connectDhanForBroker().catch(e => console.error("[connectDhanForBroker] Error:", e.message));
+
+  // 9b. Connect Angel Feed (SECONDARY - broker adapter only, fallback for order execution)
   connectAngelFeedForBroker().catch(e => console.error("[connectAngelFeedForBroker] Error:", e.message));
 }
 
@@ -691,13 +694,34 @@ async function connectDhanFeed() {
   }
 }
 
+/**
+ * Register Dhan adapter in BrokerFactory for order execution (PRIMARY).
+ * Reuses the DataProviderSwitch's already-connected DhanAdapter instance.
+ */
+async function connectDhanForBroker() {
+  const dhanAdapter = dataProviderSwitch.getDhanAdapter();
+  if (!dhanAdapter || !dhanAdapter.isConnected) {
+    console.warn('[DhanBroker] Dhan adapter not ready — order execution via Dhan unavailable');
+    return;
+  }
+
+  try {
+    const clientId = dhanAdapter.auth.clientId || process.env.DHAN_CLIENT_ID || 'default';
+    BrokerFactory.registerInstance('dhan', dhanAdapter, clientId);
+    console.log(`[DhanBroker] ✓ Dhan adapter registered for order execution (clientId: ${clientId})`);
+    console.log('[DhanBroker]   Dhan is now the PRIMARY broker for all order routing');
+  } catch (err) {
+    console.warn('[DhanBroker] Registration failed:', err.message);
+  }
+}
+
 async function connectAngelFeedForBroker() {
   try {
     angelFeed.setEventBus(eventBus);
     await angelFeed.connect();
-    // NOTE: Angel feed is SECONDARY — only used for broker adapter registration (order execution).
-    // Dhan WebSocket is the PRIMARY live tick source.
-    console.log('[AngelFeed] Connected (broker adapter only — NOT used for live ticks)');
+    // NOTE: Angel feed is SECONDARY — fallback broker for order execution only.
+    // Dhan is now the PRIMARY broker for both data AND execution.
+    console.log('[AngelFeed] Connected (SECONDARY broker — fallback for order execution only)');
 
     // Wire token propagation for Angel-based services (still needed for order execution)
     const propagateToken = (session) => {

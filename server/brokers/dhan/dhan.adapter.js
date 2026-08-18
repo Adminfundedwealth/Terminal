@@ -312,15 +312,17 @@ export class DhanAdapter {
 
     const payload = {
       dhanClientId: this.auth.clientId,
-      transactionType: order.side || order.transactionType,
+      correlationId: `ORD_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+      transactionType: (order.side || order.transactionType || 'BUY').toUpperCase(),
       exchangeSegment: this._mapExchange(order.exchange || order.segment),
       productType: this._mapProduct(order.productType),
       orderType: this._mapOrderType(order.orderType),
-      validity: 'DAY',
+      validity: order.validity || 'DAY',
       securityId: String(order.token || order.securityId),
-      quantity: order.qty || order.quantity,
-      price: order.price || 0,
-      triggerPrice: order.triggerPrice || 0,
+      quantity: Number(order.qty || order.quantity),
+      price: (order.orderType === 'LIMIT' || order.orderType === 'SL') ? Number(order.price || 0) : 0,
+      triggerPrice: (order.orderType === 'SL' || order.orderType === 'SL-M') ? Number(order.triggerPrice || 0) : 0,
+      afterMarketOrder: !!order.isAmo,
     };
 
     try {
@@ -330,14 +332,17 @@ export class DhanAdapter {
         headers: this.auth.getHeaders(),
       });
 
+      const data = resp.data?.data || resp.data || {};
       return {
-        orderId: resp.data?.data?.orderId || resp.data?.orderId || '',
-        brokerOrderId: resp.data?.data?.orderId || '',
-        status: 'PENDING',
-        message: resp.data?.message || 'Order placed',
+        orderId: data.orderId || '',
+        brokerOrderId: data.orderId || '',
+        status: data.orderStatus || 'PENDING',
+        message: resp.data?.message || 'Order placed via Dhan',
+        raw: resp.data,
       };
     } catch (err) {
-      throw new Error(`[Dhan] Order failed: ${err.response?.data?.message || err.message}`);
+      const errMsg = err.response?.data?.message || err.response?.data?.remarks || err.message;
+      throw new Error(`[Dhan] Order failed: ${errMsg}`);
     }
   }
 
@@ -353,7 +358,7 @@ export class DhanAdapter {
       quantity: params.qty || params.quantity,
       price: params.price,
       triggerPrice: params.triggerPrice,
-      validity: 'DAY',
+      validity: params.validity || 'DAY',
     };
 
     // Remove undefined fields
@@ -371,9 +376,11 @@ export class DhanAdapter {
         brokerOrderId: String(orderId),
         status: 'PENDING',
         message: resp.data?.message || 'Order modified',
+        raw: resp.data,
       };
     } catch (err) {
-      throw new Error(`[Dhan] Modify failed: ${err.response?.data?.message || err.message}`);
+      const errMsg = err.response?.data?.message || err.response?.data?.remarks || err.message;
+      throw new Error(`[Dhan] Modify failed: ${errMsg}`);
     }
   }
 
@@ -391,11 +398,14 @@ export class DhanAdapter {
 
       return {
         orderId: String(orderId),
-        status: 'cancelled',
+        brokerOrderId: String(orderId),
+        status: 'CANCELLED',
         message: resp.data?.message || 'Order cancelled',
+        raw: resp.data,
       };
     } catch (err) {
-      throw new Error(`[Dhan] Cancel failed: ${err.response?.data?.message || err.message}`);
+      const errMsg = err.response?.data?.message || err.response?.data?.remarks || err.message;
+      throw new Error(`[Dhan] Cancel failed: ${errMsg}`);
     }
   }
 
@@ -453,6 +463,28 @@ export class DhanAdapter {
       placedAt: o.createTime || o.orderTimestamp || '',
       updatedAt: o.updateTime || '',
     }));
+  }
+
+  async getOrderStatus(orderId) {
+    if (!this.auth.isTokenValid) throw new Error('[Dhan] Token invalid');
+
+    const resp = await axios.get(`${DHAN_API_BASE}/orders/${orderId}`, {
+      httpsAgent: IPV4_AGENT,
+      timeout: 8000,
+      headers: this.auth.getHeaders(),
+    });
+
+    const o = resp.data?.data || resp.data || {};
+    return {
+      orderId: String(o.orderId || orderId),
+      brokerOrderId: String(o.orderId || orderId),
+      status: this._mapStatus(o.orderStatus),
+      filledQty: o.filledQty || o.tradedQty || 0,
+      avgPrice: o.tradedPrice || o.price || 0,
+      symbol: o.tradingSymbol || o.securityId || '',
+      message: o.rejectionReason || o.remarks || '',
+      raw: o,
+    };
   }
 
   async getTrades() {

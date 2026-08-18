@@ -111,7 +111,7 @@ CREATE TABLE IF NOT EXISTS t_accounts (
     user_id UUID NOT NULL REFERENCES t_users(id) ON DELETE CASCADE,
     account_code TEXT UNIQUE NOT NULL,
     challenge_id UUID REFERENCES t_challenges(id),
-    broker_provider TEXT NOT NULL DEFAULT 'angelone',
+    broker_provider TEXT NOT NULL DEFAULT 'dhan',
     balance NUMERIC(15,2) NOT NULL DEFAULT 10000000,
     peak_balance NUMERIC(15,2) DEFAULT 10000000,
     status TEXT DEFAULT 'active',

@@ -255,7 +255,7 @@ export class OrderExecutionService {
       try { account = await this._getAccount(accountId); } catch (_) {}
     }
     if (!account) {
-      account = { id: accountId, broker_provider: 'angelone', balance: 0, status: 'active' };
+      account = { id: accountId, broker_provider: 'dhan', balance: 0, status: 'active' };
     }
 
     try {
@@ -316,7 +316,7 @@ export class OrderExecutionService {
       }
 
       // ── Step 2: Route to Broker ──────────────────────────────
-      const brokerProvider = account.broker_provider || account.brokerProvider || 'angelone';
+      const brokerProvider = account.broker_provider || account.brokerProvider || 'dhan';
       let brokerResponse;
 
       // Check execution mode — paper mode simulates fill without real broker call
@@ -1002,13 +1002,13 @@ export class OrderExecutionService {
     if (accountId === 'dev-account') {
       return {
         id: 'dev-account',
-        broker_provider: 'angelone',
+        broker_provider: 'dhan',
         balance: 10000000,
         leverage_max: 50,
         status: 'active',
       };
     }
-    if (!supabase) return { id: accountId, broker_provider: 'angelone', balance: 1000000, leverage_max: 10, status: 'active' };
+    if (!supabase) return { id: accountId, broker_provider: 'dhan', balance: 1000000, leverage_max: 10, status: 'active' };
     const { data, error } = await supabase
       .from('trading_accounts')
       .select('*')
@@ -1016,7 +1016,7 @@ export class OrderExecutionService {
       .single();
     if (error || !data) {
       // Fallback: don't return 0 balance which blocks ALL orders
-      return { id: accountId, broker_provider: 'angelone', balance: 1000000, leverage_max: 10, status: 'active' };
+      return { id: accountId, broker_provider: 'dhan', balance: 1000000, leverage_max: 10, status: 'active' };
     }
     // Ensure leverage_max has a sane default
     if (!data.leverage_max || data.leverage_max <= 0) {

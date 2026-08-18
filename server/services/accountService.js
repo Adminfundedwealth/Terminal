@@ -147,11 +147,11 @@ export class AccountService {
     // Dev bypass — fetch real data from Supabase for dev user
     if (accountId === 'dev-account') {
       if (!supabase) {
-        return { id: 'dev-account', accountCode: 'FW-DEV', clientId: 'FW-DEV', name: 'Dev Trader', balance: 1000000, peakBalance: 1000000, availableMargin: 1000000, usedMargin: 0, totalPnl: 0, status: 'active', brokerProvider: 'angelone' };
+        return { id: 'dev-account', accountCode: 'FW-DEV', clientId: 'FW-DEV', name: 'Dev Trader', balance: 1000000, peakBalance: 1000000, availableMargin: 1000000, usedMargin: 0, totalPnl: 0, status: 'active', brokerProvider: 'dhan' };
       }
       const { data: trader } = await supabase.from('terminal_traders').select('id').eq('external_id', 'dev-user').single();
       if (!trader) {
-        return { id: 'dev-account', accountCode: 'FW-DEV', clientId: 'FW-DEV', name: 'Dev Trader', balance: 1000000, peakBalance: 1000000, availableMargin: 1000000, usedMargin: 0, totalPnl: 0, status: 'active', brokerProvider: 'angelone' };
+        return { id: 'dev-account', accountCode: 'FW-DEV', clientId: 'FW-DEV', name: 'Dev Trader', balance: 1000000, peakBalance: 1000000, availableMargin: 1000000, usedMargin: 0, totalPnl: 0, status: 'active', brokerProvider: 'dhan' };
       }
       const { data: ta } = await supabase
         .from('trading_accounts')
@@ -162,7 +162,7 @@ export class AccountService {
         .limit(1)
         .single();
       if (!ta) {
-        return { id: 'dev-account', accountCode: 'FW-DEV', clientId: 'FW-DEV', name: 'Dev Trader', balance: 1000000, peakBalance: 1000000, availableMargin: 1000000, usedMargin: 0, totalPnl: 0, status: 'active', brokerProvider: 'angelone' };
+        return { id: 'dev-account', accountCode: 'FW-DEV', clientId: 'FW-DEV', name: 'Dev Trader', balance: 1000000, peakBalance: 1000000, availableMargin: 1000000, usedMargin: 0, totalPnl: 0, status: 'active', brokerProvider: 'dhan' };
       }
       const ch = ta.challenge_accounts;
       

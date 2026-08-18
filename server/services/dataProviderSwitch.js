@@ -1,14 +1,15 @@
 /**
- * DATA PROVIDER — 100% DHAN (No Angel Fallback for Data)
+ * DATA PROVIDER — 100% DHAN (Unified Data + Execution)
  * 
  * Dhan is the SINGLE source for:
  *   - Historical Charts (intraday + daily)
  *   - Option Chain (expiries + strikes + Greeks)
  *   - Live LTP (via poller in MarketDataEngine)
+ *   - Order Execution (place, modify, cancel, positions)
  * 
- * Angel One is used ONLY for:
- *   - WebSocket real-time feed (tick-by-tick streaming)
- *   - Order execution (broker adapter)
+ * Angel One is available ONLY as:
+ *   - Fallback broker adapter (if Dhan execution fails)
+ *   - Fallback data source (if Dhan returns empty)
  * 
  * If Dhan data fails, return empty — do NOT mix Angel data into charts.
  */

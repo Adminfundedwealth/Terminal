@@ -166,7 +166,7 @@ export class RiskEngine {
 
     if (!account) {
       // Fallback: allow trading with default constraints rather than blocking
-      account = { id: accountId, balance: 1000000, status: 'active', leverage_max: 10, broker_provider: 'angelone' };
+      account = { id: accountId, balance: 1000000, status: 'active', leverage_max: 10, broker_provider: 'dhan' };
     }
     if (account.status !== 'active') {
       return { allowed: false, reason: `Account is ${account.status}. Trading disabled.` };
