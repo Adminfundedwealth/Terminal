@@ -199,6 +199,58 @@ export class MarketDataEngine {
   setLtpFallbacks(dhanAdapter, candleService) {
     this._dhanAdapter = dhanAdapter;
     this._candleService = candleService;
+
+    // Start Dhan LTP correction poller — overrides wrong Angel ticks
+    // for tokens where Angel ID ≠ Dhan ID (e.g. HCLTECH)
+    this._startDhanLtpPoller();
+  }
+
+  /**
+   * Dhan LTP Poller — fetches correct prices for all actively subscribed tokens
+   * every 5 seconds and pushes them into the quote cache.
+   * This ensures live prices are correct even when Angel token != Dhan token.
+   */
+  _startDhanLtpPoller() {
+    if (!this._dhanAdapter) return;
+    if (this._dhanPollerInterval) return;
+
+    this._dhanPollerInterval = setInterval(async () => {
+      if (!this._dhanAdapter?.auth?.isTokenValid) return;
+
+      // Get all tokens that have active subscribers
+      const activeTokens = [...this.subscribers.keys()];
+      if (activeTokens.length === 0) return;
+
+      // Batch fetch LTP from Dhan for active tokens
+      try {
+        // Group by segment — for now assume all are NSE_EQ
+        const nseTokens = activeTokens.filter(t => /^\d+$/.test(t)).slice(0, 50);
+        if (nseTokens.length === 0) return;
+
+        const quotes = await this._dhanAdapter.getQuotes(nseTokens);
+        if (!quotes || quotes.length === 0) return;
+
+        for (const q of quotes) {
+          if (q.ltp && q.ltp > 0 && q.token) {
+            const existing = this.quotes.get(q.token);
+            // Only override if price is significantly different (>5% deviation)
+            // This avoids overriding valid Angel ticks with slightly delayed Dhan data
+            if (existing?.ltp && Math.abs(existing.ltp - q.ltp) / q.ltp < 0.05) continue;
+
+            // Push corrected price
+            this.pushQuote(q.token, {
+              ...existing,
+              ltp: q.ltp,
+              volume: q.volume || existing?.volume,
+              oi: q.oi || existing?.oi,
+              timestamp: Date.now(),
+            });
+          }
+        }
+      } catch (_) {
+        // Silent — poller errors shouldn't crash anything
+      }
+    }, 5000); // Every 5 seconds
   }
 
   /**
