@@ -811,8 +811,23 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
           const dhan = dataProviderSwitch.getDhanAdapter();
           if (dhan && dhan.isConnected) {
             const result = await dhan.getQuote(mapping.securityId, mapping.segment);
-            const ltp = result?.ltp || result?.last_price;
-            if (ltp && ltp > 0) {
+            // Dhan marketfeed/quote returns nested data by segment
+            let ltp = null;
+            if (result) {
+              // Could be { ltp } directly or nested { [segment]: { [secId]: { ltp } } }
+              if (result.ltp) ltp = result.ltp;
+              else if (result.last_price) ltp = result.last_price;
+              else if (typeof result === 'object') {
+                // Try extracting from nested response
+                const segData = result[mapping.segment] || Object.values(result)[0];
+                if (segData) {
+                  const entry = segData[mapping.securityId] || Object.values(segData)[0];
+                  if (entry?.ltp) ltp = entry.ltp;
+                  else if (entry?.last_price) ltp = entry.last_price;
+                }
+              }
+            }
+            if (ltp && Number.isFinite(ltp) && ltp > 0) {
               return res.json({ token, ltp, exchange: mapping.segment, timestamp: Date.now(), symbol: token });
             }
           }
