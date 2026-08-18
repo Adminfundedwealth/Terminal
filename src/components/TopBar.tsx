@@ -50,23 +50,39 @@ function applyLightModeForce(enable: boolean) {
       html[data-theme="light"] [style*="background:#1"] {
         background: var(--fw-surface-2) !important;
       }
-      /* Protect BUY/SELL buttons and semantic colors */
-      html[data-theme="light"] .bg-fw-green,
-      html[data-theme="light"] .bg-fw-red,
-      html[data-theme="light"] .bg-fw-accent,
-      html[data-theme="light"] [class*="bg-green-"],
-      html[data-theme="light"] [class*="bg-red-"],
-      html[data-theme="light"] [class*="bg-emerald-"],
-      html[data-theme="light"] [class*="bg-blue-"],
-      html[data-theme="light"] [class*="bg-orange-"],
-      html[data-theme="light"] [class*="bg-yellow-"],
-      html[data-theme="light"] [class*="bg-purple-"],
-      html[data-theme="light"] [class*="bg-amber-"],
-      html[data-theme="light"] [class*="bg-black"],
-      html[data-theme="light"] .bg-white,
-      html[data-theme="light"] .bg-transparent,
-      html[data-theme="light"] [class*="bg-current"] {
-        background-color: revert !important;
+      /* Protect BUY/SELL buttons and semantic colors - do NOT override these */
+      html[data-theme="light"] .bg-fw-green { background-color: var(--fw-green) !important; }
+      html[data-theme="light"] .bg-fw-red { background-color: var(--fw-red) !important; }
+      html[data-theme="light"] .bg-fw-accent { background-color: var(--fw-accent) !important; }
+      html[data-theme="light"] .bg-white { background-color: #ffffff !important; }
+      html[data-theme="light"] .bg-transparent { background-color: transparent !important; }
+      html[data-theme="light"] .bg-current { background-color: currentColor !important; }
+      html[data-theme="light"] .bg-fw-hover { background-color: var(--fw-hover) !important; }
+      html[data-theme="light"] .bg-fw-border { background-color: var(--fw-border) !important; }
+      /* Keep text readable — force dark text on light backgrounds */
+      html[data-theme="light"] .text-fw-text { color: var(--fw-text) !important; }
+      html[data-theme="light"] .text-fw-text-secondary { color: var(--fw-text-secondary) !important; }
+      html[data-theme="light"] .text-fw-text-muted { color: var(--fw-text-muted) !important; }
+      html[data-theme="light"] .text-white { color: #111827 !important; }
+      /* But keep white text ON colored button backgrounds */
+      html[data-theme="light"] [class*="bg-fw-green"] .text-white,
+      html[data-theme="light"] [class*="bg-fw-red"] .text-white,
+      html[data-theme="light"] [class*="bg-fw-accent"] .text-white,
+      html[data-theme="light"] [class*="bg-green-"] .text-white,
+      html[data-theme="light"] [class*="bg-red-"] .text-white,
+      html[data-theme="light"] [class*="bg-emerald-"] .text-white,
+      html[data-theme="light"] [class*="bg-blue-"] .text-white,
+      html[data-theme="light"] button[style*="linear-gradient(180deg, #16"] .text-white,
+      html[data-theme="light"] button[style*="linear-gradient(180deg, #7f"] .text-white,
+      html[data-theme="light"] button[style*="background"] span {
+        color: white !important;
+      }
+      /* BUY/SELL buttons have inline style backgrounds - protect them */
+      html[data-theme="light"] button[style*="linear-gradient(180deg, #166534"] {
+        background: linear-gradient(180deg, #166534 0%, #16a34a 50%, #15803d 100%) !important;
+      }
+      html[data-theme="light"] button[style*="linear-gradient(180deg, #7f1d1d"] {
+        background: linear-gradient(180deg, #7f1d1d 0%, #dc2626 50%, #b91c1c 100%) !important;
       }
     `;
   } else {
