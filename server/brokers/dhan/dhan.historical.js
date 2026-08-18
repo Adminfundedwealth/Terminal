@@ -107,40 +107,84 @@ export class DhanHistoricalService {
     // Resolve Dhan-specific params from the Angel token + exchange
     const { securityId, segment, instrument } = this._resolveInstrument(token, exchange);
 
-    const fromDate = this._formatDate(new Date(fromTimestamp * 1000));
-    const toDate = this._formatDate(new Date(toTimestamp * 1000));
+    // For intraday: Dhan allows max 5 trading days per request.
+    // Split if range > 5 days. For historical (daily): no limit needed.
+    if (tfConfig.endpoint === 'intraday') {
+      return this._fetchIntraday(securityId, segment, instrument, tfConfig.interval, fromTimestamp, toTimestamp);
+    } else {
+      return this._fetchHistorical(securityId, segment, instrument, timeframe, fromTimestamp, toTimestamp);
+    }
+  }
 
-    const payload = {
-      securityId,
-      exchangeSegment: segment,
-      instrument,
-      interval: tfConfig.interval,
-      fromDate,
-      toDate,
-    };
+  async _fetchIntraday(securityId, segment, instrument, interval, fromTs, toTs) {
+    const MAX_DAYS = 5;
+    const allCandles = [];
+    let currentFrom = fromTs;
 
-    const endpoint = tfConfig.endpoint === 'intraday'
-      ? `${DHAN_API_BASE}/charts/intraday`
-      : `${DHAN_API_BASE}/charts/historical`;
+    while (currentFrom < toTs) {
+      const chunkEnd = Math.min(currentFrom + MAX_DAYS * 24 * 60 * 60, toTs);
+      const fromDate = this._formatDate(new Date(currentFrom * 1000));
+      const toDate = this._formatDate(new Date(chunkEnd * 1000));
 
-    console.log(`[DhanHistorical] ${tfConfig.endpoint} ${securityId}/${segment} ${timeframe} ${fromDate}→${toDate}`);
+      const payload = { securityId, exchangeSegment: segment, instrument, interval, fromDate, toDate };
+      const endpoint = `${DHAN_API_BASE}/charts/intraday`;
+
+      console.log(`[DhanHistorical] intraday ${securityId}/${segment} ${interval} ${fromDate}→${toDate}`);
+
+      try {
+        const resp = await this._request(endpoint, payload);
+        const candles = this._parse(resp.data, interval);
+        allCandles.push(...candles);
+      } catch (err) {
+        if (err.response?.status === 401 || err.response?.status === 403) {
+          const refreshed = await this.auth.refreshToken();
+          if (refreshed) {
+            const resp = await this._request(endpoint, payload);
+            allCandles.push(...this._parse(resp.data, interval));
+          } else { throw err; }
+        } else {
+          console.error(`[DhanHistorical] Intraday chunk failed:`, err.response?.data || err.message);
+          throw err;
+        }
+      }
+
+      currentFrom = chunkEnd + 1;
+    }
+
+    // Deduplicate and sort
+    allCandles.sort((a, b) => a.time - b.time);
+    const deduped = [];
+    let prevTime = 0;
+    for (const c of allCandles) {
+      if (c.time !== prevTime) { deduped.push(c); prevTime = c.time; }
+    }
+    return deduped;
+  }
+
+  async _fetchHistorical(securityId, segment, instrument, timeframe, fromTs, toTs) {
+    const fromDate = this._formatDate(new Date(fromTs * 1000));
+    const toDate = this._formatDate(new Date(toTs * 1000));
+
+    const payload = { securityId, exchangeSegment: segment, instrument, interval: 'DAY', fromDate, toDate };
+    const endpoint = `${DHAN_API_BASE}/charts/historical`;
+
+    console.log(`[DhanHistorical] historical ${securityId}/${segment} DAY ${fromDate}→${toDate}`);
 
     try {
       const resp = await this._request(endpoint, payload);
       const candles = this._parse(resp.data, timeframe);
-      console.log(`[DhanHistorical] Got ${candles.length} candles`);
+      if (timeframe === 'W') return this._aggregateWeekly(candles);
       return candles;
     } catch (err) {
-      // Retry once on 401
       if (err.response?.status === 401 || err.response?.status === 403) {
         const refreshed = await this.auth.refreshToken();
         if (refreshed) {
           const resp = await this._request(endpoint, payload);
-          return this._parse(resp.data, timeframe);
+          const candles = this._parse(resp.data, timeframe);
+          if (timeframe === 'W') return this._aggregateWeekly(candles);
+          return candles;
         }
       }
-      const msg = err.response?.data || err.message;
-      console.error(`[DhanHistorical] Failed:`, JSON.stringify(msg).slice(0, 200));
       throw err;
     }
   }
