@@ -1,19 +1,70 @@
 /**
  * OI ANALYTICS SERVICE
- * 
+ *
  * Provides OI analysis: PCR, max pain, OI change distribution.
  * Aggregates option chain data for visualization.
+ *
+ * Accepts either:
+ *   - A DataProviderSwitch instance  (getOptionChain returns { data: [], provider })
+ *   - A raw OptionChainService       (getOptionChain returns [] directly)
+ *
+ * Pass dataProviderSwitch as the primary argument so Dhan-sourced chains
+ * (which include native OI change + Greeks) feed the analytics.
+ * Pass optionChainService as the fallback so Angel One chains still work
+ * when Dhan is unavailable.
  */
 
 export class OIAnalyticsService {
-  constructor(optionChainService) {
-    this.ocs = optionChainService;
+  /**
+   * @param {object} primarySource   - DataProviderSwitch or any service with getOptionChain()
+   * @param {object} [fallbackSource] - Angel One OptionChainService used if primary returns empty
+   */
+  constructor(primarySource, fallbackSource = null) {
+    this._primary = primarySource;
+    this._fallback = fallbackSource;
+  }
+
+  /**
+   * Resolve chain data from primary (DataProviderSwitch) or fallback (Angel OCS).
+   * DataProviderSwitch.getOptionChain() returns { data: OptionChainEntry[], provider }.
+   * Raw OptionChainService.getOptionChain() returns OptionChainEntry[] directly.
+   */
+  async _getChain(symbol, expiry) {
+    // Primary source
+    if (this._primary) {
+      try {
+        const result = await this._primary.getOptionChain(symbol, expiry);
+        // DataProviderSwitch shape: { data: [...], provider: '...' }
+        const chain = Array.isArray(result) ? result : result?.data;
+        if (Array.isArray(chain) && chain.length > 0) {
+          return chain;
+        }
+      } catch (err) {
+        console.warn(`[OIAnalytics] Primary source error: ${err.message}`);
+      }
+    }
+
+    // Fallback to raw Angel One optionChainService
+    if (this._fallback) {
+      try {
+        await this._fallback._ensureToken?.();
+        if (this._fallback.jwtToken) {
+          const chain = await this._fallback.getOptionChain(symbol, expiry);
+          if (Array.isArray(chain) && chain.length > 0) {
+            return chain;
+          }
+        }
+      } catch (err) {
+        console.warn(`[OIAnalytics] Fallback source error: ${err.message}`);
+      }
+    }
+
+    return [];
   }
 
   async getOIAnalytics(symbol = 'NIFTY', expiry = null) {
     try {
-      // Get option chain data
-      const chainData = await this.ocs.getOptionChain(symbol, expiry);
+      const chainData = await this._getChain(symbol, expiry);
       if (!chainData || !chainData.length) {
         return { strikes: [], summary: null };
       }
@@ -48,9 +99,7 @@ export class OIAnalyticsService {
         };
       });
 
-      // Calculate max pain
       const maxPainStrike = this._calculateMaxPain(chainData);
-
       const pcr = totalCallOi > 0 ? totalPutOi / totalCallOi : 0;
 
       return {
@@ -73,7 +122,6 @@ export class OIAnalyticsService {
   }
 
   _calculateMaxPain(chainData) {
-    // Max pain = strike where option buyers lose the most
     let minPain = Infinity;
     let maxPainStrike = 0;
 
@@ -82,11 +130,9 @@ export class OIAnalyticsService {
       const testStrike = entry.strike;
 
       for (const row of chainData) {
-        // Call pain: max(0, testStrike - row.strike) * row.callOi
         if (testStrike > row.strike) {
           pain += (testStrike - row.strike) * (row.callOi || 0);
         }
-        // Put pain: max(0, row.strike - testStrike) * row.putOi
         if (row.strike > testStrike) {
           pain += (row.strike - testStrike) * (row.putOi || 0);
         }

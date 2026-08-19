@@ -1,21 +1,22 @@
 /**
  * DHAN OPTION CHAIN SERVICE
- * 
+ *
  * Retrieves option chain data from Dhan API v2.
- * 
+ *
  * Endpoints:
  *   POST /v2/optionchain/expirylist  — Get available expiry dates
  *   POST /v2/optionchain             — Get full option chain with Greeks
- * 
+ *
  * Key findings from live API testing:
- *   - ExpiryList: needs UnderlyingScrip (int), UnderlyingSeg ('IDX_I')
+ *   - ExpiryList: needs UnderlyingScrip (int), UnderlyingSeg ('IDX_I' | 'NSE_EQ')
  *   - ExpiryList returns: { data: ["2026-08-18", "2026-08-25", ...], status: "success" }
- *   - Headers MUST include: access-token, client-id, dhan-client-id, dhanClientId
+ *   - Headers MUST include: access-token, client-id, dhanClientId
  *   - OptionChain endpoint returns 400 "Invalid Expiry Date" on YYYY-MM-DD format
  *     but ExpiryList returns YYYY-MM-DD — possible API bug or market hours restriction
- * 
+ *
  * Security ID mapping:
- *   NIFTY=13, BANKNIFTY=25, FINNIFTY=27, MIDCPNIFTY=442, SENSEX=51
+ *   Indices (IDX_I):  NIFTY=13, BANKNIFTY=25, FINNIFTY=27, MIDCPNIFTY=442, SENSEX=51
+ *   Stocks  (NSE_EQ): RELIANCE=2885, HDFCBANK=1333, ICICIBANK=4963, …
  */
 
 import axios from 'axios';
@@ -24,17 +25,59 @@ import https from 'https';
 const DHAN_API_BASE = 'https://api.dhan.co/v2';
 const IPV4_AGENT = new https.Agent({ family: 4 });
 
-// Dhan underlying security IDs for indices
-const UNDERLYING_IDS = {
-  'NIFTY': 13,
-  'NIFTY 50': 13,
-  'BANKNIFTY': 25,
-  'NIFTY BANK': 25,
-  'FINNIFTY': 27,
-  'NIFTY FIN SERVICE': 27,
-  'MIDCPNIFTY': 442,
-  'NIFTY MIDCAP SELECT': 442,
-  'SENSEX': 51,
+/**
+ * Canonical underlying map.
+ * Each entry: { scrip: <Dhan security ID>, seg: <UnderlyingSeg string> }
+ *
+ * Segment values:
+ *   'IDX_I'  — NSE/BSE index futures & options
+ *   'NSE_EQ' — NSE equity (stock) F&O
+ *
+ * NOTE: ADANIENT scrip is 25215 (NSE_EQ), NOT 25 (which is BANKNIFTY/IDX_I).
+ */
+export const DHAN_UNDERLYING_MAP = {
+  // ── Indices (IDX_I) ────────────────────────────────────────────────────────
+  'NIFTY':              { scrip: 13,    seg: 'IDX_I' },
+  'NIFTY 50':           { scrip: 13,    seg: 'IDX_I' },
+  'BANKNIFTY':          { scrip: 25,    seg: 'IDX_I' },
+  'NIFTY BANK':         { scrip: 25,    seg: 'IDX_I' },
+  'FINNIFTY':           { scrip: 27,    seg: 'IDX_I' },
+  'NIFTY FIN SERVICE':  { scrip: 27,    seg: 'IDX_I' },
+  'MIDCPNIFTY':         { scrip: 442,   seg: 'IDX_I' },
+  'NIFTY MIDCAP SELECT':{ scrip: 442,   seg: 'IDX_I' },
+  'SENSEX':             { scrip: 51,    seg: 'IDX_I' },
+
+  // ── F&O Stocks (NSE_EQ) ────────────────────────────────────────────────────
+  'RELIANCE':           { scrip: 2885,  seg: 'NSE_EQ' },
+  'HDFCBANK':           { scrip: 1333,  seg: 'NSE_EQ' },
+  'ICICIBANK':          { scrip: 4963,  seg: 'NSE_EQ' },
+  'SBIN':               { scrip: 3045,  seg: 'NSE_EQ' },
+  'TCS':                { scrip: 11536, seg: 'NSE_EQ' },
+  'INFY':               { scrip: 1594,  seg: 'NSE_EQ' },
+  'ITC':                { scrip: 1660,  seg: 'NSE_EQ' },
+  'LT':                 { scrip: 11483, seg: 'NSE_EQ' },
+  'AXISBANK':           { scrip: 5900,  seg: 'NSE_EQ' },
+  'HCLTECH':            { scrip: 7229,  seg: 'NSE_EQ' },
+  'BAJFINANCE':         { scrip: 317,   seg: 'NSE_EQ' },
+  'KOTAKBANK':          { scrip: 1922,  seg: 'NSE_EQ' },
+  'TATAMOTORS':         { scrip: 3456,  seg: 'NSE_EQ' },
+  'TATASTEEL':          { scrip: 3499,  seg: 'NSE_EQ' },
+  'MARUTI':             { scrip: 10999, seg: 'NSE_EQ' },
+  'TITAN':              { scrip: 3506,  seg: 'NSE_EQ' },
+  'ADANIENT':           { scrip: 25215, seg: 'NSE_EQ' }, // NOTE: 25 = BANKNIFTY (IDX_I)
+  'ADANIPORTS':         { scrip: 15083, seg: 'NSE_EQ' },
+  'BEL':                { scrip: 383,   seg: 'NSE_EQ' },
+  'HAL':                { scrip: 2303,  seg: 'NSE_EQ' },
+  'ZOMATO':             { scrip: 5097,  seg: 'NSE_EQ' },
+  'DLF':                { scrip: 14732, seg: 'NSE_EQ' },
+  'SUNPHARMA':          { scrip: 881,   seg: 'NSE_EQ' },
+  'POWERGRID':          { scrip: 14977, seg: 'NSE_EQ' },
+  'NTPC':               { scrip: 11630, seg: 'NSE_EQ' },
+  'COALINDIA':          { scrip: 20374, seg: 'NSE_EQ' },
+  'BHARTIARTL':         { scrip: 10604, seg: 'NSE_EQ' },
+  'TIINDIA':            { scrip: 1410,  seg: 'NSE_EQ' },
+  'VOLTAS':             { scrip: 3718,  seg: 'NSE_EQ' },
+  'WIPRO':              { scrip: 3787,  seg: 'NSE_EQ' },
 };
 
 export class DhanOptionChainService {
@@ -47,7 +90,7 @@ export class DhanOptionChainService {
 
   /**
    * Get available expiry dates for a symbol.
-   * This endpoint WORKS reliably.
+   * This endpoint WORKS reliably for both indices (IDX_I) and stocks (NSE_EQ).
    */
   async getExpiries(symbol) {
     if (!this.auth.isTokenValid) {
@@ -58,8 +101,8 @@ export class DhanOptionChainService {
     }
 
     const sym = symbol.toUpperCase();
-    const secId = UNDERLYING_IDS[sym];
-    if (!secId) {
+    const entry = DHAN_UNDERLYING_MAP[sym];
+    if (!entry) {
       console.warn(`[DhanOC] Unknown symbol: ${sym}`);
       return [];
     }
@@ -74,7 +117,7 @@ export class DhanOptionChainService {
 
     const resp = await axios.post(
       `${DHAN_API_BASE}/optionchain/expirylist`,
-      { UnderlyingScrip: secId, UnderlyingSeg: 'IDX_I' },
+      { UnderlyingScrip: entry.scrip, UnderlyingSeg: entry.seg },
       { httpsAgent: IPV4_AGENT, timeout: 8000, headers: ocHeaders }
     );
 
@@ -99,8 +142,8 @@ export class DhanOptionChainService {
     }
 
     const sym = symbol.toUpperCase();
-    const secId = UNDERLYING_IDS[sym];
-    if (!secId) {
+    const entry = DHAN_UNDERLYING_MAP[sym];
+    if (!entry) {
       console.warn(`[DhanOC] Unknown symbol for chain: ${sym}`);
       return [];
     }
@@ -113,7 +156,7 @@ export class DhanOptionChainService {
 
     if (this._loading.has(cacheKey)) return this._loading.get(cacheKey);
 
-    const promise = this._fetchChainWithFallback(secId, sym, expiry)
+    const promise = this._fetchChainWithFallback(entry, sym, expiry)
       .then(chain => {
         this._loading.delete(cacheKey);
         if (chain.length > 0) {
@@ -134,14 +177,14 @@ export class DhanOptionChainService {
    * Fetch chain with auto-fallback: if the requested expiry is rejected,
    * try the next available expiry from the expiry list.
    */
-  async _fetchChainWithFallback(secId, symbol, expiry) {
+  async _fetchChainWithFallback(entry, symbol, expiry) {
     try {
-      const chain = await this._fetchChain(secId, symbol, expiry);
+      const chain = await this._fetchChain(entry, symbol, expiry);
       if (chain.length > 0) return chain;
     } catch (err) {
       const errMsg = JSON.stringify(err.response?.data || '');
       const isInvalidExpiry = errMsg.includes('811') || errMsg.includes('Invalid Expiry');
-      
+
       if (isInvalidExpiry) {
         console.warn(`[DhanOC] Expiry "${expiry}" rejected for ${symbol} — auto-resolving next valid expiry`);
         try {
@@ -150,12 +193,12 @@ export class DhanOptionChainService {
             // Find the next expiry that is NOT today (today's expiry may be expired post-settlement)
             const today = new Date().toISOString().slice(0, 10);
             const validExpiry = expiries.find(e => e > today) || expiries[0];
-            
+
             if (validExpiry && validExpiry !== expiry) {
               console.log(`[DhanOC] Retrying with fallback expiry: ${validExpiry}`);
               // Wait for rate limit
               await new Promise(r => setTimeout(r, 3500));
-              return await this._fetchChain(secId, symbol, validExpiry);
+              return await this._fetchChain(entry, symbol, validExpiry);
             }
           }
         } catch (fallbackErr) {
@@ -167,17 +210,17 @@ export class DhanOptionChainService {
     return [];
   }
 
-  async _fetchChain(secId, symbol, expiry) {
+  async _fetchChain(entry, symbol, expiry) {
     // Dhan requires exact key "Expiry" (capital E, not Expirydate)
     const normalizedExpiry = this._normalizeExpiry(expiry);
 
     const payload = {
-      UnderlyingScrip: secId,
-      UnderlyingSeg: 'IDX_I',
+      UnderlyingScrip: entry.scrip,
+      UnderlyingSeg: entry.seg,
       Expiry: normalizedExpiry,
     };
 
-    console.log(`[DhanOC] Fetching chain: ${symbol} Expiry=${normalizedExpiry}`);
+    console.log(`[DhanOC] Fetching chain: ${symbol} seg=${entry.seg} Expiry=${normalizedExpiry}`);
 
     // Option Chain endpoint needs specific header set — different from other endpoints
     const ocHeaders = {

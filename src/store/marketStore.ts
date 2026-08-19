@@ -8,6 +8,10 @@ interface MarketState {
   marketStatus: 'PRE_OPEN' | 'OPEN' | 'CLOSED' | 'POST_CLOSE';
 
   updateQuote: (token: string, quote: Partial<MarketQuote>) => void;
+  /** Flush multiple quote updates in a single Zustand state transition.
+   *  This is the high-frequency tick path — one setState call per batch window
+   *  instead of one per tick, which dramatically reduces React re-render storms. */
+  batchUpdateQuotes: (batch: Record<string, Partial<MarketQuote>>) => void;
   updateDepth: (token: string, depth: MarketDepth) => void;
   subscribe: (token: string) => void;
   unsubscribe: (token: string) => void;
@@ -27,6 +31,15 @@ export const useMarketStore = create<MarketState>((set, get) => ({
         [token]: { ...state.quotes[token], ...quote } as MarketQuote,
       },
     })),
+
+  batchUpdateQuotes: (batch) =>
+    set((state) => {
+      const next = { ...state.quotes };
+      for (const token of Object.keys(batch)) {
+        next[token] = { ...next[token], ...batch[token] } as MarketQuote;
+      }
+      return { quotes: next };
+    }),
 
   updateDepth: (token, depth) =>
     set((state) => ({

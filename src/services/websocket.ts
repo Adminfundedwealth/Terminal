@@ -22,6 +22,16 @@ class WebSocketService {
   private _lastAccountFetch = 0;
   private _accountFetchThrottleMs = 5000;
 
+  // ── Tick batching ──────────────────────────────────────────────────────────
+  // Incoming quote ticks are buffered here and flushed to Zustand in a single
+  // batchUpdateQuotes() call every TICK_FLUSH_MS milliseconds.  This collapses
+  // N rapid ticks (e.g. 20+ tokens firing within one Dhan 3-second poll cycle)
+  // into one React state update, eliminating the re-render storm that causes
+  // the UI freeze/lag observed at live-market open.
+  private _tickBuffer: Record<string, Partial<MarketQuote>> = {};
+  private _tickFlushTimer: ReturnType<typeof setTimeout> | null = null;
+  private static readonly TICK_FLUSH_MS = 100; // flush window: 100 ms
+
   connect(url?: string) {
     if (this.isConnecting || (this.ws && this.ws.readyState === WebSocket.OPEN)) return;
 
@@ -106,7 +116,10 @@ class WebSocketService {
 
     switch (data.type) {
       case 'quote':
-        store.updateQuote(data.token, data.data as Partial<MarketQuote>);
+        // Buffer the tick; flush to Zustand in one batch after TICK_FLUSH_MS.
+        // This prevents one setState per tick, which causes full-tree re-renders
+        // when 20–100 tokens are subscribed and the Dhan poller fires every 3s.
+        this._enqueueQuoteTick(data.token, data.data as Partial<MarketQuote>);
         break;
       case 'depth':
         store.updateDepth(data.token, data.data as MarketDepth);
@@ -201,6 +214,35 @@ class WebSocketService {
     }
   }
 
+  // ── Tick batching helpers ─────────────────────────────────────────────────
+
+  /**
+   * Buffer one incoming quote tick.  A flush timer is armed on the first
+   * tick of each window; subsequent ticks in the same window just overwrite
+   * the previous buffered value for that token (last-write-wins — correct for
+   * live prices where only the latest value matters).
+   */
+  private _enqueueQuoteTick(token: string, quote: Partial<MarketQuote>) {
+    // Merge into buffer: if the same token ticks twice before the flush fires,
+    // spread the new fields on top so no field from an earlier tick is lost.
+    this._tickBuffer[token] = this._tickBuffer[token]
+      ? { ...this._tickBuffer[token], ...quote }
+      : quote;
+
+    if (!this._tickFlushTimer) {
+      this._tickFlushTimer = setTimeout(() => this._flushTickBuffer(), WebSocketService.TICK_FLUSH_MS);
+    }
+  }
+
+  /** Flush all buffered quote ticks into Zustand in a single state transition. */
+  private _flushTickBuffer() {
+    this._tickFlushTimer = null;
+    const batch = this._tickBuffer;
+    if (Object.keys(batch).length === 0) return;
+    this._tickBuffer = {};
+    useMarketStore.getState().batchUpdateQuotes(batch);
+  }
+
   private _throttledAccountFetch() {
     const now = Date.now();
     if (now - this._lastAccountFetch < this._accountFetchThrottleMs) return;
@@ -258,6 +300,11 @@ class WebSocketService {
   }
 
   disconnect() {
+    // Flush any pending tick batch before closing so nothing is silently dropped.
+    if (this._tickFlushTimer) {
+      clearTimeout(this._tickFlushTimer);
+      this._flushTickBuffer();
+    }
     if (this.ws) {
       this.ws.close();
       this.ws = null;

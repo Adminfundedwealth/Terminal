@@ -10,7 +10,7 @@
  *   Retries run inside the budget; Retry Now starts a fresh budget.
  * - Module-level caches reduce repeat latency without persisting stale data.
  */
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react';
 import { useAppStore } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
 import { getOptionChain, getExpiries } from '@/services/api';
@@ -42,15 +42,10 @@ const EXPIRY_CACHE_TTL = 5 * 60 * 1000;  // 5 minutes
 const CHAIN_CACHE_TTL  = 20 * 1000;      // 20 seconds (matches backend 30s TTL)
 
 // ─── Segments that are known NOT to have option chains via current backend ────
-// The backend optionChainService._searchScrip() uses exchange:'NFO' only.
 // MCX options and CDS options require different exchange parameters that are
-// not implemented in the current optionChainService.  Show instant unavailable.
+// not implemented in the current services.  Show instant unavailable.
+// NOTE: SENSEX is NOT blocked here — Dhan supports it (IDX_I, scrip 51).
 const UNSUPPORTED_SEGMENTS = new Set(['MCX', 'CDS']);
-
-// Angel One SmartConnect searchScrip does not return SENSEX option contracts
-// on any exchange (NFO/BFO/BSE/NSE confirmed by live API test).
-// Show a specific provider-limitation message instead of a generic error.
-const PROVIDER_UNAVAILABLE_UNDERLYINGS = new Set(['SENSEX']);
 
 // ─── Underlying derivation ────────────────────────────────────────────────────
 /**
@@ -141,6 +136,195 @@ function buildFallbackExpiries(underlying: string, lotSize: number): string[] {
   return fallback;
 }
 
+// ─── Memoized strike row ──────────────────────────────────────────────────────
+/**
+ * Extracted from the inline .map() so React.memo can bail out of re-renders.
+ *
+ * Re-renders only when one of its specific props changes:
+ *   - The chain entry itself changes (new chain load or expiry switch)
+ *   - Its ATM / ITM status changes (spot price crosses a strike band boundary)
+ *   - The selected contract changes to/from this strike
+ *   - The OI/Volume bar percentages change (maxOi / maxVol shift)
+ *   - viewMode changes (BOTH / CE / PE toggle)
+ *
+ * Spot price ticks that don't cross a strike boundary, and ticks for unrelated
+ * tokens, will NOT cause any StrikeRow to re-render.
+ */
+interface StrikeRowProps {
+  e: OptionChainEntry;
+  isAtm: boolean;
+  isItmCall: boolean;
+  isItmPut: boolean;
+  isSelCE: boolean;
+  isSelPE: boolean;
+  callOiPct: number;
+  putOiPct: number;
+  callVolPct: number;
+  putVolPct: number;
+  viewMode: 'both' | 'ce' | 'pe';
+  onStrikeClick: (strike: number, type: 'CE' | 'PE', ltp?: number, token?: string) => void;
+  setOrderForm: (form: { side: 'BUY' | 'SELL' }) => void;
+}
+
+const StrikeRow = memo(function StrikeRow({
+  e,
+  isAtm,
+  isItmCall,
+  isItmPut,
+  isSelCE,
+  isSelPE,
+  callOiPct,
+  putOiPct,
+  callVolPct,
+  putVolPct,
+  viewMode,
+  onStrikeClick,
+  setOrderForm,
+}: StrikeRowProps) {
+  const callOiChg = e.callOiChange || 0;
+  const putOiChg  = e.putOiChange  || 0;
+
+  return (
+    <tr
+      className={cn(
+        'border-b border-fw-border/20 transition-colors group',
+        isAtm
+          ? 'bg-fw-accent/[0.08] border-y-2 border-fw-accent/50'
+          : isItmCall && viewMode !== 'pe'
+            ? 'bg-emerald-500/[0.04] hover:bg-emerald-500/[0.07]'
+            : isItmPut && viewMode !== 'ce'
+              ? 'bg-red-500/[0.04] hover:bg-red-500/[0.07]'
+              : 'hover:bg-fw-hover/30',
+      )}
+    >
+      {/* ── CALL SIDE ── */}
+      {viewMode !== 'pe' && (
+        <>
+          {/* B/S */}
+          <td className="px-1 py-[6px] text-center">
+            <div className="flex gap-0.5 justify-center">
+              <button
+                onClick={() => { onStrikeClick(e.strike, 'CE', e.callLtp, e.callToken); setOrderForm({ side: 'BUY' }); }}
+                className="text-[9px] text-emerald-300 font-bold bg-emerald-700/30 hover:bg-emerald-600/50 px-1 py-0.5 rounded transition-colors leading-none"
+              >B</button>
+              <button
+                onClick={() => { onStrikeClick(e.strike, 'CE', e.callLtp, e.callToken); setOrderForm({ side: 'SELL' }); }}
+                className="text-[9px] text-red-300 font-bold bg-red-700/30 hover:bg-red-600/50 px-1 py-0.5 rounded transition-colors leading-none"
+              >S</button>
+            </div>
+          </td>
+          {/* OI with bar — green gradient */}
+          <td
+            className="px-2 py-[6px] text-right font-mono tabular-nums relative overflow-hidden"
+            style={{
+              background: callOiPct > 0
+                ? `linear-gradient(to right, transparent ${100 - callOiPct}%, rgba(0,220,150,0.22) ${100 - callOiPct}%)`
+                : undefined,
+            }}
+          >
+            <span className={cn('relative z-10 truncate block', isSelCE ? 'text-fw-accent' : 'text-fw-text')}>{formatNumber(e.callOi || 0)}</span>
+          </td>
+          {/* OI Change */}
+          <td className="px-2 py-[6px] text-right font-mono tabular-nums">
+            <span className={cn('font-semibold truncate block', callOiChg > 0 ? 'text-emerald-400' : callOiChg < 0 ? 'text-red-400' : 'text-fw-text-muted')}>
+              {callOiChg !== 0 ? (callOiChg > 0 ? '+' : '') + callOiChg.toFixed(2) + '%' : '—'}
+            </span>
+          </td>
+          {/* Volume — green bar */}
+          <td
+            className="px-2 py-[6px] text-right font-mono tabular-nums text-fw-text-secondary truncate"
+            style={{
+              background: callVolPct > 0
+                ? `linear-gradient(to right, transparent ${100 - callVolPct}%, rgba(0,220,150,0.13) ${100 - callVolPct}%)`
+                : undefined,
+            }}
+          >
+            {formatNumber(e.callVolume || 0)}
+          </td>
+          {/* CALL LTP */}
+          <td
+            className={cn(
+              'px-2 py-[6px] text-right font-mono tabular-nums font-bold cursor-pointer hover:underline truncate',
+              isSelCE ? 'text-fw-accent' : e.callLtp > 0 ? 'text-emerald-400' : 'text-fw-text-muted',
+            )}
+            onClick={() => onStrikeClick(e.strike, 'CE', e.callLtp, e.callToken)}
+          >
+            {e.callLtp > 0 ? formatPrice(e.callLtp) : '—'}
+          </td>
+        </>
+      )}
+
+      {/* ── STRIKE CENTER ── */}
+      <td className={cn(
+        'px-1 py-[6px] text-center font-mono font-bold tabular-nums border-x border-fw-border/40 bg-fw-surface-2 whitespace-nowrap overflow-hidden',
+        isAtm ? 'text-fw-accent text-[13px]' : 'text-fw-text text-[12px]',
+      )}>
+        {isAtm && (
+          <div className="text-[8px] font-extrabold tracking-widest text-fw-accent/80 uppercase leading-none mb-[2px]">ATM</div>
+        )}
+        {formatPrice(e.strike)}
+      </td>
+
+      {/* ── PUT SIDE ── */}
+      {viewMode !== 'ce' && (
+        <>
+          {/* PUT LTP */}
+          <td
+            className={cn(
+              'px-2 py-[6px] text-left font-mono tabular-nums font-bold cursor-pointer hover:underline truncate',
+              isSelPE ? 'text-fw-accent' : e.putLtp > 0 ? 'text-red-400' : 'text-fw-text-muted',
+            )}
+            onClick={() => onStrikeClick(e.strike, 'PE', e.putLtp, e.putToken)}
+          >
+            {e.putLtp > 0 ? formatPrice(e.putLtp) : '—'}
+          </td>
+          {/* Volume — red bar */}
+          <td
+            className="px-2 py-[6px] text-left font-mono tabular-nums text-fw-text-secondary truncate"
+            style={{
+              background: putVolPct > 0
+                ? `linear-gradient(to left, transparent ${100 - putVolPct}%, rgba(255,70,90,0.13) ${100 - putVolPct}%)`
+                : undefined,
+            }}
+          >
+            {formatNumber(e.putVolume || 0)}
+          </td>
+          {/* OI Change */}
+          <td className="px-2 py-[6px] text-left font-mono tabular-nums">
+            <span className={cn('font-semibold truncate block', putOiChg > 0 ? 'text-emerald-400' : putOiChg < 0 ? 'text-red-400' : 'text-fw-text-muted')}>
+              {putOiChg !== 0 ? (putOiChg > 0 ? '+' : '') + putOiChg.toFixed(2) + '%' : '—'}
+            </span>
+          </td>
+          {/* OI with bar — red gradient */}
+          <td
+            className="px-2 py-[6px] text-left font-mono tabular-nums relative overflow-hidden"
+            style={{
+              background: putOiPct > 0
+                ? `linear-gradient(to left, transparent ${100 - putOiPct}%, rgba(255,70,90,0.22) ${100 - putOiPct}%)`
+                : undefined,
+            }}
+          >
+            <span className={cn('relative z-10 truncate block', isSelPE ? 'text-fw-accent' : 'text-fw-text')}>{formatNumber(e.putOi || 0)}</span>
+          </td>
+          {/* B/S */}
+          <td className="px-1 py-[6px] text-center">
+            <div className="flex gap-0.5 justify-center">
+              <button
+                onClick={() => { onStrikeClick(e.strike, 'PE', e.putLtp, e.putToken); setOrderForm({ side: 'BUY' }); }}
+                className="text-[9px] text-emerald-300 font-bold bg-emerald-700/30 hover:bg-emerald-600/50 px-1 py-0.5 rounded transition-colors leading-none"
+              >B</button>
+              <button
+                onClick={() => { onStrikeClick(e.strike, 'PE', e.putLtp, e.putToken); setOrderForm({ side: 'SELL' }); }}
+                className="text-[9px] text-red-300 font-bold bg-red-700/30 hover:bg-red-600/50 px-1 py-0.5 rounded transition-colors leading-none"
+              >S</button>
+            </div>
+          </td>
+        </>
+      )}
+    </tr>
+  );
+});
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function OptionChainModal() {
@@ -160,12 +344,6 @@ export function OptionChainModal() {
   const segmentUnsupported = useMemo(() =>
     activeSymbol ? UNSUPPORTED_SEGMENTS.has(activeSymbol.segment) : false,
   [activeSymbol]);
-
-  // SENSEX: Angel One SmartConnect does not provide option contracts for SENSEX
-  // regardless of exchange parameter (confirmed live). Show specific message.
-  const providerUnavailable = useMemo(() =>
-    underlying ? PROVIDER_UNAVAILABLE_UNDERLYINGS.has(underlying) : false,
-  [underlying]);
 
   // ── UI state ──────────────────────────────────────────────────────────────
   const [expiries, setExpiries] = useState<string[]>([]);
@@ -386,14 +564,9 @@ export function OptionChainModal() {
       return;
     }
 
-    if (providerUnavailable) {
-      setStatus({ type: 'unsupported', instrument: underlying });
-      return;
-    }
-
     setStatus({ type: 'loading', label: underlying, attempt: 0 });
     startLoad(underlying, session);
-  }, [underlying, segmentUnsupported, providerUnavailable]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [underlying, segmentUnsupported]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── User actions ──────────────────────────────────────────────────────────
   const handleExpiryChange = useCallback((expiry: string) => {
@@ -604,13 +777,11 @@ export function OptionChainModal() {
             <span className="text-[28px]">🔒</span>
             <p className="text-[13px] text-fw-text-secondary font-semibold">Option Chain Not Available</p>
             <p className="text-[12px] text-fw-text-muted max-w-[240px]">
-              {PROVIDER_UNAVAILABLE_UNDERLYINGS.has(status.instrument)
-                ? `${status.instrument} option contracts are not available via this data provider.`
-                : activeSymbol?.segment === 'MCX'
-                  ? 'MCX commodity option chains are not currently supported.'
-                  : activeSymbol?.segment === 'CDS'
-                    ? 'Currency derivative option chains are not currently supported.'
-                    : `Option chains are not available for ${status.instrument}.`}
+              {activeSymbol?.segment === 'MCX'
+                ? 'MCX commodity option chains are not currently supported.'
+                : activeSymbol?.segment === 'CDS'
+                  ? 'Currency derivative option chains are not currently supported.'
+                  : `Option chains are not available for ${status.instrument}.`}
             </p>
           </div>
 
