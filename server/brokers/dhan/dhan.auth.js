@@ -112,8 +112,25 @@ export class DhanAuthService extends EventEmitter {
     if (liveClient && liveClient !== this.clientId) {
       this.clientId = liveClient;
     }
-    if (this._tokenRejected) return false;
+    if (this._tokenRejected) {
+      // If a successful validation happened recently (via dhan-auth-check), trust it.
+      // This allows the running instance to recover without a restart.
+      if (this._lastValidatedAt && (Date.now() - this._lastValidatedAt) < 10 * 60 * 1000) {
+        return !!(this.accessToken && this.clientId);
+      }
+      return false;
+    }
     return !!(this.accessToken && this.clientId);
+  }
+
+  /**
+   * Record a successful real Dhan API validation (called by dhan-auth-check endpoint).
+   * Clears any stale rejection state so the running instance recovers without restart.
+   */
+  recordValidationSuccess() {
+    this._tokenRejected = false;
+    this._lastValidatedAt = Date.now();
+    console.log('[DhanAuth] Token validation success recorded — clearing any stale rejection flag');
   }
 
   /**

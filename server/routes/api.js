@@ -1502,6 +1502,85 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
     }
   });
 
+  /**
+   * Safe Dhan authentication diagnostic endpoint.
+   * Makes a real authenticated request to Dhan /v2/profile.
+   * Reports HTTP status, auth result, and Dhan error codes — never reveals credentials.
+   */
+  router.get('/provider/dhan-auth-check', async (req, res) => {
+    const dhan = dataProviderSwitch?.getDhanAdapter();
+    if (!dhan) return res.json({ checked: false, reason: 'No DhanAdapter' });
+
+    const clientId = process.env.DHAN_CLIENT_ID || '';
+    const token = process.env.DHAN_ACCESS_TOKEN || '';
+    const credentialSummary = {
+      DHAN_CLIENT_ID: clientId ? 'SET' : 'MISSING',
+      DHAN_ACCESS_TOKEN: token ? 'SET' : 'MISSING',
+      tokenLength: token.length,
+      clientIdMasked: clientId ? `****${clientId.slice(-4)}` : 'MISSING',
+      isTokenValid_inMemory: dhan.auth?.isTokenValid || false,
+      tokenRejectedFlag: dhan.auth?._tokenRejected || false,
+    };
+
+    if (!token || !clientId) {
+      return res.json({ checked: false, reason: 'Missing credentials', credentials: credentialSummary });
+    }
+
+    // Make real /v2/profile request — proves credentials are accepted by Dhan
+    const https = await import('https');
+    const axios = (await import('axios')).default;
+    const IPV4_AGENT = new https.Agent({ family: 4 });
+
+    const start = Date.now();
+    try {
+      const resp = await axios.get('https://api.dhan.co/v2/profile', {
+        httpsAgent: IPV4_AGENT,
+        timeout: 8000,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'access-token': token.trim(),
+          'client-id': clientId.trim(),
+        },
+      });
+      const latencyMs = Date.now() - start;
+      // Dhan returns profile data — confirm it looks valid without exposing PII
+      const profileValid = resp.status === 200 &&
+        !!(resp.data?.dhanClientId || resp.data?.clientId || resp.data?.data);
+
+      // Clear any stale _tokenRejected flag since the real call just succeeded
+      if (profileValid && dhan.auth?._tokenRejected) {
+        dhan.auth.recordValidationSuccess();
+        console.log('[DhanAuthCheck] Cleared stale _tokenRejected flag — token confirmed valid by /v2/profile');
+      }
+
+      return res.json({
+        checked: true,
+        endpoint: '/v2/profile',
+        httpStatus: resp.status,
+        dhanAuth: profileValid ? 'PASS' : 'UNKNOWN',
+        profileValid,
+        latencyMs,
+        credentials: credentialSummary,
+      });
+    } catch (err) {
+      const latencyMs = Date.now() - start;
+      const httpStatus = err.response?.status || null;
+      const dhanErrorCode = err.response?.data?.errorCode || null;
+      const dhanErrorMessage = err.response?.data?.errorMessage || err.response?.data?.message || err.message;
+      return res.json({
+        checked: true,
+        endpoint: '/v2/profile',
+        httpStatus,
+        dhanAuth: httpStatus === 401 ? 'FAIL — 401 Unauthorized' : 'FAIL — network/other',
+        dhanErrorCode,
+        dhanErrorMessage,
+        latencyMs,
+        credentials: credentialSummary,
+      });
+    }
+  });
+
   // Direct Dhan test endpoint — bypasses all caching/fallback
   router.get('/provider/test-dhan', async (req, res) => {
     if (!dataProviderSwitch) return res.json({ error: 'not initialized' });

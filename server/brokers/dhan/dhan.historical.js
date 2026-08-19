@@ -168,27 +168,45 @@ export class DhanHistoricalService {
         console.log(`[DhanHist] Chunk ${this._fmt(cursor)}→${this._fmt(chunkEnd)}: ${parsed.length} candles`);
         allCandles.push(...parsed);
       } catch (err) {
-        // On auth error, try refresh once
-        if (err.response?.status === 401 || err.response?.status === 400) {
+        // On auth error, try refresh once.
+        // IMPORTANT: Only treat as an auth error when:
+        //   (a) HTTP 401 (explicit auth rejection), OR
+        //   (b) HTTP 400 AND the error message mentions Token/Authentication
+        // A plain HTTP 400 with DH-905 (bad parameters) is NOT an auth failure.
+        // Calling markTokenInvalid() on a 400 bad-params error was the bug that
+        // set dhanTokenValid=false even when the token was perfectly valid.
+        const isAuthError = err.response?.status === 401 ||
+          (err.response?.status === 400 && (
+            String(err.response?.data?.errorMessage || '').includes('Token') ||
+            String(err.response?.data?.errorMessage || '').includes('Authentication') ||
+            String(err.response?.data?.data || '').includes('Token') ||
+            String(err.response?.data?.data || '').includes('Authentication')
+          ));
+
+        if (isAuthError) {
           const errMsg = err.response?.data?.errorMessage || err.response?.data?.data || '';
-          if (String(errMsg).includes('Token') || String(errMsg).includes('Authentication') || err.response?.status === 401) {
-            console.warn(`[DhanHist] Auth error on chunk ${this._fmt(cursor)}→${this._fmt(chunkEnd)}, attempting token refresh`);
-            const refreshed = await this.auth.refreshToken();
-            if (refreshed) {
-              try {
-                const resp = await this._post(`${DHAN_API_BASE}/charts/intraday`, payload);
-                allCandles.push(...this._parse(resp.data));
-                cursor.setDate(cursor.getDate() + 5);
-                continue;
-              } catch (_) {}
-            }
-            // Refresh failed — mark token invalid and abort
-            this.auth.markTokenInvalid();
-            console.error('[DhanHist] Token refresh failed, aborting intraday fetch — Angel fallback will be used');
-            break;
-          } else {
-            console.warn(`[DhanHist] Chunk error (non-auth 400): ${JSON.stringify(err.response?.data).slice(0, 120)}`);
+          console.warn(`[DhanHist] Auth error on chunk ${this._fmt(cursor)}→${this._fmt(chunkEnd)}: ${errMsg}`);
+          const refreshed = await this.auth.refreshToken();
+          if (refreshed) {
+            try {
+              const resp = await this._post(`${DHAN_API_BASE}/charts/intraday`, payload);
+              allCandles.push(...this._parse(resp.data));
+              cursor.setDate(cursor.getDate() + 5);
+              continue;
+            } catch (_) {}
           }
+          // Only call markTokenInvalid when the original error was a confirmed 401
+          // (not a 400 bad-parameters). Prevents a bad chart request from poisoning
+          // the entire session's authentication state.
+          if (err.response?.status === 401) {
+            this.auth.markTokenInvalid();
+            console.error('[DhanHist] Confirmed 401 from Dhan — token marked invalid. Update DHAN_ACCESS_TOKEN in Railway.');
+          } else {
+            console.warn('[DhanHist] Auth-like 400 error but not 401 — NOT marking token invalid. Angel fallback for this request only.');
+          }
+          break;
+        } else if (err.response?.status === 400) {
+          console.warn(`[DhanHist] Chunk error (non-auth 400 — bad params): ${JSON.stringify(err.response?.data).slice(0, 120)}`);
         } else {
           console.warn(`[DhanHist] Chunk network error: ${err.message}`);
         }

@@ -538,8 +538,19 @@ async function startup() {
   console.log('â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');
 
   // 9. Connect Dhan WebSocket Feed (PRIMARY live market data) - fire and forget
-  // connectDhanFeed disabled — REST poller handles live data
-    // connectDhanFeed().catch(e => console.error("[connectDhanFeed] Fatal error:", e.message));
+  // connectDhanFeed() has its own isTokenValid guard — if token is invalid it
+  // logs a warning and returns without connecting. Safe to call unconditionally.
+  // Wrapped in try/catch as belt-and-suspenders — the .catch handles Promise
+  // rejections and the try/catch handles synchronous throws.
+  try {
+    connectDhanFeed().catch(e => {
+      // ETIMEDOUT from Railway → Dhan WS is a network-level block, not a code bug.
+      // Log and continue — REST poller still provides live prices.
+      console.warn('[connectDhanFeed] Connection failed (will use REST poller for live prices):', e?.message || e);
+    });
+  } catch (e) {
+    console.warn('[connectDhanFeed] Synchronous error:', e?.message || e);
+  }
 
   // 9a. Register Dhan adapter for order execution (PRIMARY broker)
   connectDhanForBroker().catch(e => console.error("[connectDhanForBroker] Error:", e.message));
@@ -568,10 +579,20 @@ async function connectDhanFeed() {
     console.log('[DhanFeed] ✓ Connected — PRIMARY real-time feed active');
 
     // Pipe tick events into MarketDataEngine
+    // For index instruments, also publish under the Angel-style token so the
+    // frontend (which uses 99926000 for NIFTY etc.) receives live WS updates.
+    const DHAN_TO_ANGEL_IDX = {
+      '13':  '99926000',
+      '25':  '99926009',
+      '27':  '99926037',
+      '442': '99926074',
+      '51':  '99919000',
+    };
+
     dhanFeed.on('tick', (tick) => {
       if (tick.token && tick.ltp > 0) {
         const existing = marketDataEngine.getQuote(tick.token);
-        marketDataEngine.pushQuote(tick.token, {
+        const quoteData = {
           ltp: tick.ltp,
           open: tick.open || existing?.open,
           high: tick.high || existing?.high,
@@ -582,7 +603,14 @@ async function connectDhanFeed() {
           symbol: existing?.symbol,
           exchange: existing?.exchange,
           segment: existing?.segment,
-        });
+        };
+        marketDataEngine.pushQuote(tick.token, quoteData);
+
+        // Mirror index ticks to Angel-style tokens used by the frontend
+        const angelToken = DHAN_TO_ANGEL_IDX[String(tick.token)];
+        if (angelToken) {
+          marketDataEngine.pushQuote(angelToken, { ...quoteData });
+        }
       }
     });
 

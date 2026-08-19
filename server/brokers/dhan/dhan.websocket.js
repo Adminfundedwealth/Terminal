@@ -52,6 +52,18 @@ export class DhanWebSocketFeed extends EventEmitter {
     this._reconnectAttempts = 0;
     this._maxReconnects = 10;
     this._heartbeatTimer = null;
+
+    // Default 'error' listener — prevents Node from crashing on unhandled
+    // EventEmitter error events (e.g. ETIMEDOUT during connect before caller
+    // adds its own listener). Callers may override by adding their own listener.
+    this.on('error', (err) => {
+      // Suppress — errors during connect are already handled by the connect()
+      // promise reject path and the ws 'error' event. Without this default
+      // listener Node.js throws the error as an uncaught exception.
+      if (process.env.NODE_ENV !== 'production') {
+        console.debug('[DhanWS] Default error handler (suppressed):', err?.message || err);
+      }
+    });
   }
 
   get isConnected() { return this._connected; }
