@@ -491,6 +491,23 @@ export class OrderExecutionService {
       }
     }
 
+    // ── Close-order fallback: use position's last known LTP or avg price ──
+    // For exit orders the position row always carries a recent ltp / avg_price.
+    // Using it as the fill price is far safer than rejecting the order outright
+    // — the trader gets a fill at a slightly stale price rather than being
+    // unable to close their position at all.
+    if (!fillPrice && orderParams.isCloseOrder) {
+      const posLtp = Number(orderParams.positionLtp);
+      const posAvg = Number(orderParams.positionAvgPrice);
+      if (posLtp > 0) {
+        fillPrice = posLtp;
+        console.warn(`[OrderExecution] Close-order LTP fallback: using position.ltp ${fillPrice} for ${orderParams.symbol} (${orderId})`);
+      } else if (posAvg > 0) {
+        fillPrice = posAvg;
+        console.warn(`[OrderExecution] Close-order LTP fallback: using position.avgPrice ${fillPrice} for ${orderParams.symbol} (${orderId})`);
+      }
+    }
+
     if (!fillPrice || fillPrice <= 0) {
       // ALL synchronous fallbacks exhausted — reject
       const reason = 'Market data unavailable — LTP is zero or missing. Order not executed. Please retry.';
@@ -785,6 +802,11 @@ export class OrderExecutionService {
       productType: position.product_type,
       qty: closeQty,
       isCloseOrder: true, // bypass all risk rule checks — closing always allowed
+      // Carry the position's last known LTP and avg price as fill-price fallbacks.
+      // _handleMarketFill will use these if the live quote cache is cold/empty,
+      // ensuring a close order never fails with "LTP unavailable".
+      positionLtp: position.ltp || null,
+      positionAvgPrice: position.avg_price || position.avgPrice || null,
     };
 
     // Insert order into database
