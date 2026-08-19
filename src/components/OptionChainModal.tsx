@@ -16,6 +16,7 @@ import { useMarketStore } from '@/store/marketStore';
 import { getOptionChain, getExpiries } from '@/services/api';
 import { cn, formatPrice, formatNumber } from '@/utils/helpers';
 import { useTradingStore } from '@/store/tradingStore';
+import { wsService } from '@/services/websocket';
 import type { OptionChainEntry, Instrument } from '@/types';
 import { SymbolLogo } from '@/components/SymbolLogo';
 
@@ -396,6 +397,10 @@ export function OptionChainModal() {
   const [workerIv, setWorkerIv] = useState<Map<string, number>>(new Map());
   const [maxPainStrike, setMaxPainStrike] = useState<number>(0);
 
+  // Track the currently WS-subscribed option token so we can unsubscribe
+  // when the trader picks a different strike (prevents subscription leaks).
+  const activeOptionTokenRef = useRef<string | null>(null);
+
   // ── Lifecycle ─────────────────────────────────────────────────────────────
   useEffect(() => {
     isMountedRef.current = true;
@@ -429,6 +434,11 @@ export function OptionChainModal() {
       clearAll();
       workerRef.current?.terminate();
       workerRef.current = null;
+      // Unsubscribe any active option token subscription on unmount
+      if (activeOptionTokenRef.current) {
+        wsService.unsubscribe([activeOptionTokenRef.current]);
+        activeOptionTokenRef.current = null;
+      }
     };
   }, []);
 
@@ -639,6 +649,12 @@ export function OptionChainModal() {
     setWorkerIv(new Map());
     setMaxPainStrike(0);
 
+    // Unsubscribe previous option token when underlying changes
+    if (activeOptionTokenRef.current) {
+      wsService.unsubscribe([activeOptionTokenRef.current]);
+      activeOptionTokenRef.current = null;
+    }
+
     if (segmentUnsupported) {
       setStatus({ type: 'unsupported', instrument: activeSymbol.symbol });
       return;
@@ -647,6 +663,37 @@ export function OptionChainModal() {
     setStatus({ type: 'loading', label: underlying, attempt: 0 });
     startLoad(underlying, session);
   }, [underlying, segmentUnsupported]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Auto-refresh: refresh chain every 30s during market hours ───────────
+  // Fires only when a chain is already showing (status === ready).
+  // Uses the existing loadChain path — the 20s frontend cache absorbs extra calls
+  // so no extra API requests happen unless the cache has expired.
+  // Clears on underlying change, expiry change, unmount.
+  useEffect(() => {
+    if (autoRefreshRef.current) {
+      clearInterval(autoRefreshRef.current);
+      autoRefreshRef.current = null;
+    }
+    if (status.type !== 'ready' || !underlying || !selectedExpiry) return;
+
+    autoRefreshRef.current = setInterval(() => {
+      if (!isMountedRef.current) return;
+      if (!isMarketOpen()) return; // no-op outside trading hours
+      if (fetchInFlightRef.current) return; // another request already running
+      const session = sessionRef.current;
+      // Expire the cache entry so loadChain fetches fresh data
+      const ck = `${underlying}:${selectedExpiry}`;
+      _chainCache.delete(ck);
+      loadChain(underlying, selectedExpiry, 0, session);
+    }, 30_000); // every 30 seconds
+
+    return () => {
+      if (autoRefreshRef.current) {
+        clearInterval(autoRefreshRef.current);
+        autoRefreshRef.current = null;
+      }
+    };
+  }, [status.type, underlying, selectedExpiry, loadChain]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── User actions ──────────────────────────────────────────────────────────
   const handleExpiryChange = useCallback((expiry: string) => {
@@ -694,6 +741,21 @@ export function OptionChainModal() {
       });
     }
 
+    // ── Subscribe the selected option token to the live WS feed ─────────
+    // The Dhan LTP poller picks up ALL subscribed tokens every 3s.
+    // Pass segment hint 'NFO' (or 'BFO' for BSE-based SENSEX options) so the
+    // server routes the subscription to the correct Dhan segment (NSE_FNO / BSE_FNO).
+    if (realToken && /^\d+$/.test(realToken)) {
+      const prevToken = activeOptionTokenRef.current;
+      if (prevToken && prevToken !== realToken) {
+        // Unsubscribe previous option token to prevent unbounded subscription growth.
+        wsService.unsubscribe([prevToken]);
+      }
+      const segHint = optExchange === 'BSE' ? 'BFO' : 'NFO';
+      wsService.subscribe([realToken], { [realToken]: segHint });
+      activeOptionTokenRef.current = realToken;
+    }
+
     setActiveSymbol({
       token,
       symbol: `${underlying} ${strike} ${type}`,
@@ -717,9 +779,25 @@ export function OptionChainModal() {
       lotSize,
       ltp: ltp || undefined,
     });
-    if (ltp && ltp > 0) setOrderForm({ price: ltp, orderType: 'LIMIT', qty: lotSize });
-    else setOrderForm({ qty: lotSize, price: 0 });
+    if (ltp && ltp > 0) setOrderForm({ price: ltp, orderType: 'LIMIT', qty: lotSize, productType: 'NRML', symbol: `${underlying} ${strike} ${type}`, token });
+    else setOrderForm({ qty: lotSize, price: 0, productType: 'NRML', symbol: `${underlying} ${strike} ${type}`, token });
   }, [underlying, selectedExpiry, lotSize, optExchange, activeSymbol, setActiveSymbol, setSelectedContract, setOrderForm]);
+
+  // ── Auto-refresh interval ref ────────────────────────────────────────────
+  // Refreshes the chain every 30s while it is visible and market is open.
+  // Does NOT reset the session — uses the current underlying/expiry.
+  // Respects the existing cache TTL: if cache is still fresh it returns instantly.
+  const autoRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  /** IST market-hours check — true between 09:15 and 15:35 on weekdays */
+  const isMarketOpen = (): boolean => {
+    const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+    const now = new Date(Date.now() + IST_OFFSET_MS);
+    const day = now.getUTCDay();   // 0=Sun, 6=Sat
+    if (day === 0 || day === 6) return false;
+    const mins = now.getUTCHours() * 60 + now.getUTCMinutes();
+    return mins >= 555 && mins <= 935; // 09:15 – 15:35 IST
+  };
 
   // ── Render helpers ────────────────────────────────────────────────────────
   const isLoading = status.type === 'loading' || status.type === 'idle';
@@ -763,33 +841,98 @@ export function OptionChainModal() {
     } catch { return exp; }
   };
 
+  // ── Data-state pill ───────────────────────────────────────────────────────
+  // Derives the canonical feed state to display in the header.
+  // Rules:
+  //   LOADING        — chain is being fetched (initial or retry)
+  //   LIVE           — chain loaded AND spotPrice is fresh (< 5s old)
+  //   STALE          — chain loaded BUT spotPrice is 0 or last quote > 5s ago
+  //   ERROR          — chain fetch failed after budget expired
+  //   DISCONNECTED   — WS is not connected AND no spot price
+  //   UNSUPPORTED    — segment cannot have option chain (MCX/CDS)
+  //   AUTH_REQUIRED  — placeholder: set when backend explicitly returns 401
+  const feedStatePill = useMemo((): {
+    label: string;
+    color: string;
+    dot?: string;
+  } => {
+    if (status.type === 'unsupported') return { label: 'N/A', color: 'text-fw-text-muted', dot: 'bg-fw-border' };
+    if (status.type === 'loading' || status.type === 'idle') return { label: 'LOADING', color: 'text-amber-400', dot: 'bg-amber-400 animate-pulse' };
+    if (status.type === 'error') {
+      const msg = (status as any).message || '';
+      if (msg.toLowerCase().includes('auth') || msg.toLowerCase().includes('token') || msg.toLowerCase().includes('401')) {
+        return { label: 'AUTH ERROR', color: 'text-red-400', dot: 'bg-red-400' };
+      }
+      return { label: 'ERROR', color: 'text-red-400', dot: 'bg-red-400' };
+    }
+    if (status.type === 'ready') {
+      if (spotPrice > 0) {
+        const q = quotes[activeSymbol?.token || ''];
+        const ageMs = q?.timestamp ? Date.now() - q.timestamp : Infinity;
+        if (ageMs < 5000) return { label: 'LIVE', color: 'text-emerald-400', dot: 'bg-emerald-400' };
+        return { label: 'STALE', color: 'text-amber-400', dot: 'bg-amber-400' };
+      }
+      // Chain loaded but no spot — could be market closed or WS not connected
+      return { label: 'STALE', color: 'text-amber-400', dot: 'bg-amber-400' };
+    }
+    return { label: 'DISCONNECTED', color: 'text-fw-text-muted', dot: 'bg-fw-border' };
+  }, [status, spotPrice, quotes, activeSymbol?.token]);
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col h-full bg-fw-bg overflow-hidden">
 
       {/* ── Header ── */}
-      <div className="flex items-center gap-3 px-3 py-2 border-b border-fw-border flex-shrink-0 bg-fw-surface">
-        <span className="text-[14px] font-bold text-fw-text tracking-wide">OPTION CHAIN</span>
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-fw-border flex-shrink-0 bg-fw-surface">
+        <span className="text-[13px] font-bold text-fw-text tracking-wide flex-shrink-0">OPT CHAIN</span>
         {underlying && (
           <>
-            <SymbolLogo symbol={underlying} size={20} className="flex-shrink-0" />
-            <span className="text-[14px] font-bold text-fw-accent">{underlying}</span>
+            <SymbolLogo symbol={underlying} size={18} className="flex-shrink-0" />
+            <span className="text-[13px] font-bold text-fw-accent">{underlying}</span>
           </>
         )}
         {expiries.length > 0 && (
           <select
             value={selectedExpiry}
             onChange={(e) => handleExpiryChange(e.target.value)}
-            className="bg-fw-bg text-fw-text text-[12px] border border-fw-border rounded px-2 py-1 font-mono cursor-pointer hover:border-fw-accent/50 transition-colors"
+            className="bg-fw-bg text-fw-text text-[11px] border border-fw-border rounded px-1.5 py-0.5 font-mono cursor-pointer hover:border-fw-accent/50 transition-colors"
           >
             {expiries.map((e) => <option key={e} value={e}>{e}</option>)}
           </select>
         )}
+
+        {/* ── Data-state pill ── */}
+        {activeSymbol && (
+          <div className="flex items-center gap-1 ml-1">
+            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${feedStatePill.dot || 'bg-fw-border'}`} />
+            <span className={`text-[9px] font-bold uppercase tracking-widest ${feedStatePill.color}`}>
+              {feedStatePill.label}
+            </span>
+          </div>
+        )}
+
         <div className="flex-1" />
+
+        {/* Spot price */}
         {spotPrice > 0 && (
-          <span className="text-[13px] font-mono font-bold text-emerald-400 tabular-nums">
-            Spot: {formatPrice(spotPrice)}
+          <span className="text-[12px] font-mono font-bold text-emerald-400 tabular-nums flex-shrink-0">
+            {formatPrice(spotPrice)}
           </span>
+        )}
+
+        {/* Manual refresh button — always visible when chain is loaded */}
+        {(status.type === 'ready' || status.type === 'error') && (
+          <button
+            onClick={handleManualRetry}
+            className="p-1 rounded hover:bg-fw-hover text-fw-text-muted hover:text-fw-text transition-colors flex-shrink-0"
+            title="Refresh option chain"
+          >
+            {/* Reload icon */}
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+              <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+            </svg>
+          </button>
         )}
       </div>
 

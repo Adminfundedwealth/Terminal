@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useTradingStore } from '@/store/tradingStore';
 import { useAppStore } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
@@ -35,6 +35,33 @@ export function OrderPanel() {
   const [tpPrice, setTpPrice] = useState<number>(0);
   const [confirmOrder, setConfirmOrder] = useState<{ side: OrderSide } | null>(null);
 
+  // Listen for real order status events pushed via WebSocket → CustomEvent.
+  // These fire when the backend async execution completes (FILLED / REJECTED).
+  // Using window events avoids a direct dependency on wsService here.
+  useEffect(() => {
+    const onRejected = (e: Event) => {
+      const ev = e as CustomEvent;
+      const sym = orderForm.symbol || activeSymbol?.symbol || '';
+      // Only show if this order is for the currently displayed symbol
+      if (!ev.detail?.symbol || ev.detail.symbol === sym) {
+        showToast(`Order rejected: ${ev.detail?.reason || 'Risk rule or broker rejection'}`);
+      }
+    };
+    const onFilled = (e: Event) => {
+      const ev = e as CustomEvent;
+      const sym = orderForm.symbol || activeSymbol?.symbol || '';
+      if (!ev.detail?.symbol || ev.detail.symbol === sym) {
+        showToast(`Filled: ${ev.detail?.side || ''} ${ev.detail?.qty || ''} ${ev.detail?.symbol || sym} @ ₹${ev.detail?.avgPrice ? parseFloat(ev.detail.avgPrice).toFixed(2) : '—'}`);
+      }
+    };
+    window.addEventListener('fw:order:rejected', onRejected);
+    window.addEventListener('fw:order:filled', onFilled);
+    return () => {
+      window.removeEventListener('fw:order:rejected', onRejected);
+      window.removeEventListener('fw:order:filled', onFilled);
+    };
+  }, [orderForm.symbol, activeSymbol?.symbol]);
+
   const symbol = orderForm.symbol || activeSymbol?.symbol || '';
   const token = orderForm.token || activeSymbol?.token || '';
 
@@ -49,6 +76,11 @@ export function OrderPanel() {
   function validateOrder(side: OrderSide): string | null {
     if (!symbol || !token) return 'No symbol selected';
     if (!orderForm.qty || orderForm.qty <= 0) return 'Quantity must be greater than 0';
+    // Lot-size multiple validation for derivative instruments
+    const effectiveLotSize = activeSymbol?.lotSize || 1;
+    if (effectiveLotSize > 1 && orderForm.qty % effectiveLotSize !== 0) {
+      return `Quantity must be a multiple of lot size (${effectiveLotSize}). Enter ${Math.round(orderForm.qty / effectiveLotSize)} lot${Math.round(orderForm.qty / effectiveLotSize) !== 1 ? 's' : ''} = ${Math.round(orderForm.qty / effectiveLotSize) * effectiveLotSize} qty`;
+    }
     if ((orderForm.orderType === 'LIMIT' || orderForm.orderType === 'SL') && (!orderForm.price || orderForm.price <= 0)) {
       return 'Price must be greater than 0 for Limit orders';
     }
@@ -72,7 +104,7 @@ export function OrderPanel() {
     if (!symbol || !token) return;
     setIsSubmitting(true);
     try {
-      await placeOrder({
+      const result = await placeOrder({
         symbol, token,
         segment: activeSymbol?.segment || 'NSE',
         side,
@@ -86,11 +118,31 @@ export function OrderPanel() {
         slPrice: slPrice > 0 ? slPrice : undefined,
         tpPrice: tpPrice > 0 ? tpPrice : undefined,
       });
-      showToast(orderSuccessMessage({ side, qty: orderForm.qty, symbol }));
-      // Reset SL/TP inputs after successful order
-      setSlPrice(0);
-      setTpPrice(0);
-    } catch (err: any) { showToast(err.message || 'Order failed — check risk rules'); }
+      // The backend returns the initial status synchronously.
+      // MARKET orders in paper mode return FILLED immediately.
+      // LIMIT/SL orders return OPEN/PENDING — final status arrives via WS push.
+      // Live MARKET orders via Dhan may also return PENDING initially.
+      const brokerStatus = (result as any)?.status || 'PENDING';
+      if (brokerStatus === 'REJECTED') {
+        const rejectReason = (result as any)?.message || 'Order rejected — check risk rules';
+        showToast(`Rejected: ${rejectReason}`);
+      } else if (brokerStatus === 'FILLED') {
+        // Paper mode MARKET fill — immediate
+        showToast(orderSuccessMessage({ side, qty: orderForm.qty, symbol }));
+        setSlPrice(0);
+        setTpPrice(0);
+      } else {
+        // PENDING / OPEN — accepted by engine, final status via WS
+        const typeLabel = orderForm.orderType === 'MARKET' ? 'Market' : orderForm.orderType;
+        showToast(`${typeLabel} order submitted — awaiting confirmation`);
+        setSlPrice(0);
+        setTpPrice(0);
+      }
+    } catch (err: any) {
+      // HTTP-level error (422 = risk rejected, 504 = timeout, 5xx = server error)
+      const errMsg = err.message || 'Order failed — check risk rules';
+      showToast(errMsg);
+    }
     finally { setIsSubmitting(false); }
   };
 
@@ -117,7 +169,17 @@ export function OrderPanel() {
             </div>
             <div className="text-[14px] text-fw-text-secondary leading-relaxed">
               <span className={cn('font-black', confirmOrder.side === 'BUY' ? 'text-green' : 'text-red')}>{confirmOrder.side}</span>
-              {' '}{orderForm.qty} × <span className="font-bold text-fw-text">{symbol}</span>
+              {' '}
+              {/* Show lot count for derivatives, raw qty for equity */}
+              {(activeSymbol?.lotSize || 1) > 1 ? (
+                <>
+                  <span className="font-bold text-fw-text">{orderForm.qty / (activeSymbol?.lotSize || 1)} lot{orderForm.qty / (activeSymbol?.lotSize || 1) !== 1 ? 's' : ''}</span>
+                  <span className="text-fw-text-muted text-[12px]"> ({orderForm.qty} qty)</span>
+                </>
+              ) : (
+                <span className="font-bold text-fw-text">{orderForm.qty}</span>
+              )}
+              {' '}<span className="font-bold text-fw-text">{symbol}</span>
               <br />
               <span className="text-fw-text-muted">{orderForm.orderType} · {orderForm.productType}</span>
               {(orderForm.orderType === 'LIMIT' || orderForm.orderType === 'SL') && (
@@ -206,25 +268,30 @@ export function OrderPanel() {
         </div>
       </div>
 
-      {/* Product Type Pills — hidden, MIS used as default internally */}
-      <div className="hidden">
-        <div className="flex gap-1">
-          {PRODUCT_TYPES.map((pt) => (
-            <button
-              key={pt.value}
-              onClick={() => setOrderForm({ productType: pt.value })}
-              className={cn(
-                'flex-1 py-1.5 text-[13px] font-bold rounded-md transition-all',
-                orderForm.productType === pt.value
-                  ? 'bg-fw-surface-2 text-fw-text border border-fw-accent/40'
-                  : 'bg-fw-surface-2 text-fw-text-muted border border-fw-border/40 hover:text-fw-text-secondary'
-              )}
-            >
-              {pt.label}
-            </button>
-          ))}
+      {/* Product Type Pills — visible for derivative instruments (NFO/FUT need NRML for overnight) */}
+      {activeSymbol && (activeSymbol.segment === 'NFO' || activeSymbol.segment === 'BFO' ||
+        activeSymbol.instrumentType === 'FUT' || activeSymbol.instrumentType === 'CE' || activeSymbol.instrumentType === 'PE') && (
+        <div className="px-3 pb-2 flex-shrink-0">
+          <label className="tv-label uppercase tracking-wider mb-1 block">Product</label>
+          <div className="flex gap-1">
+            {(['MIS', 'NRML'] as ProductType[]).map((pt) => (
+              <button
+                key={pt}
+                onClick={() => setOrderForm({ productType: pt })}
+                className={cn(
+                  'flex-1 py-1.5 text-[12px] font-bold rounded-md transition-all tracking-wide',
+                  orderForm.productType === pt
+                    ? 'bg-fw-accent text-white shadow-sm'
+                    : 'bg-fw-surface-2 text-fw-text-secondary border border-fw-border/60 hover:text-fw-text hover:border-fw-text-muted'
+                )}
+                title={pt === 'MIS' ? 'Intraday — auto-square off before market close' : 'Carry forward — hold overnight'}
+              >
+                {pt}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Quantity — L2 value, L4 label */}
       <div className="px-3 pb-2 flex-shrink-0">
@@ -241,7 +308,13 @@ export function OrderPanel() {
           <input
             type="number"
             value={orderForm.qty}
-            onChange={(e) => setOrderForm({ qty: Math.max(1, parseInt(e.target.value) || 1) })}
+            onChange={(e) => {
+              const raw = parseInt(e.target.value) || 1;
+              // Snap to nearest lot multiple when lotSize > 1
+              const ls = activeSymbol?.lotSize || 1;
+              const snapped = ls > 1 ? Math.max(ls, Math.round(raw / ls) * ls) : Math.max(1, raw);
+              setOrderForm({ qty: snapped });
+            }}
             className="flex-1 h-10 bg-fw-surface-2 border border-fw-border rounded-md text-center op-qty text-fw-text outline-none focus:border-fw-accent"
             min={1}
           />

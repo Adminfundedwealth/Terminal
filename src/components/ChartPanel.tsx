@@ -1724,7 +1724,7 @@ export function ChartPanel() {
                   <p className="text-[14px] text-fw-text-secondary font-medium">Chart data unavailable</p>
                   <p className="text-[14px] text-fw-text-muted">Market feed reconnecting…</p>
                   <button
-                    onClick={loadChartData}
+                    onClick={() => loadChartData()}
                     className="mt-1 px-3 py-1 rounded text-[14px] bg-fw-accent/20 hover:bg-fw-accent/40 text-fw-accent border border-fw-accent/30 transition-colors"
                   >
                     Retry

@@ -144,6 +144,57 @@ export class HolidayService {
   }
 
   /**
+   * Check whether the market is currently open for normal-session trading.
+   *
+   * Rules (NSE normal session):
+   *   - Monday–Friday only
+   *   - Not a NSE holiday
+   *   - Current IST time is between 09:15 and 15:30
+   *
+   * AMO (After-Market Orders) are intentionally excluded from this check
+   * because they are intentionally placed outside normal hours.
+   *
+   * Returns: { open: boolean, reason: string }
+   *
+   * NOTE: pre-open (09:00–09:15) is intentionally excluded from "open"
+   * because limit/SL orders during pre-open behave differently.
+   * Normal-session trading begins at 09:15.
+   */
+  static isMarketOpen() {
+    // Work entirely in IST (UTC+5:30) — server may be in any timezone
+    const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000;
+    const now = new Date(Date.now() + IST_OFFSET_MS);
+
+    // 1. Weekend check (use UTC day because we shifted to IST above)
+    const day = now.getUTCDay(); // 0=Sun, 6=Sat
+    if (day === 0) return { open: false, reason: 'Market closed (Sunday)' };
+    if (day === 6) return { open: false, reason: 'Market closed (Saturday)' };
+
+    // 2. Holiday check — compare IST date
+    const istDateStr = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2,'0')}-${String(now.getUTCDate()).padStart(2,'0')}`;
+    const year = now.getUTCFullYear();
+    const yearHolidays = (HOLIDAYS[year] || []);
+    const holiday = yearHolidays.find(h => h.date === istDateStr);
+    if (holiday) return { open: false, reason: `Market closed (holiday: ${holiday.name})` };
+
+    // 3. Trading hours check — IST HH:MM
+    const hh = now.getUTCHours();
+    const mm = now.getUTCMinutes();
+    const minuteOfDay = hh * 60 + mm;
+    const OPEN_MINUTES  = 9 * 60 + 15;  // 09:15 IST
+    const CLOSE_MINUTES = 15 * 60 + 30; // 15:30 IST
+
+    if (minuteOfDay < OPEN_MINUTES) {
+      return { open: false, reason: `Market not yet open (opens 09:15 IST, current IST: ${hh.toString().padStart(2,'0')}:${mm.toString().padStart(2,'0')})` };
+    }
+    if (minuteOfDay >= CLOSE_MINUTES) {
+      return { open: false, reason: `Market closed (closes 15:30 IST, current IST: ${hh.toString().padStart(2,'0')}:${mm.toString().padStart(2,'0')})` };
+    }
+
+    return { open: true, reason: 'Market open' };
+  }
+
+  /**
    * Format date as YYYY-MM-DD (IST).
    */
   static _formatDate(date) {

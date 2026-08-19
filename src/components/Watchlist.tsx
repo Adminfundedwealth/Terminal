@@ -49,7 +49,8 @@ const MASTER_STOCKS: WatchlistItem[] = [
   { token: '3499', symbol: 'TATASTEEL', segment: 'NSE' },
   { token: '10999', symbol: 'MARUTI', segment: 'NSE' },
   { token: '3506', symbol: 'TITAN', segment: 'NSE' },
-  { token: '25', symbol: 'ADANIENT', segment: 'NSE' },
+  // FIX: token '25' = BANKNIFTY (IDX_I) in Dhan. ADANIENT equity = scrip 25215 (NSE_EQ).
+  { token: '25215', symbol: 'ADANIENT', segment: 'NSE' },
   { token: '15083', symbol: 'ADANIPORTS', segment: 'NSE' },
   { token: '383', symbol: 'BEL', segment: 'NSE' },
   { token: '2303', symbol: 'HAL', segment: 'NSE' },
@@ -128,7 +129,8 @@ const MASTER_OPTIONS: WatchlistItem[] = [
   { token: '1922', symbol: 'KOTAKBANK', segment: 'NSE' },
   { token: '10999', symbol: 'MARUTI', segment: 'NSE' },
   { token: '3506', symbol: 'TITAN', segment: 'NSE' },
-  { token: '25', symbol: 'ADANIENT', segment: 'NSE' },
+  // FIX: token '25' = BANKNIFTY (IDX_I) in Dhan. ADANIENT equity = scrip 25215 (NSE_EQ).
+  { token: '25215', symbol: 'ADANIENT', segment: 'NSE' },
   { token: '15083', symbol: 'ADANIPORTS', segment: 'NSE' },
   { token: '383', symbol: 'BEL', segment: 'NSE' },
   { token: '2303', symbol: 'HAL', segment: 'NSE' },

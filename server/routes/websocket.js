@@ -123,6 +123,29 @@ function handleMessage(ws, data, subscriptions, depthSubscriptions, marketDataEn
         subscriptions.set(token, callback);
         marketDataEngine.subscribe(token, callback);
 
+        // ── Seed segment metadata from exchange hint ────────────────────────
+        // The Dhan REST LTP poller groups tokens by their cached segment.
+        // Fresh option tokens (e.g. "61536" → NFO) have no cached segment, so
+        // they default to NSE_EQ and Dhan returns nothing for them.
+        // Seeding the exchange here ensures the poller uses the correct segment
+        // (NSE_FNO for NFO, MCX_COMM for MCX, CUR for CDS) on the first poll cycle.
+        if (exchangeHints[token] && !/^[A-Z_]+$/.test(token)) {
+          // Only seed if hint is provided and token looks like a numeric Dhan ID
+          const hintExchange = exchangeHints[token];
+          const existing = marketDataEngine.getQuote(token);
+          // Only seed if not already cached with a valid segment
+          if (!existing?.segment && !existing?.exchange) {
+            // pushQuote validates ltp > 0, so use a partial push with ltp=undefined
+            // to avoid the LTP guard. Instead, directly update the quotes Map metadata.
+            const current = marketDataEngine.quotes.get(token) || {};
+            marketDataEngine.quotes.set(token, {
+              ...current,
+              exchange: hintExchange,   // e.g. 'NFO' → poller maps to 'NSE_FNO'
+              segment: hintExchange,    // keep both fields consistent
+            });
+          }
+        }
+
         // Only forward to AngelFeed if not already receiving ticks for this token
         // (avoid double-subscribing tokens already in the default feed list)
         if (!marketDataEngine.quotes.has(token) || !marketDataEngine.quotes.get(token)?.ltp) {

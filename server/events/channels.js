@@ -44,7 +44,9 @@ export const CHANNELS = {
 
   'trade.executed': {
     description: 'Trade fill confirmed from broker',
-    requiredFields: ['tradeId', 'orderId', 'symbol', 'side', 'qty', 'price'],
+    // tradeId is optional — at optimistic publish time the DB write is still in flight.
+    // orderId + symbol + side + qty are always present and sufficient for the frontend.
+    requiredFields: ['orderId', 'symbol', 'side', 'qty', 'price'],
     scope: 'account',
     wsEvent: 'trade_executed',
     throttleMs: 0,

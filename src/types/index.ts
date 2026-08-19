@@ -4,7 +4,8 @@ export type InstrumentType = 'EQ' | 'FUT' | 'CE' | 'PE';
 export type ProductType = 'CNC' | 'MIS' | 'NRML' | 'BO' | 'CO';
 export type OrderType = 'MARKET' | 'LIMIT' | 'SL' | 'SL-M';
 export type OrderSide = 'BUY' | 'SELL';
-export type OrderStatus = 'OPEN' | 'FILLED' | 'CANCELLED' | 'REJECTED' | 'PENDING';
+export type OrderStatus = 'OPEN' | 'FILLED' | 'CANCELLED' | 'REJECTED' | 'PENDING'
+  | 'PARTIAL' | 'PARTIALLY_FILLED' | 'TRANSIT' | 'AMO_PENDING';
 
 export interface Instrument {
   token: string;

@@ -208,10 +208,29 @@ export class MarketDataEngine {
    * Dhan LTP Poller — fetches CORRECT prices from Dhan every 3 seconds
    * for ALL actively subscribed tokens. Overrides ANY Angel tick.
    * Dhan is the SINGLE source of truth.
+   *
+   * KEY FIX: Angel-style index tokens (99926000 etc.) have no segment in
+   * the quote cache because they are never pushed through Dhan.  Without a
+   * segment hint they default to NSE_EQ and Dhan returns nothing for them.
+   * The ANGEL_TO_DHAN_IDX alias table maps each Angel index token to its
+   * canonical Dhan { id, segment } so the poller requests the correct segment
+   * AND publishes the result under BOTH the Dhan id AND the Angel token, so
+   * the Option Chain's spotPrice (keyed on the Angel token) is non-zero.
    */
   _startDhanLtpPoller() {
     if (!this._dhanAdapter) return;
     if (this._dhanPollerInterval) return;
+
+    // Angel One index token → Dhan security ID + IDX_I segment
+    // These tokens are used as activeSymbol.token for NIFTY/BANKNIFTY etc.
+    // and MUST map to the correct Dhan numeric id to get spot prices.
+    const ANGEL_TO_DHAN_IDX = {
+      '99926000': { id: '13',  seg: 'IDX_I', symbol: 'NIFTY 50'    },
+      '99926009': { id: '25',  seg: 'IDX_I', symbol: 'BANKNIFTY'   },
+      '99926037': { id: '27',  seg: 'IDX_I', symbol: 'FINNIFTY'    },
+      '99926074': { id: '442', seg: 'IDX_I', symbol: 'MIDCPNIFTY'  },
+      '99919000': { id: '51',  seg: 'IDX_I', symbol: 'SENSEX'      },
+    };
 
     this._dhanPollerInterval = setInterval(async () => {
       if (!this._dhanAdapter?.auth?.isTokenValid) return;
@@ -220,8 +239,68 @@ export class MarketDataEngine {
       if (activeTokens.length === 0) return;
 
       try {
-        // Only poll numeric tokens (skip placeholder strings like 'NF_FUT')
-        const numericTokens = activeTokens.filter(t => /^\d+$/.test(t));
+        // ── Phase A: resolve Angel index tokens via alias table ───────────
+        // These tokens have no segment metadata in the cache — use hardcoded map.
+        const indexBatch = [];
+        for (const token of activeTokens) {
+          const alias = ANGEL_TO_DHAN_IDX[token];
+          if (alias) indexBatch.push({ angelToken: token, ...alias });
+        }
+
+        if (indexBatch.length > 0) {
+          // Group by segment (always IDX_I for indices, but be explicit)
+          const idxBySegment = {};
+          for (const entry of indexBatch) {
+            if (!idxBySegment[entry.seg]) idxBySegment[entry.seg] = [];
+            idxBySegment[entry.seg].push(entry);
+          }
+          for (const [seg, entries] of Object.entries(idxBySegment)) {
+            try {
+              const instrumentList = entries.map(e => ({ token: e.id, segment: seg }));
+              const quotes = await this._dhanAdapter.getQuotes(instrumentList);
+              if (!quotes || quotes.length === 0) continue;
+
+              for (const q of quotes) {
+                if (!q.ltp || q.ltp <= 0) continue;
+                // Find the Angel token(s) that map to this Dhan id
+                const matched = entries.filter(e => e.id === q.token || e.id === String(q.token));
+                for (const entry of matched) {
+                  // Publish under Angel token (used by OptionChainModal spotPrice)
+                  const existingAngel = this.quotes.get(entry.angelToken);
+                  this.pushQuote(entry.angelToken, {
+                    ...existingAngel,
+                    ltp: q.ltp,
+                    volume: q.volume || existingAngel?.volume,
+                    oi: q.oi || existingAngel?.oi,
+                    symbol: entry.symbol,
+                    exchange: 'NSE',
+                    segment: 'IDX_I',
+                    timestamp: Date.now(),
+                  });
+                  // Also publish under Dhan id so alias lookups in risk/order engine work
+                  const existingDhan = this.quotes.get(entry.id);
+                  this.pushQuote(entry.id, {
+                    ...existingDhan,
+                    ltp: q.ltp,
+                    volume: q.volume || existingDhan?.volume,
+                    oi: q.oi || existingDhan?.oi,
+                    symbol: entry.symbol,
+                    exchange: 'NSE',
+                    segment: 'IDX_I',
+                    timestamp: Date.now(),
+                  });
+                }
+              }
+            } catch (_) {}
+          }
+        }
+
+        // ── Phase B: all other numeric tokens (equities, options, MCX, CDS) ─
+        // Skip tokens that were already handled by the index alias table.
+        const indexAngelTokens = new Set(Object.keys(ANGEL_TO_DHAN_IDX));
+        const numericTokens = activeTokens.filter(t =>
+          /^\d+$/.test(t) && !indexAngelTokens.has(t)
+        );
         if (numericTokens.length === 0) return;
 
         // Build segment-aware token list by reading the cached quote metadata.

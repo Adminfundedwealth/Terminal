@@ -144,6 +144,19 @@ class WebSocketService {
           } else {
             trading.addOrder(order);
           }
+          // Surface important order status changes as window events so the
+          // OrderPanel / ToastProvider can show appropriate notifications
+          // without requiring a direct component dependency on wsService.
+          const status = (order.status || '').toUpperCase();
+          if (status === 'REJECTED') {
+            window.dispatchEvent(new CustomEvent('fw:order:rejected', {
+              detail: { orderId: order.id, symbol: order.symbol, reason: order.message || order.rejectReason || 'Rejected by broker or risk engine' }
+            }));
+          } else if (status === 'FILLED') {
+            window.dispatchEvent(new CustomEvent('fw:order:filled', {
+              detail: { orderId: order.id, symbol: order.symbol, side: order.side, qty: order.filledQty || order.qty, avgPrice: order.avgPrice }
+            }));
+          }
         }
         break;
       }

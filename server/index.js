@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿/**
+﻿﻿﻿﻿﻿﻿﻿﻿﻿/**
  * FUNDEDWEALTH TERMINAL â€” SERVER ENTRY POINT
  * 
  * Wires together all backend components:
@@ -61,6 +61,7 @@ import { DhanWebSocketFeed } from './brokers/dhan/dhan.websocket.js';
 import { eventBus, EventBridge } from './events/index.js';
 import { eventDispatcher } from './services/eventDispatcher.js';
 import { DataProviderSwitch } from './services/dataProviderSwitch.js';
+import { DhanOrderPoller } from './services/dhanOrderPoller.js';
 
 const PORT = process.env.PORT || 4000;
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
@@ -78,6 +79,7 @@ const angelFeed = new AngelFeedConnector(marketDataEngine);
 const eventBridge = new EventBridge();
 const dataProviderSwitch = new DataProviderSwitch(candleService, optionChainService);
 let dhanFeed = null; // Dhan WebSocket — primary real-time feed
+let dhanOrderPoller = null; // Live order-status poller
 let tradingViewDatafeed = null;
 let realtimeServer = null;
 
@@ -557,6 +559,13 @@ async function startup() {
 
   // 9b. Connect Angel Feed (SECONDARY - broker adapter only, fallback for order execution)
   connectAngelFeedForBroker().catch(e => console.error("[connectAngelFeedForBroker] Error:", e.message));
+
+  // 9c. Start Dhan live order-status poller (ONLY in live execution mode).
+  // Polls GET /v2/orders every 5 s for OPEN/PENDING orders that have a real
+  // Dhan broker_order_id, detects TRADED/PART_TRADED and invokes the existing
+  // handleBrokerFill() path so positions and trades are created correctly.
+  // In paper mode this poller has no effect (no orders have real Dhan IDs).
+  startDhanOrderPoller();
 }
 
 
@@ -831,6 +840,36 @@ async function connectAngelFeedForBroker() {
 }
 
 
+/**
+ * Start the Dhan live order-status poller.
+ *
+ * Wires the DhanOrderPoller to the existing OrderExecutionService
+ * and the DataProviderSwitch's DhanAdapter. The poller starts immediately
+ * but fires its first cycle only after INITIAL_DELAY_MS (8 s) to allow
+ * the DB, broker adapter and other services to finish initializing.
+ *
+ * The poller:
+ *   - polls GET /v2/orders every 5 s
+ *   - only checks orders whose broker_order_id is a real Dhan ID (not PAPER-)
+ *   - calls the existing handleBrokerFill() on TRADED / PART_TRADED
+ *   - marks orders CANCELLED / REJECTED on terminal Dhan statuses
+ *   - is idempotent — the same fill is never processed twice
+ *   - survives server restarts via DB-backed open-order discovery
+ *
+ * In paper mode the poller runs but no orders ever match (PAPER- IDs are
+ * excluded), so it has zero overhead in simulation environments.
+ */
+function startDhanOrderPoller() {
+  const dhanAdapter = dataProviderSwitch.getDhanAdapter();
+  if (!dhanAdapter) {
+    console.warn('[DhanPoller] Dhan adapter not available — live order poller not started');
+    return;
+  }
+  dhanOrderPoller = new DhanOrderPoller(accountService.executionService, dhanAdapter);
+  dhanOrderPoller.start();
+  console.log('[Startup] ✓ Dhan live order-status poller active');
+}
+
 startup().catch((err) => {
   console.error('[Startup] FATAL:', err.message);
   process.exit(1);
@@ -859,6 +898,7 @@ process.on('SIGTERM', async () => {
   healthMonitor.stop();
   eventBridge.stop();
   if (dhanFeed) dhanFeed.disconnect();
+  if (dhanOrderPoller) dhanOrderPoller.stop();
   angelFeed.disconnect();
   marketDataEngine.destroy();
   eventBus.destroy();
@@ -878,6 +918,7 @@ process.on('SIGINT', async () => {
   healthMonitor.stop();
   eventBridge.stop();
   if (dhanFeed) dhanFeed.disconnect();
+  if (dhanOrderPoller) dhanOrderPoller.stop();
   angelFeed.disconnect();
   marketDataEngine.destroy();
   eventBus.destroy();

@@ -92,7 +92,8 @@ const defaultWatchlists: Watchlist[] = [
     { token: '3499', symbol: 'TATASTEEL', segment: 'NSE' },
     { token: '10999', symbol: 'MARUTI', segment: 'NSE' },
     { token: '3506', symbol: 'TITAN', segment: 'NSE' },
-    { token: '25', symbol: 'ADANIENT', segment: 'NSE' },
+    // FIX: token '25' = BANKNIFTY (IDX_I) in Dhan. ADANIENT equity = scrip 25215 (NSE_EQ).
+    { token: '25215', symbol: 'ADANIENT', segment: 'NSE' },
     { token: '15083', symbol: 'ADANIPORTS', segment: 'NSE' },
     { token: '383', symbol: 'BEL', segment: 'NSE' },
     { token: '2303', symbol: 'HAL', segment: 'NSE' },
@@ -169,7 +170,8 @@ const defaultWatchlists: Watchlist[] = [
     { token: '1922', symbol: 'KOTAKBANK', segment: 'NSE' },
     { token: '10999', symbol: 'MARUTI', segment: 'NSE' },
     { token: '3506', symbol: 'TITAN', segment: 'NSE' },
-    { token: '25', symbol: 'ADANIENT', segment: 'NSE' },
+    // FIX: token '25' = BANKNIFTY (IDX_I) in Dhan. ADANIENT equity = scrip 25215 (NSE_EQ).
+    { token: '25215', symbol: 'ADANIENT', segment: 'NSE' },
     { token: '15083', symbol: 'ADANIPORTS', segment: 'NSE' },
     { token: '383', symbol: 'BEL', segment: 'NSE' },
     { token: '2303', symbol: 'HAL', segment: 'NSE' },
@@ -328,7 +330,7 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: 'fw-terminal-v8',
-      version: 4,
+      version: 5,
       migrate: (persistedState: any, version: number) => {
         if (version < 4) {
           return {
@@ -336,6 +338,20 @@ export const useAppStore = create<AppState>()(
             watchlists: defaultWatchlists,
             activeWatchlistTab: 'index',
           };
+        }
+        if (version < 5) {
+          // Fix ADANIENT token collision: token '25' = BANKNIFTY in Dhan.
+          // Replace with correct NSE_EQ scrip 25215 in all persisted watchlists.
+          const state = persistedState as any;
+          const fixedWatchlists = (state.watchlists || defaultWatchlists).map((wl: any) => ({
+            ...wl,
+            items: (wl.items || []).map((item: any) =>
+              item.token === '25' && item.symbol === 'ADANIENT'
+                ? { ...item, token: '25215' }
+                : item
+            ),
+          }));
+          return { ...state, watchlists: fixedWatchlists };
         }
         return persistedState;
       },

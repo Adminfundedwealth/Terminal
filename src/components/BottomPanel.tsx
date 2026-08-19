@@ -220,7 +220,7 @@ export function BottomPanel() {
 
   const tabs = [
     { id: 'positions' as const, label: 'Positions', count: positions.length },
-    { id: 'orders' as const, label: 'Orders', count: orders.filter((o) => o.status === 'OPEN').length },
+    { id: 'orders' as const, label: 'Orders', count: orders.filter((o) => ['OPEN', 'PENDING', 'PARTIAL', 'PARTIALLY_FILLED', 'TRANSIT', 'AMO_PENDING'].includes(o.status)).length },
     { id: 'trades' as const, label: 'Trade Book', count: trades.length },
     { id: 'journal' as const, label: 'Journal', count: 0 },
     { id: 'alerts' as const, label: 'Alerts', count: 0 },
@@ -717,13 +717,21 @@ function OrdersTable({ orders, onCancel }: { orders: Order[]; onCancel: (id: str
               <td>
                 <span className={cn(
                   'px-2 py-0.5 text-[11px] rounded font-bold uppercase tracking-wide',
-                  order.status === 'FILLED'    && 'bg-green-900/20 text-green-400',
-                  order.status === 'OPEN'      && 'bg-blue-900/20 text-blue-400',
-                  order.status === 'CANCELLED' && 'bg-yellow-900/20 text-yellow-400',
-                  order.status === 'REJECTED'  && 'bg-red-900/20 text-red-400',
-                  order.status === 'PENDING'   && 'bg-orange-900/20 text-orange-400',
+                  order.status === 'FILLED'                 && 'bg-green-900/20 text-green-400',
+                  order.status === 'OPEN'                   && 'bg-blue-900/20 text-blue-400',
+                  order.status === 'CANCELLED'              && 'bg-yellow-900/20 text-yellow-400',
+                  order.status === 'REJECTED'               && 'bg-red-900/20 text-red-400',
+                  order.status === 'PENDING'                && 'bg-orange-900/20 text-orange-400',
+                  order.status === 'AMO_PENDING'            && 'bg-orange-900/20 text-orange-400',
+                  order.status === 'TRANSIT'                && 'bg-purple-900/20 text-purple-400',
+                  order.status === 'PARTIAL'                && 'bg-cyan-900/20 text-cyan-400',
+                  order.status === 'PARTIALLY_FILLED'       && 'bg-cyan-900/20 text-cyan-400',
                 )}>
-                  {order.status}
+                  {/* Normalise display labels for broker-specific status strings */}
+                  {order.status === 'PARTIALLY_FILLED' ? 'PARTIAL'
+                    : order.status === 'AMO_PENDING' ? 'AMO'
+                    : order.status === 'TRANSIT' ? 'TRANSIT'
+                    : order.status}
                 </span>
                 {order.message && order.status === 'REJECTED' && (
                   <div className="tv-support text-red-400/70 mt-0.5 max-w-[180px] truncate" title={order.message}>
@@ -732,7 +740,8 @@ function OrdersTable({ orders, onCancel }: { orders: Order[]; onCancel: (id: str
                 )}
               </td>
               <td>
-                {order.status === 'OPEN' && (
+                {/* Cancel button for all cancellable statuses */}
+                {['OPEN', 'PENDING', 'TRANSIT', 'AMO_PENDING', 'PARTIAL', 'PARTIALLY_FILLED'].includes(order.status) && (
                   <button onClick={() => onCancel(order.id)} className="p-1.5 rounded-md hover:bg-red-900/30 text-red-400 transition-colors" title="Cancel">
                     <X size={12} />
                   </button>

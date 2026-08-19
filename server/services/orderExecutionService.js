@@ -648,12 +648,16 @@ export class OrderExecutionService {
    * Called when broker reports a fill via order update callback or polling.
    */
   async handleBrokerFill(accountId, orderId, fillData) {
-    const { filledQty, avgPrice, brokerOrderId } = fillData;
+    const { filledQty, brokerOrderId } = fillData;
+    // avgPrice may be 0 or undefined when Dhan returns a TRADED status without
+    // a tradedPrice (e.g. during pre-open or for certain order types).
+    // Fall back to the live LTP cache so the position is never created at price 0.
+    let avgPrice = fillData.avgPrice && fillData.avgPrice > 0 ? fillData.avgPrice : null;
 
     // Get the original order
     let order;
     try {
-      order = await orderRepo.findById ? await this._findOrder(orderId) : null;
+      order = await this._findOrder(orderId);
     } catch (e) {
       order = null;
     }
@@ -663,21 +667,38 @@ export class OrderExecutionService {
       return;
     }
 
+    // If Dhan did not return a fill price, resolve from the live LTP cache
+    if (!avgPrice) {
+      avgPrice = this.marketDataEngine.getQuote(order.token)?.ltp || null;
+    }
+    // Last resort: use order's limit price (for LIMIT orders)
+    if (!avgPrice && order.price > 0) {
+      avgPrice = parseFloat(order.price);
+    }
+    // If still no price, log a warning and default to 0 (position will be created
+    // but P&L will be computed from live LTP once it arrives)
+    if (!avgPrice) {
+      console.warn(`[OrderExecution] handleBrokerFill: no avgPrice available for order ${orderId} (${order.symbol}) — defaulting to 0`);
+      avgPrice = 0;
+    }
+
     // Determine if partial or full fill
     const totalFilled = (order.filled_qty || 0) + filledQty;
     const isFullyFilled = totalFilled >= order.qty;
     const newStatus = isFullyFilled ? 'FILLED' : 'PARTIAL';
 
-    // Update order status
-    await orderRepo.updateStatus(orderId, isFullyFilled ? 'FILLED' : 'OPEN', {
+    // Update order status — use 'PARTIALLY_FILLED' for partial fills so the
+    // DB status matches Dhan's terminology and the poller can continue polling.
+    const newDbStatus = isFullyFilled ? 'FILLED' : 'PARTIALLY_FILLED';
+    await orderRepo.updateStatus(orderId, newDbStatus, {
       filled_qty: totalFilled,
-      avg_price: avgPrice,
+      avg_fill_price: avgPrice,   // correct column name in trading_orders
       broker_order_id: brokerOrderId,
     });
 
     eventBus.publish('order.updated', {
       orderId,
-      status: isFullyFilled ? 'FILLED' : 'PARTIAL',
+      status: isFullyFilled ? 'FILLED' : 'PARTIALLY_FILLED',
       symbol: order.symbol,
       token: order.token,
       segment: order.segment,

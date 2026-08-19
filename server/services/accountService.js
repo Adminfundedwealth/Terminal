@@ -17,6 +17,7 @@
 import { supabase } from '../db/client.js';
 import { eventBus } from '../events/index.js';
 import { OrderExecutionService } from './orderExecutionService.js';
+import { HolidayService } from './holidayService.js';
 import crypto from 'crypto';
 
 // In-memory order store for when trading_orders table doesn't exist
@@ -464,6 +465,22 @@ export class AccountService {
     if (!supabase) {
       throw new Error('Database not configured. Cannot place orders.');
     }
+
+    // ── Market-closed guard (live mode only) ──────────────────────────────
+    // In paper mode any-time-of-day orders are allowed for simulation purposes.
+    // In live mode we must reject orders outside NSE trading hours (09:15–15:30 IST,
+    // weekdays, non-holiday) unless the order is explicitly an AMO.
+    // Import is dynamic to keep paper mode overhead zero.
+    if (!params.isAmo) {
+      const { ExecutionMode } = await import('./executionMode.js');
+      if (!ExecutionMode.isPaper) {
+        const { open, reason } = HolidayService.isMarketOpen();
+        if (!open) {
+          throw new Error(`Market is closed — ${reason}. Use AMO for after-hours orders.`);
+        }
+      }
+    }
+
     // Normalise exchange — defaults to segment when not provided
     const exchange = params.exchange || params.segment;
 
