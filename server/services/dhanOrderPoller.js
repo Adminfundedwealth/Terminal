@@ -123,7 +123,7 @@ export class DhanOrderPoller {
     // broker_order_id (not a PAPER- id, not null).
     const { data: openOrders, error } = await supabase
       .from('trading_orders')
-      .select('id, trading_account_id, broker_order_id, order_type, qty, filled_qty, symbol, token, segment, side, product_type, exchange, placed_at')
+      .select('id, trading_account_id, broker_order_id, order_type, qty, filled_qty, symbol, token, segment, side, product_type, placed_at')
       .in('status', ['PENDING', 'OPEN', 'PARTIALLY_FILLED'])
       .not('broker_order_id', 'is', null)
       .not('broker_order_id', 'like', 'PAPER-%');
