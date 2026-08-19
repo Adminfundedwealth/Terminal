@@ -5,6 +5,7 @@ import { useTradingStore } from '@/store/tradingStore';
 import { wsService } from '@/services/websocket';
 import { cn, formatPrice } from '@/utils/helpers';
 import type { MarketDepthLevel } from '@/types';
+import { SymbolLogo } from '@/components/SymbolLogo';
 
 // ─── constants ────────────────────────────────────────────────────────────────
 const MAX_TAPE        = 150;
@@ -431,7 +432,10 @@ export function MarketDepthPanel() {
         <div className="flex items-center gap-1.5 min-w-0">
           <span className="tv-heading text-fw-text-muted">DOM</span>
           {activeSymbol && (
-            <span className="text-[11px] font-bold text-fw-accent truncate">{activeSymbol.symbol}</span>
+            <>
+              <SymbolLogo symbol={activeSymbol.symbol} size={16} className="flex-shrink-0" />
+              <span className="text-[11px] font-bold text-fw-accent truncate">{activeSymbol.symbol}</span>
+            </>
           )}
           {quote && (
             <span className={cn(

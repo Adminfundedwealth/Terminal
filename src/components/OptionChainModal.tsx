@@ -17,6 +17,7 @@ import { getOptionChain, getExpiries } from '@/services/api';
 import { cn, formatPrice, formatNumber } from '@/utils/helpers';
 import { useTradingStore } from '@/store/tradingStore';
 import type { OptionChainEntry, Instrument } from '@/types';
+import { SymbolLogo } from '@/components/SymbolLogo';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -515,7 +516,10 @@ export function OptionChainModal() {
       <div className="flex items-center gap-3 px-3 py-2 border-b border-fw-border flex-shrink-0 bg-fw-surface">
         <span className="text-[14px] font-bold text-fw-text tracking-wide">OPTION CHAIN</span>
         {underlying && (
-          <span className="text-[14px] font-bold text-fw-accent">{underlying}</span>
+          <>
+            <SymbolLogo symbol={underlying} size={20} className="flex-shrink-0" />
+            <span className="text-[14px] font-bold text-fw-accent">{underlying}</span>
+          </>
         )}
         {expiries.length > 0 && (
           <select

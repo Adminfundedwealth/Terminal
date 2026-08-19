@@ -14,6 +14,7 @@ import { DrawingLayersPanel } from './DrawingLayersPanel';
 import { EmojiMarkerPicker } from './EmojiMarkerPicker';
 import { PositionManager } from './chart/PositionManager';
 import { DrawingToolbar } from './chart/DrawingToolbar';
+import { SymbolLogo } from '@/components/SymbolLogo';
 import {
   calculateSMA, calculateEMA, calculateRSI, calculateMACD, calculateBollinger,
   calculateVWAP, extractVolume, calculateATR, calculateStochastic, calculateStochRSI,
@@ -1570,6 +1571,7 @@ export function ChartPanel() {
         <div className="h-[34px] min-h-[34px] flex items-center px-3 gap-3 border-b border-fw-border/40 bg-fw-surface">
           {/* Symbol + Exchange — L3/L5 hierarchy */}
           <div className="flex items-center gap-1.5 flex-shrink-0">
+            <SymbolLogo symbol={activeSymbol.symbol} size={20} className="flex-shrink-0" />
             <span className="tv-symbol-lg">{activeSymbol.symbol}</span>
             <span className="tv-support bg-fw-surface-2 px-1.5 py-[3px] rounded border border-fw-border/40">{activeSymbol.exchange}</span>
           </div>

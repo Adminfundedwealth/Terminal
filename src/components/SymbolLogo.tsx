@@ -10,17 +10,19 @@ interface SymbolLogoProps {
 
 export function SymbolLogo({ symbol, size = 20, className = '', title }: SymbolLogoProps) {
   const meta = useMemo(() => resolveSymbolIconMeta(symbol), [symbol]);
-  const [failed, setFailed] = useState(false);
+  // Stage 0 = try logoSrc; Stage 1 = local failed, try CDN; Stage 2 = show chip
+  const [failStage, setFailStage] = useState(0);
 
-  // ── Index / Commodity / Currency chip ────────────────────────────────────
+  // ── Index / Commodity / Currency / ETF chip ───────────────────────────────
   if (meta.kind === 'index') {
-    const label = INDEX_LABELS[meta.normalized] ||
-                  INDEX_LABELS[meta.normalized.replace(/\d+$/, '')] ||
-                  meta.initial;
+    const label =
+      INDEX_LABELS[meta.normalized] ||
+      INDEX_LABELS[meta.normalized.replace(/\d+$/, '')] ||
+      meta.initial;
     return (
       <div
         title={title || meta.symbol}
-        className={`inline-flex items-center justify-center rounded font-black text-white flex-shrink-0 ${className}`}
+        className={`inline-flex items-center justify-center rounded font-black text-white flex-shrink-0 select-none ${className}`}
         style={{
           width: size,
           height: size,
@@ -37,8 +39,8 @@ export function SymbolLogo({ symbol, size = 20, className = '', title }: SymbolL
     );
   }
 
-  // ── Stock logo from local SVG ─────────────────────────────────────────────
-  if (meta.kind === 'logo' && meta.logoSrc && !failed) {
+  // ── Stock logo — local SVG primary, CDN fallback, initials last resort ────
+  if (meta.kind === 'logo' && meta.logoSrc && failStage < 2) {
     return (
       <img
         src={meta.logoSrc}
@@ -46,16 +48,16 @@ export function SymbolLogo({ symbol, size = 20, className = '', title }: SymbolL
         title={title || meta.symbol}
         className={`object-contain rounded flex-shrink-0 ${className}`}
         style={{ width: size, height: size, minWidth: size, minHeight: size }}
-        onError={() => setFailed(true)}
+        onError={() => setFailStage(s => s + 1)}
       />
     );
   }
 
-  // ── Colored initial circle fallback ──────────────────────────────────────
+  // ── Colored initial circle (final fallback) ───────────────────────────────
   return (
     <div
       title={title || meta.symbol}
-      className={`inline-flex items-center justify-center rounded-full font-black uppercase text-white flex-shrink-0 ${className}`}
+      className={`inline-flex items-center justify-center rounded-full font-black uppercase text-white flex-shrink-0 select-none ${className}`}
       style={{
         width: size,
         height: size,

@@ -168,13 +168,17 @@ export class RiskEngine {
       // Fallback: allow trading with default constraints rather than blocking
       account = { id: accountId, balance: 1000000, status: 'active', leverage_max: 10, broker_provider: 'dhan' };
     }
-    if (account.status !== 'active') {
-      return { allowed: false, reason: `Account is ${account.status}. Trading disabled.` };
-    }
 
-    // ── Close/exit orders bypass ALL trading rules ──────────────────────────
+    // ── Close/exit orders bypass ALL trading rules (including account lock) ──
+    // A trader must always be able to close an existing position regardless of
+    // risk-rule violations, drawdown locks, or daily-loss locks.  Blocking exits
+    // increases risk — it prevents de-risking an open position.
     if (orderParams.isCloseOrder) {
       return { allowed: true };
+    }
+
+    if (account.status !== 'active') {
+      return { allowed: false, reason: `Account is ${account.status}. Trading disabled.` };
     }
 
     // Load authoritative rules map.

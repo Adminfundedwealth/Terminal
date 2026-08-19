@@ -4,6 +4,7 @@ import { useMarketStore } from '@/store/marketStore';
 import { useTradingStore } from '@/store/tradingStore';
 import { cn, formatPrice } from '@/utils/helpers';
 import type { MarketDepthLevel } from '@/types';
+import { SymbolLogo } from '@/components/SymbolLogo';
 
 /**
  * 20-Level DOM (Depth of Market) Panel
@@ -63,7 +64,15 @@ export function DOMPanel() {
     <div className="h-full flex flex-col bg-fw-bg select-none">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-fw-border bg-fw-surface flex-shrink-0">
-        <span className="text-[13px] font-bold text-fw-text-secondary uppercase tracking-wider">20-Level DOM</span>
+        <div className="flex items-center gap-2">
+          <span className="text-[13px] font-bold text-fw-text-secondary uppercase tracking-wider">20-Level DOM</span>
+          {activeSymbol && (
+            <>
+              <SymbolLogo symbol={activeSymbol.symbol} size={16} className="flex-shrink-0" />
+              <span className="text-[13px] font-bold text-fw-text truncate">{activeSymbol.symbol}</span>
+            </>
+          )}
+        </div>
         {quote && (
           <span className={cn('font-mono font-black text-[14px] tabular-nums', (quote.changePercent || 0) >= 0 ? 'text-green' : 'text-red')}>
             {formatPrice(quote.ltp)}

@@ -870,6 +870,33 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
         }
       }
     }
+    // Step 1b: Check numeric token map (known MCX/CDS/ETF tokens from frontend watchlists)
+    else if (/^\d+$/.test(token) && NUMERIC_TOKEN_MAP[token]) {
+      const numMapping = NUMERIC_TOKEN_MAP[token];
+      exchange = numMapping.segment;
+      // For MCX/CDS derivatives, try to resolve the active contract
+      if ((numMapping.segment === 'MCX_COMM' || numMapping.segment === 'NSE_CURRENCY') && numMapping.scripSymbol) {
+        const activeId = resolveActiveContract(numMapping.scripSymbol, numMapping.segment);
+        if (activeId) {
+          console.log(`[History] Known token ${token} (${numMapping.scripSymbol}) → active contract ${activeId}`);
+          token = activeId;
+        }
+      }
+      // For ETFs/equities: try scrip master symbol lookup to get the correct Dhan securityId
+      else if (numMapping.segment === 'NSE_EQ' && numMapping.scripSymbol) {
+        try {
+          const dhan = dataProviderSwitch?.getDhanAdapter();
+          if (dhan?.historical?._scripMaster?.bySymbol) {
+            const entry = dhan.historical._scripMaster.bySymbol.get(`${numMapping.scripSymbol}:NSE_EQ`) ||
+                         dhan.historical._scripMaster.bySymbol.get(`${numMapping.scripSymbol}:E`);
+            if (entry?.securityId && entry.securityId !== token) {
+              console.log(`[History] ETF ${numMapping.scripSymbol} token ${token} → Dhan ${entry.securityId}`);
+              token = entry.securityId;
+            }
+          }
+        } catch (_) {}
+      }
+    }
     // Step 2: Check if token is a symbol name (non-numeric, not a known placeholder)
     else if (!/^\d+$/.test(token)) {
       const upper = token.toUpperCase().trim();

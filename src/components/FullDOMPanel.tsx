@@ -3,6 +3,7 @@ import { useDepth } from '@/hooks/useMarketData';
 import { useMarketStore } from '@/store/marketStore';
 import { useTradingStore } from '@/store/tradingStore';
 import { cn, formatPrice } from '@/utils/helpers';
+import { SymbolLogo } from '@/components/SymbolLogo';
 
 function fmtQty(n: number): string {
   if (n >= 10_000_000) return (n / 10_000_000).toFixed(1) + 'Cr';
@@ -43,7 +44,12 @@ export function FullDOMPanel() {
       <div className="flex items-center justify-between px-3 py-2 border-b border-fw-border bg-fw-surface-2 flex-shrink-0">
         <div className="flex items-center gap-2">
           <span className="text-[14px] font-bold text-fw-text">20-Level DOM</span>
-          {activeSymbol && <span className="text-[14px] text-fw-text-muted">{activeSymbol.symbol}</span>}
+          {activeSymbol && (
+            <>
+              <SymbolLogo symbol={activeSymbol.symbol} size={18} className="flex-shrink-0" />
+              <span className="text-[14px] text-fw-text-muted">{activeSymbol.symbol}</span>
+            </>
+          )}
         </div>
         {quote && (
           <span className={cn('text-[14px] font-mono font-black', (quote.changePercent || 0) >= 0 ? 'text-green' : 'text-red')}>

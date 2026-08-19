@@ -56,13 +56,18 @@ export class FlashRiskEngine {
    */
   static async validateOrder(accountId, orderParams, quoteProvider, account) {
     // ── Account status ───────────────────────────────────────────────────
-    if (!account || account.status !== 'active') {
-      return { allowed: false, reason: `Account is ${account?.status || 'unknown'}. Trading disabled.` };
-    }
 
-    // ── Close orders always bypass trading rules ──────────────────────────
+    // ── Close orders bypass ALL trading rules (including account lock) ───
+    // A trader must always be able to close an existing position regardless of
+    // risk violations, drawdown locks, or daily-loss locks.  The account-status
+    // block is intentionally placed AFTER this check so that even locked/breached
+    // accounts can de-risk by closing open positions.
     if (orderParams.isCloseOrder) {
       return { allowed: true };
+    }
+
+    if (!account || account.status !== 'active') {
+      return { allowed: false, reason: `Account is ${account?.status || 'unknown'}. Trading disabled.` };
     }
 
     const profile = await FlashRiskProfileService.getProfile();
