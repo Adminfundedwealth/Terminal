@@ -24,12 +24,13 @@ import { SymbolLogo } from '@/components/SymbolLogo';
 const STRIKES_AROUND_ATM = 20;
 
 // Retry schedule within the 15-second budget
-const MAX_AUTO_RETRIES = 4;
-const retryDelay = (attempt: number) => Math.min((attempt + 1) * 1500, 4000);
+const MAX_AUTO_RETRIES = 6;
+const retryDelay = (attempt: number) => ([500, 1000, 2000, 3000, 4000, 5000][attempt] ?? 5000);
 
 // Hard wall-clock budget from first load attempt to success/error.
 // Retries do NOT reset this clock.  Retry Now starts a NEW budget.
-const TOTAL_BUDGET_MS = 15_000;
+// 25s gives all 6 retries room even when Angel One JWT is warming up on fresh deploy.
+const TOTAL_BUDGET_MS = 25_000;
 
 // ─── Module-level caches (survive symbol switches, cleared on page reload) ───
 

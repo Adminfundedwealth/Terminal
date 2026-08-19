@@ -1235,8 +1235,23 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
   });
 
   router.get('/market/option-chain', async (req, res) => {
-    const { symbol, expiry } = req.query;
-    if (!symbol || !expiry) return res.status(400).json({ message: 'symbol and expiry required' });
+    // Normalize symbol — strip trailing " 50" so "NIFTY 50" → "NIFTY"
+    const symbol = req.query.symbol
+      ? String(req.query.symbol).toUpperCase().replace(/\s+50$/, '').trim()
+      : null;
+
+    if (!symbol) return res.status(400).json({ message: 'symbol required' });
+
+    // Auto-resolve expiry when not provided by the client:
+    // Ask DataProviderSwitch (Dhan first, Angel fallback) for the nearest expiry.
+    let expiry = req.query.expiry ? String(req.query.expiry) : '';
+    if (!expiry && dataProviderSwitch) {
+      try {
+        const result = await dataProviderSwitch.getExpiries(symbol);
+        if (result.data && result.data.length > 0) expiry = result.data[0];
+      } catch (_) {}
+    }
+    if (!expiry) return res.status(400).json({ message: 'expiry required and could not be auto-resolved' });
 
     console.log(`[OptionChain] Request: symbol=${symbol}, expiry=${expiry}`);
 

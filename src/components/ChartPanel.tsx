@@ -939,11 +939,30 @@ export function ChartPanel() {
   // Keep applyOverlayDrawings ref in sync
   useEffect(() => { applyOverlayDrawingsRef.current = applyOverlayDrawings; });
 
+  // Tracks the symbol+timeframe for which a load is currently in-flight.
+  // If symbol/tf changes before the fetch resolves we discard the stale result.
+  const loadingForRef = useRef<string>('');
+
   // Load chart data when symbol/timeframe/chartType changes
   useEffect(() => {
     if (!chartRef.current || !activeSymbol) return;
-    liveBarRef.current = null; // reset live candle tracking on symbol/tf change
-    loadChartData();
+
+    // ── 1. Immediately wipe previous data to prevent stale-series spike ──
+    // rawDataRef must be cleared BEFORE the async fetch so the live-tick
+    // guard (which reads rawDataRef) sees an empty array and exits early,
+    // preventing old symbol LTPs from being painted onto the new series.
+    rawDataRef.current = [];
+    liveBarRef.current = null;
+
+    // ── 2. Clear the series data visually right now ────────────────────
+    // We wipe rather than remove+recreate so the chart axes don't flash.
+    try { seriesRef.current?.setData([]); } catch {}
+    try { volumeSeriesRef.current?.setData([]); } catch {}
+
+    // ── 3. Fetch fresh candles, ignore result if symbol changed again ──
+    const key = `${activeSymbol.token}:${activeSymbol.exchange}:${timeframe}`;
+    loadingForRef.current = key;
+    loadChartData(key);
   }, [activeSymbol?.token, activeSymbol?.exchange, timeframe, chartType]);
 
   // Apply indicators whenever data or indicator config changes.
@@ -996,7 +1015,7 @@ export function ChartPanel() {
     }
   });
 
-  const loadChartData = async () => {
+  const loadChartData = async (expectedKey?: string) => {
     if (!chartRef.current || !activeSymbol) return;
     setIsLoading(true);
     setNoData(false);
@@ -1004,11 +1023,21 @@ export function ChartPanel() {
     let data: OHLC[] | null = null;
     let lastErr: unknown = null;
     for (let attempt = 0; attempt < 3; attempt++) {
+      // Bail out immediately if the symbol/timeframe changed while we were waiting
+      if (expectedKey && loadingForRef.current !== expectedKey) {
+        setIsLoading(false);
+        return;
+      }
       try {
         if (attempt > 0) await new Promise(r => setTimeout(r, attempt * 1500));
         const result = await getHistoricalData(activeSymbol.token, timeframe, activeSymbol.exchange);
         if (result && result.length > 0) { data = result; break; }
       } catch (err) { lastErr = err; }
+    }
+    // Discard result if a newer load has already been kicked off
+    if (expectedKey && loadingForRef.current !== expectedKey) {
+      setIsLoading(false);
+      return;
     }
     if (data && data.length > 0) {
       rawDataRef.current = data;
@@ -1017,7 +1046,6 @@ export function ChartPanel() {
       applyOverlayDrawings(drawings);
       applyTextMarkers(drawings);
       setNoData(false);
-      // notifyChartReady handled by PositionManager on next render
     } else {
       if (lastErr) console.error('[ChartPanel] loadChartData failed after retries:', lastErr);
       setNoData(true);
