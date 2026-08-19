@@ -164,6 +164,9 @@ interface StrikeRowProps {
   viewMode: 'both' | 'ce' | 'pe';
   onStrikeClick: (strike: number, type: 'CE' | 'PE', ltp?: number, token?: string) => void;
   setOrderForm: (form: { side: 'BUY' | 'SELL' }) => void;
+  // IV from optionsWorker (0 = not yet computed or unavailable)
+  callIv: number;
+  putIv: number;
 }
 
 const StrikeRow = memo(function StrikeRow({
@@ -180,9 +183,15 @@ const StrikeRow = memo(function StrikeRow({
   viewMode,
   onStrikeClick,
   setOrderForm,
+  callIv,
+  putIv,
 }: StrikeRowProps) {
   const callOiChg = e.callOiChange || 0;
   const putOiChg  = e.putOiChange  || 0;
+
+  // Prefer server-supplied IV (Dhan); fall back to worker-computed IV
+  const displayCallIv = e.callIv > 0 ? e.callIv : callIv;
+  const displayPutIv  = e.putIv  > 0 ? e.putIv  : putIv;
 
   return (
     <tr
@@ -241,6 +250,10 @@ const StrikeRow = memo(function StrikeRow({
           >
             {formatNumber(e.callVolume || 0)}
           </td>
+          {/* CALL IV */}
+          <td className="px-2 py-[6px] text-right font-mono tabular-nums text-fw-text-secondary truncate">
+            {displayCallIv > 0 ? displayCallIv.toFixed(1) + '%' : '—'}
+          </td>
           {/* CALL LTP */}
           <td
             className={cn(
@@ -277,6 +290,10 @@ const StrikeRow = memo(function StrikeRow({
             onClick={() => onStrikeClick(e.strike, 'PE', e.putLtp, e.putToken)}
           >
             {e.putLtp > 0 ? formatPrice(e.putLtp) : '—'}
+          </td>
+          {/* PUT IV */}
+          <td className="px-2 py-[6px] text-left font-mono tabular-nums text-fw-text-secondary truncate">
+            {displayPutIv > 0 ? displayPutIv.toFixed(1) + '%' : '—'}
           </td>
           {/* Volume — red bar */}
           <td
@@ -371,10 +388,47 @@ export function OptionChainModal() {
   // Records wall-clock start of the current budget period.
   const budgetStartRef   = useRef(0);
 
+  // ── Options worker ────────────────────────────────────────────────────────
+  // Worker computes BS greeks + max pain off the main thread.
+  // IV result: map keyed "strike:CE" / "strike:PE" → IV percentage
+  const workerRef = useRef<Worker | null>(null);
+  const [workerIv, setWorkerIv] = useState<Map<string, number>>(new Map());
+  const [maxPainStrike, setMaxPainStrike] = useState<number>(0);
+
   // ── Lifecycle ─────────────────────────────────────────────────────────────
   useEffect(() => {
     isMountedRef.current = true;
-    return () => { isMountedRef.current = false; clearAll(); };
+
+    // Instantiate the options worker once on mount
+    try {
+      const w = new Worker(
+        new URL('../workers/optionsWorker.ts', import.meta.url),
+        { type: 'module' },
+      );
+      w.onmessage = (evt) => {
+        if (!isMountedRef.current) return;
+        const { type } = evt.data;
+        if (type === 'greeks-result') {
+          const map = new Map<string, number>();
+          for (const r of evt.data.results as Array<{ strike: number; type: 'CE' | 'PE'; iv: number }>) {
+            map.set(`${r.strike}:${r.type}`, r.iv);
+          }
+          setWorkerIv(map);
+        } else if (type === 'maxpain-result') {
+          setMaxPainStrike(evt.data.strike as number);
+        }
+      };
+      workerRef.current = w;
+    } catch {
+      // Web Worker unavailable in this environment (e.g. SSR) — silently skip
+    }
+
+    return () => {
+      isMountedRef.current = false;
+      clearAll();
+      workerRef.current?.terminate();
+      workerRef.current = null;
+    };
   }, []);
 
   // ── Spot price — use active symbol's token directly ───────────────────────
@@ -457,6 +511,29 @@ export function OptionChainModal() {
         setChain(data);
         setStatus({ type: 'ready' });
         if (budgetTimerRef.current) { clearTimeout(budgetTimerRef.current); budgetTimerRef.current = null; }
+
+        // Dispatch greeks + max pain to worker.
+        // Worker uses LTP-based Newton-Raphson IV when chain data has no IV (Angel path).
+        // When Dhan supplies IV the worker result is used as fallback only (server IV takes priority).
+        if (workerRef.current && spotPrice > 0 && selectedExpiry) {
+          const msToExpiry = new Date(selectedExpiry).getTime() - Date.now();
+          const daysToExpiry = Math.max(msToExpiry / 86_400_000, 0.001);
+          const strikes = data.flatMap((e) => [
+            { strike: e.strike, type: 'CE' as const, ltp: e.callLtp, iv: e.callIv || undefined },
+            { strike: e.strike, type: 'PE' as const, ltp: e.putLtp,  iv: e.putIv  || undefined },
+          ]).filter((s) => s.ltp > 0);
+          workerRef.current.postMessage({
+            type: 'greeks',
+            strikes,
+            spot: spotPrice,
+            riskFreeRate: 0.065, // RBI repo rate approximation
+            daysToExpiry,
+          });
+          workerRef.current.postMessage({
+            type: 'maxpain',
+            chain: data.map((e) => ({ strike: e.strike, callOi: e.callOi, putOi: e.putOi })),
+          });
+        }
         return;
       }
 
@@ -558,6 +635,8 @@ export function OptionChainModal() {
     setChain([]);
     setExpiries([]);
     setSelectedExpiry('');
+    setWorkerIv(new Map());
+    setMaxPainStrike(0);
 
     if (segmentUnsupported) {
       setStatus({ type: 'unsupported', instrument: activeSymbol.symbol });
@@ -575,6 +654,8 @@ export function OptionChainModal() {
     clearAll();
     setChain([]);
     setSelectedExpiry(expiry);
+    setWorkerIv(new Map());
+    setMaxPainStrike(0);
     setStatus({ type: 'loading', label: `${underlying} · ${expiry}`, attempt: 0 });
     startBudget(session);
     loadChain(underlying, expiry, 0, session);
@@ -758,6 +839,11 @@ export function OptionChainModal() {
               ATM: {atmStrike}
             </span>
           )}
+          {maxPainStrike > 0 && (
+            <span className="text-[11px] text-amber-400 font-mono font-bold" title="Max Pain: strike where option buyers lose the most at expiry">
+              MaxPain: {maxPainStrike}
+            </span>
+          )}
         </div>
       )}
 
@@ -812,19 +898,21 @@ export function OptionChainModal() {
               {viewMode !== 'pe' && (
                 <>
                   <col style={{ width: '32px' }} />   {/* B/S */}
-                  <col style={{ width: '13%' }} />     {/* OI */}
-                  <col style={{ width: '10%' }} />     {/* OI Chg */}
-                  <col style={{ width: '11%' }} />     {/* Volume */}
-                  <col style={{ width: '10%' }} />     {/* LTP */}
+                  <col style={{ width: '12%' }} />     {/* OI */}
+                  <col style={{ width: '9%' }} />      {/* OI Chg */}
+                  <col style={{ width: '10%' }} />     {/* Volume */}
+                  <col style={{ width: '8%' }} />      {/* IV */}
+                  <col style={{ width: '9%' }} />      {/* LTP */}
                 </>
               )}
               <col style={{ width: '80px' }} />        {/* STRIKE — fixed */}
               {viewMode !== 'ce' && (
                 <>
-                  <col style={{ width: '10%' }} />     {/* LTP */}
-                  <col style={{ width: '11%' }} />     {/* Volume */}
-                  <col style={{ width: '10%' }} />     {/* OI Chg */}
-                  <col style={{ width: '13%' }} />     {/* OI */}
+                  <col style={{ width: '9%' }} />      {/* LTP */}
+                  <col style={{ width: '8%' }} />      {/* IV */}
+                  <col style={{ width: '10%' }} />     {/* Volume */}
+                  <col style={{ width: '9%' }} />      {/* OI Chg */}
+                  <col style={{ width: '12%' }} />     {/* OI */}
                   <col style={{ width: '32px' }} />    {/* B/S */}
                 </>
               )}
@@ -832,7 +920,7 @@ export function OptionChainModal() {
             <thead className="sticky top-0 z-10">
               <tr className="bg-fw-surface">
                 {viewMode !== 'pe' && (
-                  <th colSpan={5} className="py-2 text-center text-[11px] font-bold text-emerald-400 uppercase tracking-widest border-b border-emerald-500/20 bg-emerald-500/[0.04]">
+                  <th colSpan={6} className="py-2 text-center text-[11px] font-bold text-emerald-400 uppercase tracking-widest border-b border-emerald-500/20 bg-emerald-500/[0.04]">
                     CALLS
                   </th>
                 )}
@@ -840,7 +928,7 @@ export function OptionChainModal() {
                   STRIKE
                 </th>
                 {viewMode !== 'ce' && (
-                  <th colSpan={5} className="py-2 text-center text-[11px] font-bold text-red-400 uppercase tracking-widest border-b border-red-500/20 bg-red-500/[0.04]">
+                  <th colSpan={6} className="py-2 text-center text-[11px] font-bold text-red-400 uppercase tracking-widest border-b border-red-500/20 bg-red-500/[0.04]">
                     PUTS
                   </th>
                 )}
@@ -852,6 +940,7 @@ export function OptionChainModal() {
                     <th className="px-2 py-1.5 text-right truncate">OI</th>
                     <th className="px-2 py-1.5 text-right truncate">OI Chg</th>
                     <th className="px-2 py-1.5 text-right truncate">Vol</th>
+                    <th className="px-2 py-1.5 text-right truncate">IV</th>
                     <th className="px-2 py-1.5 text-right truncate">LTP</th>
                   </>
                 )}
@@ -859,6 +948,7 @@ export function OptionChainModal() {
                 {viewMode !== 'ce' && (
                   <>
                     <th className="px-2 py-1.5 text-left truncate">LTP</th>
+                    <th className="px-2 py-1.5 text-left truncate">IV</th>
                     <th className="px-2 py-1.5 text-left truncate">Vol</th>
                     <th className="px-2 py-1.5 text-left truncate">OI Chg</th>
                     <th className="px-2 py-1.5 text-left truncate">OI</th>
@@ -869,159 +959,34 @@ export function OptionChainModal() {
             </thead>
             <tbody>
               {filteredChain.map((e) => {
-                const isAtm = e.strike === atmStrike;
+                const isAtm     = e.strike === atmStrike;
                 const isItmCall = spotPrice > 0 && e.strike < spotPrice;
                 const isItmPut  = spotPrice > 0 && e.strike > spotPrice;
-                const isSelCE = selectedContract?.strike === e.strike && selectedContract?.optionType === 'CE';
-                const isSelPE = selectedContract?.strike === e.strike && selectedContract?.optionType === 'PE';
-
-                const callOiPct = maxOi > 0 ? (e.callOi / maxOi) * 100 : 0;
-                const putOiPct  = maxOi > 0 ? (e.putOi / maxOi) * 100 : 0;
+                const isSelCE   = selectedContract?.strike === e.strike && selectedContract?.optionType === 'CE';
+                const isSelPE   = selectedContract?.strike === e.strike && selectedContract?.optionType === 'PE';
+                const callOiPct  = maxOi  > 0 ? (e.callOi     / maxOi)  * 100 : 0;
+                const putOiPct   = maxOi  > 0 ? (e.putOi      / maxOi)  * 100 : 0;
                 const callVolPct = maxVol > 0 ? (e.callVolume / maxVol) * 100 : 0;
-                const putVolPct  = maxVol > 0 ? (e.putVolume / maxVol) * 100 : 0;
-
-                const callOiChg = e.callOiChange || 0;
-                const putOiChg  = e.putOiChange  || 0;
-
+                const putVolPct  = maxVol > 0 ? (e.putVolume  / maxVol) * 100 : 0;
                 return (
-                  <tr
+                  <StrikeRow
                     key={e.strike}
-                    className={cn(
-                      'border-b border-fw-border/20 transition-colors group',
-                      isAtm
-                        ? 'bg-fw-accent/[0.08] border-y-2 border-fw-accent/50'
-                        : isItmCall && viewMode !== 'pe'
-                          ? 'bg-emerald-500/[0.04] hover:bg-emerald-500/[0.07]'
-                          : isItmPut && viewMode !== 'ce'
-                            ? 'bg-red-500/[0.04] hover:bg-red-500/[0.07]'
-                            : 'hover:bg-fw-hover/30',
-                    )}
-                  >
-                    {/* ── CALL SIDE ── */}
-                    {viewMode !== 'pe' && (
-                      <>
-                        {/* B/S */}
-                        <td className="px-1 py-[6px] text-center">
-                          <div className="flex gap-0.5 justify-center">
-                            <button
-                              onClick={() => { handleStrikeClick(e.strike, 'CE', e.callLtp, e.callToken); setOrderForm({ side: 'BUY' }); }}
-                              className="text-[9px] text-emerald-300 font-bold bg-emerald-700/30 hover:bg-emerald-600/50 px-1 py-0.5 rounded transition-colors leading-none"
-                            >B</button>
-                            <button
-                              onClick={() => { handleStrikeClick(e.strike, 'CE', e.callLtp, e.callToken); setOrderForm({ side: 'SELL' }); }}
-                              className="text-[9px] text-red-300 font-bold bg-red-700/30 hover:bg-red-600/50 px-1 py-0.5 rounded transition-colors leading-none"
-                            >S</button>
-                          </div>
-                        </td>
-                        {/* OI with bar — green gradient always visible */}
-                        <td
-                          className="px-2 py-[6px] text-right font-mono tabular-nums relative overflow-hidden"
-                          style={{
-                            background: callOiPct > 0
-                              ? `linear-gradient(to right, transparent ${100 - callOiPct}%, rgba(0,220,150,0.22) ${100 - callOiPct}%)`
-                              : undefined,
-                          }}
-                        >
-                          <span className={cn('relative z-10 truncate block', isSelCE ? 'text-fw-accent' : 'text-fw-text')}>{formatNumber(e.callOi || 0)}</span>
-                        </td>
-                        {/* OI Change */}
-                        <td className="px-2 py-[6px] text-right font-mono tabular-nums">
-                          <span className={cn('font-semibold truncate block', callOiChg > 0 ? 'text-emerald-400' : callOiChg < 0 ? 'text-red-400' : 'text-fw-text-muted')}>
-                            {callOiChg !== 0 ? (callOiChg > 0 ? '+' : '') + callOiChg.toFixed(2) + '%' : '—'}
-                          </span>
-                        </td>
-                        {/* Volume — green bar */}
-                        <td
-                          className="px-2 py-[6px] text-right font-mono tabular-nums text-fw-text-secondary truncate"
-                          style={{
-                            background: callVolPct > 0
-                              ? `linear-gradient(to right, transparent ${100 - callVolPct}%, rgba(0,220,150,0.13) ${100 - callVolPct}%)`
-                              : undefined,
-                          }}
-                        >
-                          {formatNumber(e.callVolume || 0)}
-                        </td>
-                        {/* CALL LTP — green */}
-                        <td
-                          className={cn(
-                            'px-2 py-[6px] text-right font-mono tabular-nums font-bold cursor-pointer hover:underline truncate',
-                            isSelCE ? 'text-fw-accent' : e.callLtp > 0 ? 'text-emerald-400' : 'text-fw-text-muted',
-                          )}
-                          onClick={() => handleStrikeClick(e.strike, 'CE', e.callLtp, e.callToken)}
-                        >
-                          {e.callLtp > 0 ? formatPrice(e.callLtp) : '—'}
-                        </td>
-                      </>
-                    )}
-
-                    {/* ── STRIKE CENTER ── */}
-                    <td className={cn(
-                      'px-1 py-[6px] text-center font-mono font-bold tabular-nums border-x border-fw-border/40 bg-fw-surface-2 whitespace-nowrap overflow-hidden',
-                      isAtm ? 'text-fw-accent text-[13px]' : 'text-fw-text text-[12px]',
-                    )}>
-                      {isAtm && (
-                        <div className="text-[8px] font-extrabold tracking-widest text-fw-accent/80 uppercase leading-none mb-[2px]">ATM</div>
-                      )}
-                      {formatPrice(e.strike)}
-                    </td>
-
-                    {/* ── PUT SIDE ── */}
-                    {viewMode !== 'ce' && (
-                      <>
-                        {/* PUT LTP — red */}
-                        <td
-                          className={cn(
-                            'px-2 py-[6px] text-left font-mono tabular-nums font-bold cursor-pointer hover:underline truncate',
-                            isSelPE ? 'text-fw-accent' : e.putLtp > 0 ? 'text-red-400' : 'text-fw-text-muted',
-                          )}
-                          onClick={() => handleStrikeClick(e.strike, 'PE', e.putLtp, e.putToken)}
-                        >
-                          {e.putLtp > 0 ? formatPrice(e.putLtp) : '—'}
-                        </td>
-                        {/* Volume — red bar */}
-                        <td
-                          className="px-2 py-[6px] text-left font-mono tabular-nums text-fw-text-secondary truncate"
-                          style={{
-                            background: putVolPct > 0
-                              ? `linear-gradient(to left, transparent ${100 - putVolPct}%, rgba(255,70,90,0.13) ${100 - putVolPct}%)`
-                              : undefined,
-                          }}
-                        >
-                          {formatNumber(e.putVolume || 0)}
-                        </td>
-                        {/* OI Change */}
-                        <td className="px-2 py-[6px] text-left font-mono tabular-nums">
-                          <span className={cn('font-semibold truncate block', putOiChg > 0 ? 'text-emerald-400' : putOiChg < 0 ? 'text-red-400' : 'text-fw-text-muted')}>
-                            {putOiChg !== 0 ? (putOiChg > 0 ? '+' : '') + putOiChg.toFixed(2) + '%' : '—'}
-                          </span>
-                        </td>
-                        {/* OI with bar — red gradient always visible */}
-                        <td
-                          className="px-2 py-[6px] text-left font-mono tabular-nums relative overflow-hidden"
-                          style={{
-                            background: putOiPct > 0
-                              ? `linear-gradient(to left, transparent ${100 - putOiPct}%, rgba(255,70,90,0.22) ${100 - putOiPct}%)`
-                              : undefined,
-                          }}
-                        >
-                          <span className={cn('relative z-10 truncate block', isSelPE ? 'text-fw-accent' : 'text-fw-text')}>{formatNumber(e.putOi || 0)}</span>
-                        </td>
-                        {/* B/S */}
-                        <td className="px-1 py-[6px] text-center">
-                          <div className="flex gap-0.5 justify-center">
-                            <button
-                              onClick={() => { handleStrikeClick(e.strike, 'PE', e.putLtp, e.putToken); setOrderForm({ side: 'BUY' }); }}
-                              className="text-[9px] text-emerald-300 font-bold bg-emerald-700/30 hover:bg-emerald-600/50 px-1 py-0.5 rounded transition-colors leading-none"
-                            >B</button>
-                            <button
-                              onClick={() => { handleStrikeClick(e.strike, 'PE', e.putLtp, e.putToken); setOrderForm({ side: 'SELL' }); }}
-                              className="text-[9px] text-red-300 font-bold bg-red-700/30 hover:bg-red-600/50 px-1 py-0.5 rounded transition-colors leading-none"
-                            >S</button>
-                          </div>
-                        </td>
-                      </>
-                    )}
-                  </tr>
+                    e={e}
+                    isAtm={isAtm}
+                    isItmCall={isItmCall}
+                    isItmPut={isItmPut}
+                    isSelCE={isSelCE}
+                    isSelPE={isSelPE}
+                    callOiPct={callOiPct}
+                    putOiPct={putOiPct}
+                    callVolPct={callVolPct}
+                    putVolPct={putVolPct}
+                    viewMode={viewMode}
+                    onStrikeClick={handleStrikeClick}
+                    setOrderForm={setOrderForm}
+                    callIv={workerIv.get(`${e.strike}:CE`) ?? 0}
+                    putIv={workerIv.get(`${e.strike}:PE`) ?? 0}
+                  />
                 );
               })}
             </tbody>

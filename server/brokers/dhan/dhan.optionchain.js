@@ -96,7 +96,8 @@ export class DhanOptionChainService {
     if (!this.auth.isTokenValid) {
       const refreshed = await this.auth.refreshToken();
       if (!refreshed && !this.auth.isTokenValid) {
-        throw new Error('[DhanOC] No valid token');
+        console.warn('[DhanOC] No valid token — returning empty expiries');
+        return [];
       }
     }
 
@@ -107,26 +108,24 @@ export class DhanOptionChainService {
       return [];
     }
 
-    const ocHeaders = {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      'access-token': this.auth.accessToken,
-      'client-id': this.auth.clientId,
-      'dhanClientId': this.auth.clientId,
-    };
+    try {
+      const resp = await axios.post(
+        `${DHAN_API_BASE}/optionchain/expirylist`,
+        // parseInt guard: Dhan rejects the request if UnderlyingScrip is a float or string
+        { UnderlyingScrip: parseInt(entry.scrip, 10), UnderlyingSeg: entry.seg },
+        { httpsAgent: IPV4_AGENT, timeout: 8000, headers: this.auth.getHeaders() }
+      );
 
-    const resp = await axios.post(
-      `${DHAN_API_BASE}/optionchain/expirylist`,
-      { UnderlyingScrip: entry.scrip, UnderlyingSeg: entry.seg },
-      { httpsAgent: IPV4_AGENT, timeout: 8000, headers: ocHeaders }
-    );
-
-    const data = resp.data?.data;
-    if (Array.isArray(data) && data.length > 0) {
-      console.log(`[DhanOC] Expiries for ${sym}: ${data.length} dates`);
-      return data; // Already ISO YYYY-MM-DD strings
+      const data = resp.data?.data;
+      if (Array.isArray(data) && data.length > 0) {
+        console.log(`[DhanOC] Expiries for ${sym}: ${data.length} dates`);
+        return data; // Already ISO YYYY-MM-DD strings
+      }
+      return [];
+    } catch (err) {
+      console.error(`[DhanOC] getExpiries error for ${sym}:`, err.response?.data || err.message);
+      return [];
     }
-    return [];
   }
 
   /**
@@ -137,7 +136,8 @@ export class DhanOptionChainService {
     if (!this.auth.isTokenValid) {
       const refreshed = await this.auth.refreshToken();
       if (!refreshed && !this.auth.isTokenValid) {
-        throw new Error('[DhanOC] No valid token');
+        console.warn('[DhanOC] No valid token — returning empty chain');
+        return [];
       }
     }
 
@@ -166,7 +166,8 @@ export class DhanOptionChainService {
       })
       .catch(err => {
         this._loading.delete(cacheKey);
-        throw err;
+        console.error(`[DhanOC] getOptionChain error for ${sym}/${expiry}:`, err.response?.data || err.message);
+        return []; // Return empty so the route falls back to Angel One
       });
 
     this._loading.set(cacheKey, promise);
@@ -215,21 +216,13 @@ export class DhanOptionChainService {
     const normalizedExpiry = this._normalizeExpiry(expiry);
 
     const payload = {
-      UnderlyingScrip: entry.scrip,
+      // parseInt guard: Dhan v2 API rejects UnderlyingScrip if it arrives as a float/string
+      UnderlyingScrip: parseInt(entry.scrip, 10),
       UnderlyingSeg: entry.seg,
       Expiry: normalizedExpiry,
     };
 
     console.log(`[DhanOC] Fetching chain: ${symbol} seg=${entry.seg} Expiry=${normalizedExpiry}`);
-
-    // Option Chain endpoint needs specific header set — different from other endpoints
-    const ocHeaders = {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      'access-token': this.auth.accessToken,
-      'client-id': this.auth.clientId,
-      'dhanClientId': this.auth.clientId,
-    };
 
     // Retry with backoff on 429 (Dhan rate limit: 1 unique req per 3s)
     const MAX_RETRIES = 2;
@@ -238,7 +231,8 @@ export class DhanOptionChainService {
         const resp = await axios.post(`${DHAN_API_BASE}/optionchain`, payload, {
           httpsAgent: IPV4_AGENT,
           timeout: 12000,
-          headers: ocHeaders,
+          // Use auth.getHeaders() so it always reads the freshest token from process.env
+          headers: this.auth.getHeaders(),
         });
 
         const data = resp.data?.data || resp.data;
@@ -272,6 +266,13 @@ export class DhanOptionChainService {
 
   /**
    * Parse Dhan 'oc' map format: { oc: { "24000": { ce: {...}, pe: {...} }, ... } }
+   *
+   * Field resolution order (most-specific first, then fallbacks):
+   *   token:     security_id → securityId → token
+   *   symbol:    tradingSymbol → trading_symbol
+   *   ltp:       last_price → ltp
+   *   oi_change: computed from (oi - previous_oi) if present, else oi_change field
+   *   greeks:    nested greeks object (greeks.delta) first, then flat (delta) fallback
    */
   _parseOCMap(data) {
     const oc = data.oc || {};
@@ -281,32 +282,46 @@ export class DhanOptionChainService {
       if (!strike) continue;
       const ce = sides.ce || {};
       const pe = sides.pe || {};
+
+      // OI change: prefer computed delta over stale oi_change field
+      const ceOiChange = ce.previous_oi != null
+        ? parseInt(ce.oi || 0) - parseInt(ce.previous_oi || 0)
+        : parseInt(ce.oi_change || 0);
+      const peOiChange = pe.previous_oi != null
+        ? parseInt(pe.oi || 0) - parseInt(pe.previous_oi || 0)
+        : parseInt(pe.oi_change || 0);
+
       chain.push({
         strike,
-        callToken: String(ce.security_id || ce.securityId || ''),
-        callLtp: parseFloat(ce.ltp || ce.last_price || 0),
-        callVolume: parseInt(ce.volume || 0),
-        callOi: parseInt(ce.oi || ce.open_interest || 0),
-        callOiChange: parseInt(ce.oi_change || 0),
+        // ── Call side ──────────────────────────────────────────────────────
+        callToken:    String(ce.security_id  || ce.securityId  || ce.token || ''),
+        callSymbol:   ce.tradingSymbol || ce.trading_symbol || '',
+        callLtp:      parseFloat(ce.last_price || ce.ltp || 0),
+        callVolume:   parseInt(ce.volume || 0),
+        callOi:       parseInt(ce.oi || ce.open_interest || 0),
+        callOiChange: ceOiChange,
         callBidPrice: parseFloat(ce.bid || ce.bid_price || 0),
         callAskPrice: parseFloat(ce.ask || ce.ask_price || 0),
-        callIv: parseFloat(ce.iv || ce.implied_volatility || 0),
-        callDelta: parseFloat(ce.delta || 0),
-        callGamma: parseFloat(ce.gamma || 0),
-        callTheta: parseFloat(ce.theta || 0),
-        callVega: parseFloat(ce.vega || 0),
-        putToken: String(pe.security_id || pe.securityId || ''),
-        putLtp: parseFloat(pe.ltp || pe.last_price || 0),
-        putVolume: parseInt(pe.volume || 0),
-        putOi: parseInt(pe.oi || pe.open_interest || 0),
-        putOiChange: parseInt(pe.oi_change || 0),
+        callIv:       parseFloat(ce.implied_volatility || ce.iv || 0),
+        // greeks nested object first, then flat fields (Dhan returns both shapes)
+        callDelta:    parseFloat(ce.greeks?.delta  ?? ce.delta  ?? 0),
+        callGamma:    parseFloat(ce.greeks?.gamma  ?? ce.gamma  ?? 0),
+        callTheta:    parseFloat(ce.greeks?.theta  ?? ce.theta  ?? 0),
+        callVega:     parseFloat(ce.greeks?.vega   ?? ce.vega   ?? 0),
+        // ── Put side ───────────────────────────────────────────────────────
+        putToken:    String(pe.security_id  || pe.securityId  || pe.token || ''),
+        putSymbol:   pe.tradingSymbol || pe.trading_symbol || '',
+        putLtp:      parseFloat(pe.last_price || pe.ltp || 0),
+        putVolume:   parseInt(pe.volume || 0),
+        putOi:       parseInt(pe.oi || pe.open_interest || 0),
+        putOiChange: peOiChange,
         putBidPrice: parseFloat(pe.bid || pe.bid_price || 0),
         putAskPrice: parseFloat(pe.ask || pe.ask_price || 0),
-        putIv: parseFloat(pe.iv || pe.implied_volatility || 0),
-        putDelta: parseFloat(pe.delta || 0),
-        putGamma: parseFloat(pe.gamma || 0),
-        putTheta: parseFloat(pe.theta || 0),
-        putVega: parseFloat(pe.vega || 0),
+        putIv:       parseFloat(pe.implied_volatility || pe.iv || 0),
+        putDelta:    parseFloat(pe.greeks?.delta  ?? pe.delta  ?? 0),
+        putGamma:    parseFloat(pe.greeks?.gamma  ?? pe.gamma  ?? 0),
+        putTheta:    parseFloat(pe.greeks?.theta  ?? pe.theta  ?? 0),
+        putVega:     parseFloat(pe.greeks?.vega   ?? pe.vega   ?? 0),
       });
     }
     chain.sort((a, b) => a.strike - b.strike);
