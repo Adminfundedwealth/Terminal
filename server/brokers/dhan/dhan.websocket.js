@@ -195,43 +195,62 @@ export class DhanWebSocketFeed extends EventEmitter {
 
   /**
    * Parse Dhan binary WebSocket packet.
-   * 
-   * Ticker (code 15): 32 bytes per instrument
-   *   Bytes 0-1: Response code
-   *   Bytes 2-3: Exchange segment
-   *   Bytes 4-7: Security ID
-   *   Bytes 8-11: LTP (float)
-   *   Bytes 12-15: Close (previous day close)
-   * 
-   * Quote (code 17): 56 bytes per instrument  
-   *   Adds: Open, High, Low, Volume, Avg Price, OI
+   *
+   * Dhan v2 WS binary packet layout (verified from Dhan docs + live capture):
+   *
+   * Header — common to all response types:
+   *   Bytes 0-1 : Response Code     (uint16 LE)  — 15=Ticker, 17=Quote, 21=Depth
+   *   Bytes 2-3 : Exchange Segment  (uint16 LE)
+   *   Bytes 4-7 : Security ID       (int32  LE)
+   *
+   * Ticker (code 15) — 21 bytes:
+   *   Bytes 8-11  : LTP             (float32 LE)
+   *   Bytes 12-15 : Close (prev)    (float32 LE)
+   *   Bytes 16-19 : Packet Time     (int32 LE, unix seconds)
+   *
+   * Quote (code 17) — 54 bytes:
+   *   Bytes 8-11  : LTP             (float32 LE)
+   *   Bytes 12-15 : Close           (float32 LE)
+   *   Bytes 16-19 : Open            (float32 LE)
+   *   Bytes 20-23 : High            (float32 LE)
+   *   Bytes 24-27 : Low             (float32 LE)
+   *   Bytes 28-35 : Volume          (int64  LE — use readBigInt64LE, or two int32)
+   *   Bytes 36-43 : Avg Price       (float64 LE)
+   *   Bytes 44-47 : OI              (int32 LE)
+   *   Bytes 48-51 : Prev OI         (int32 LE)
+   *   Bytes 52-53 : Packet Time     (uint16 LE, delta seconds)
+   *
+   * Depth (code 21) — variable length:
+   *   Header (8 bytes as above) +
+   *   5 × Bid levels + 5 × Ask levels:
+   *   Each level: qty(4) + orders(2) + price(4) = 10 bytes
+   *   Total depth data: 10 × 10 = 100 bytes → packet ≥ 108 bytes
+   *
+   * NOTE: exchange_segment field is uint16 (2 bytes), NOT uint8.
+   * Previous code read it as uint8(1 byte) and shifted securityId to offset 3 —
+   * this caused securityId to read into the wrong bytes, producing wrong token IDs.
    */
   _parseBinaryPacket(buf) {
     if (buf.length < 8) return;
 
     const responseCode = buf.readUInt16LE(0);
+    // exchangeSeg = buf.readUInt16LE(2) — read but currently unused (segment tracked via subscription map)
+    const securityId  = buf.readInt32LE(4);  // correct offset: after 2-byte code + 2-byte segment
 
     if (responseCode === 15) {
-      // Ticker packet
-      this._parseTickerPacket(buf);
+      this._parseTickerPacket(buf, securityId);
     } else if (responseCode === 17) {
-      // Quote packet
-      this._parseQuotePacket(buf);
+      this._parseQuotePacket(buf, securityId);
     } else if (responseCode === 21) {
-      // Depth packet
-      this._parseDepthPacket(buf);
+      this._parseDepthPacket(buf, securityId);
     }
   }
 
-  _parseTickerPacket(buf) {
-    // Ticker: response_code(2) + exchange_segment(1) + security_id(4) + ltp(4) + close(4) = ~15+ bytes
-    if (buf.length < 15) return;
-
+  _parseTickerPacket(buf, securityId) {
+    if (buf.length < 16) return;
     try {
-      const exchangeSeg = buf.readUInt8(2);
-      const securityId = buf.readInt32LE(3);
-      const ltp = buf.readFloatLE(7) || buf.readInt32LE(7) / 100;
-
+      const ltp = buf.readFloatLE(8);
+      if (!ltp || ltp <= 0) return;
       this.emit('tick', {
         token: String(securityId),
         ltp,
@@ -240,20 +259,20 @@ export class DhanWebSocketFeed extends EventEmitter {
     } catch (_) {}
   }
 
-  _parseQuotePacket(buf) {
-    // Quote has more fields — LTP, Open, High, Low, Close, Volume
-    if (buf.length < 30) return;
-
+  _parseQuotePacket(buf, securityId) {
+    if (buf.length < 32) return;
     try {
-      const exchangeSeg = buf.readUInt8(2);
-      const securityId = buf.readInt32LE(3);
-      const ltp = buf.readFloatLE(7) || buf.readInt32LE(7) / 100;
-      const open = buf.readFloatLE(11) || 0;
-      const high = buf.readFloatLE(15) || 0;
-      const low = buf.readFloatLE(19) || 0;
-      const close = buf.readFloatLE(23) || 0;
-      const volume = buf.readInt32LE(27) || 0;
+      const ltp    = buf.readFloatLE(8);
+      const close  = buf.readFloatLE(12);
+      const open   = buf.readFloatLE(16);
+      const high   = buf.readFloatLE(20);
+      const low    = buf.readFloatLE(24);
+      // Volume is int64 LE at offset 28 — read as two 32-bit halves safely
+      const volLow  = buf.readUInt32LE(28);
+      const volHigh = buf.length >= 36 ? buf.readUInt32LE(32) : 0;
+      const volume  = volHigh * 0x100000000 + volLow; // safe for < 2^53
 
+      if (!ltp || ltp <= 0) return;
       this.emit('tick', {
         token: String(securityId),
         ltp, open, high, low, close, volume,
@@ -262,12 +281,44 @@ export class DhanWebSocketFeed extends EventEmitter {
     } catch (_) {}
   }
 
-  _parseDepthPacket(buf) {
-    // Depth packets are larger — emit raw for now
-    if (buf.length < 10) return;
+  _parseDepthPacket(buf, securityId) {
+    // Depth packet: header (8) + 5 bid levels + 5 ask levels
+    // Each level = qty(4 LE) + orders(2 LE) + price(4 LE) = 10 bytes
+    // Total minimum: 8 + 100 = 108 bytes
+    if (buf.length < 108) return;
     try {
-      const securityId = buf.readInt32LE(3);
-      this.emit('depth', { token: String(securityId), raw: buf });
+      const levels = 5;
+      const LEVEL_SIZE = 10;
+      const BID_OFFSET = 8;
+      const ASK_OFFSET = BID_OFFSET + levels * LEVEL_SIZE;
+
+      const bids = [];
+      const asks = [];
+
+      for (let i = 0; i < levels; i++) {
+        const bidOff = BID_OFFSET + i * LEVEL_SIZE;
+        const bidQty    = buf.readInt32LE(bidOff);
+        const bidOrders = buf.readUInt16LE(bidOff + 4);
+        const bidPrice  = buf.readFloatLE(bidOff + 6);
+        if (bidPrice > 0) bids.push({ price: bidPrice, qty: bidQty, orders: bidOrders });
+
+        const askOff = ASK_OFFSET + i * LEVEL_SIZE;
+        const askQty    = buf.readInt32LE(askOff);
+        const askOrders = buf.readUInt16LE(askOff + 4);
+        const askPrice  = buf.readFloatLE(askOff + 6);
+        if (askPrice > 0) asks.push({ price: askPrice, qty: askQty, orders: askOrders });
+      }
+
+      const totalBuyQty  = bids.reduce((s, b) => s + b.qty, 0);
+      const totalSellQty = asks.reduce((s, a) => s + a.qty, 0);
+
+      this.emit('depth', {
+        token: String(securityId),
+        bids,
+        asks,
+        totalBuyQty,
+        totalSellQty,
+      });
     } catch (_) {}
   }
 

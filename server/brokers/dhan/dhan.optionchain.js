@@ -86,6 +86,15 @@ export class DhanOptionChainService {
     this._cache = new Map();
     this._cacheTTL = 15000; // 15s
     this._loading = new Map();
+    this._marketDataEngine = null; // injected after construction for LTP enrichment
+  }
+
+  /**
+   * Inject MarketDataEngine so the option chain can enrich LTPs from the
+   * live quote cache when Dhan returns 0 (market closed / past expiry).
+   */
+  setMarketDataEngine(mde) {
+    this._marketDataEngine = mde;
   }
 
   /**
@@ -177,11 +186,13 @@ export class DhanOptionChainService {
   /**
    * Fetch chain with auto-fallback: if the requested expiry is rejected,
    * try the next available expiry from the expiry list.
+   * After parsing, enrich any zero-LTP entries from the MarketDataEngine
+   * live quote cache (handles market-closed / post-expiry scenarios).
    */
   async _fetchChainWithFallback(entry, symbol, expiry) {
+    let chain = [];
     try {
-      const chain = await this._fetchChain(entry, symbol, expiry);
-      if (chain.length > 0) return chain;
+      chain = await this._fetchChain(entry, symbol, expiry);
     } catch (err) {
       const errMsg = JSON.stringify(err.response?.data || '');
       const isInvalidExpiry = errMsg.includes('811') || errMsg.includes('Invalid Expiry');
@@ -191,24 +202,47 @@ export class DhanOptionChainService {
         try {
           const expiries = await this.getExpiries(symbol);
           if (expiries && expiries.length > 0) {
-            // Find the next expiry that is NOT today (today's expiry may be expired post-settlement)
             const today = new Date().toISOString().slice(0, 10);
             const validExpiry = expiries.find(e => e > today) || expiries[0];
 
             if (validExpiry && validExpiry !== expiry) {
               console.log(`[DhanOC] Retrying with fallback expiry: ${validExpiry}`);
-              // Wait for rate limit
               await new Promise(r => setTimeout(r, 3500));
-              return await this._fetchChain(entry, symbol, validExpiry);
+              chain = await this._fetchChain(entry, symbol, validExpiry);
             }
           }
         } catch (fallbackErr) {
           console.error(`[DhanOC] Fallback expiry resolution failed:`, fallbackErr.message);
         }
       }
-      throw err;
+      if (chain.length === 0) throw err;
     }
-    return [];
+
+    // ── Enrich LTPs from MarketDataEngine quote cache ──────────────────────
+    // Dhan REST returns last_price=0 after market close and for expired contracts.
+    // If the chain has valid security IDs (callToken/putToken), look them up in
+    // the live quote cache so the UI shows real prices instead of all-zero.
+    if (chain.length > 0 && this._marketDataEngine) {
+      const zeroLtpEntries = chain.filter(e => e.callLtp === 0 || e.putLtp === 0);
+      if (zeroLtpEntries.length > 0) {
+        let enriched = 0;
+        for (const entry of chain) {
+          if (entry.callLtp === 0 && entry.callToken) {
+            const q = this._marketDataEngine.getQuote(entry.callToken);
+            if (q?.ltp > 0) { entry.callLtp = q.ltp; enriched++; }
+          }
+          if (entry.putLtp === 0 && entry.putToken) {
+            const q = this._marketDataEngine.getQuote(entry.putToken);
+            if (q?.ltp > 0) { entry.putLtp = q.ltp; enriched++; }
+          }
+        }
+        if (enriched > 0) {
+          console.log(`[DhanOC] Enriched ${enriched} zero-LTP entries from MarketDataEngine cache`);
+        }
+      }
+    }
+
+    return chain;
   }
 
   async _fetchChain(entry, symbol, expiry) {

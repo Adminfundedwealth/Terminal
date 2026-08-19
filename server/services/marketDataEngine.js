@@ -220,23 +220,57 @@ export class MarketDataEngine {
       if (activeTokens.length === 0) return;
 
       try {
-        const nseTokens = activeTokens.filter(t => /^\d+$/.test(t)).slice(0, 100);
-        if (nseTokens.length === 0) return;
+        // Only poll numeric tokens (skip placeholder strings like 'NF_FUT')
+        const numericTokens = activeTokens.filter(t => /^\d+$/.test(t));
+        if (numericTokens.length === 0) return;
 
-        const quotes = await this._dhanAdapter.getQuotes(nseTokens);
-        if (!quotes || quotes.length === 0) return;
+        // Build segment-aware token list by reading the cached quote metadata.
+        // Without this, every token defaults to NSE_EQ in getQuotes() and
+        // MCX/IDX/CDS tokens return nothing from Dhan.
+        const SEGMENT_MAP = {
+          'NSE': 'NSE_EQ', 'BSE': 'BSE_EQ',
+          'NFO': 'NSE_FNO', 'BFO': 'BSE_FNO',
+          'MCX': 'MCX_COMM', 'CDS': 'CUR',
+          // Already Dhan-format keys — pass through
+          'NSE_EQ': 'NSE_EQ', 'BSE_EQ': 'BSE_EQ',
+          'NSE_FNO': 'NSE_FNO', 'BSE_FNO': 'BSE_FNO',
+          'MCX_COMM': 'MCX_COMM', 'IDX_I': 'IDX_I',
+          'CUR': 'CUR', 'NSE_CURRENCY': 'CUR',
+        };
 
-        for (const q of quotes) {
-          if (q.ltp && q.ltp > 0 && q.token) {
-            const existing = this.quotes.get(q.token);
-            this.pushQuote(q.token, {
-              ...existing,
-              ltp: q.ltp,
-              volume: q.volume || existing?.volume,
-              oi: q.oi || existing?.oi,
-              timestamp: Date.now(),
-            });
-          }
+        // Group tokens by their known Dhan segment (from cached quote metadata)
+        // so getQuotes() receives pre-segmented batches and avoids the NSE_EQ default.
+        const bySegment = {};
+        for (const token of numericTokens) {
+          const cached = this.quotes.get(token);
+          const rawSeg = cached?.segment || cached?.exchange || 'NSE_EQ';
+          const dhanSeg = SEGMENT_MAP[rawSeg] || 'NSE_EQ';
+          if (!bySegment[dhanSeg]) bySegment[dhanSeg] = [];
+          bySegment[dhanSeg].push(token);
+        }
+
+        // Poll each segment separately — Dhan /marketfeed/ltp accepts one segment key per request
+        for (const [segment, tokens] of Object.entries(bySegment)) {
+          const batch = tokens.slice(0, 100); // Dhan limit per request
+          try {
+            // Pass as { token, segment } pairs so getQuotes() can skip scrip master lookup
+            const instrumentList = batch.map(t => ({ token: t, segment }));
+            const quotes = await this._dhanAdapter.getQuotes(instrumentList);
+            if (!quotes || quotes.length === 0) continue;
+
+            for (const q of quotes) {
+              if (q.ltp && q.ltp > 0 && q.token) {
+                const existing = this.quotes.get(q.token);
+                this.pushQuote(q.token, {
+                  ...existing,
+                  ltp: q.ltp,
+                  volume: q.volume || existing?.volume,
+                  oi: q.oi || existing?.oi,
+                  timestamp: Date.now(),
+                });
+              }
+            }
+          } catch (_) {} // Silent — don't let one segment's failure stop others
         }
       } catch (_) {}
     }, 3000); // Every 3 seconds — fast enough for live trading

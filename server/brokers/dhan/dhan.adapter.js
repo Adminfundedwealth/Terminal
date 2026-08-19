@@ -135,7 +135,9 @@ export class DhanAdapter {
 
   /**
    * Get real-time quotes for multiple tokens.
-   * Uses scrip master to resolve correct Dhan security IDs.
+   * Accepts either:
+   *   - string[]                           — plain token IDs (segment resolved via scrip master)
+   *   - { token: string, segment: string }[] — pre-segmented (skips scrip master lookup)
    */
   async getQuotes(tokens) {
     if (!this.auth.isTokenValid) {
@@ -144,28 +146,38 @@ export class DhanAdapter {
 
     // Resolve tokens through historical service's scrip master
     const resolvedTokens = [];
-    for (const token of tokens) {
+    for (const input of tokens) {
+      // Support both plain string and { token, segment } object
+      const rawToken   = typeof input === 'string' ? input : input.token;
+      const hintSeg    = typeof input === 'object'  ? input.segment : null;
+
+      // If caller already provided a segment hint, use it directly — no scrip master needed
+      if (hintSeg) {
+        resolvedTokens.push({ original: rawToken, dhanId: rawToken, segment: hintSeg });
+        continue;
+      }
+
       // Use the historical service's resolve method if scrip master is loaded
       if (this.historical._scripMaster) {
-        const entry = this.historical._scripMaster.byId.get(token);
+        const entry = this.historical._scripMaster.byId.get(rawToken);
         if (entry) {
-          resolvedTokens.push({ original: token, dhanId: entry.securityId, segment: entry.segment });
+          resolvedTokens.push({ original: rawToken, dhanId: entry.securityId, segment: entry.segment });
           continue;
         }
         // Symbol-based lookup
         if (this.historical._marketDataEngine) {
-          const quote = this.historical._marketDataEngine.getQuote(token);
+          const quote = this.historical._marketDataEngine.getQuote(rawToken);
           if (quote?.symbol) {
             const symEntry = this.historical._scripMaster.bySymbol.get(`${quote.symbol}:E`);
             if (symEntry) {
-              resolvedTokens.push({ original: token, dhanId: symEntry.securityId, segment: symEntry.segment });
+              resolvedTokens.push({ original: rawToken, dhanId: symEntry.securityId, segment: symEntry.segment });
               continue;
             }
           }
         }
       }
-      // Default: use token as-is
-      resolvedTokens.push({ original: token, dhanId: token, segment: 'NSE_EQ' });
+      // Default: use token as-is with NSE_EQ (only safe for equity tokens)
+      resolvedTokens.push({ original: rawToken, dhanId: rawToken, segment: 'NSE_EQ' });
     }
 
     const results = [];

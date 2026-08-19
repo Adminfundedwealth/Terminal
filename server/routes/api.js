@@ -1295,6 +1295,22 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
           })).filter(e => e.strike > 0)
             .sort((a, b) => a.strike - b.strike);
 
+          // Enrich zero-LTP entries from live quote cache (market closed / past expiry)
+          let enrichCount = 0;
+          for (const e of normalized) {
+            if (e.callLtp === 0 && e.callToken) {
+              const q = marketDataEngine.getQuote(e.callToken);
+              if (q?.ltp > 0) { e.callLtp = q.ltp; enrichCount++; }
+            }
+            if (e.putLtp === 0 && e.putToken) {
+              const q = marketDataEngine.getQuote(e.putToken);
+              if (q?.ltp > 0) { e.putLtp = q.ltp; enrichCount++; }
+            }
+          }
+          if (enrichCount > 0) {
+            console.log(`[OptionChain] Enriched ${enrichCount} zero-LTP entries from quote cache`);
+          }
+
           console.log(`[OptionChain] Response via ${result.provider}: ${normalized.length} strikes`);
           return res.json(normalized);
         }

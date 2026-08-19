@@ -458,6 +458,12 @@ async function startup() {
   if (dhanAdapter) dhanAdapter.setMarketDataEngine(marketDataEngine);
   marketDataEngine.setLtpFallbacks(dhanAdapter, candleService);
 
+  // Wire MarketDataEngine into DhanOptionChainService for LTP enrichment
+  // (when Dhan REST returns 0 LTPs after market close, we fill from the live cache)
+  if (dhanAdapter?.optionChain) {
+    dhanAdapter.optionChain.setMarketDataEngine(marketDataEngine);
+  }
+
   // Pre-load Dhan scrip master in background (prevents 502 timeout on first MCX/CDS quote)
   if (dhanAdapter?.historical?._getScripMaster) {
     dhanAdapter.historical._getScripMaster()
@@ -741,14 +747,15 @@ async function connectAngelFeedForBroker() {
     angelFeed.onTokenRefresh(propagateToken);
     propagateToken(angelFeed.session);
 
-    // ── Wire Angel JWT into data services (candleService + optionChainService) ──
+    // ── Wire Angel JWT into data services (candleService + optionChainService + depthService) ──
     // This is CRITICAL: without this, historical chart fallback and option chain
     // fallback via Angel One both fail silently (jwtToken stays null).
     const wireDataServices = (session) => {
       if (!session?.jwtToken) return;
       candleService.setAuthToken(session.jwtToken);
       optionChainService.setAuthToken(session.jwtToken);
-      console.log('[AngelFeed] ✓ JWT wired into candleService + optionChainService for data fallback');
+      depthService.setAuthToken(session.jwtToken);
+      console.log('[AngelFeed] ✓ JWT wired into candleService + optionChainService + depthService for data fallback');
     };
     // Wire on connect + on every refresh
     wireDataServices(angelFeed.session);
@@ -761,6 +768,7 @@ async function connectAngelFeedForBroker() {
         if (tok) {
           candleService.setAuthToken(tok);
           optionChainService.setAuthToken(tok);
+          depthService.setAuthToken(tok);
         }
         return tok;
       } catch (e) {
@@ -770,6 +778,7 @@ async function connectAngelFeedForBroker() {
     };
     candleService.setRefreshCallback(refreshFn);
     optionChainService.setRefreshCallback(refreshFn);
+    depthService.setRefreshCallback(refreshFn);
 
     // Register a shared AngelOneAdapter instance for order execution
     const { AngelOneAdapter } = await import('./brokers/angelone/angelone.adapter.js');

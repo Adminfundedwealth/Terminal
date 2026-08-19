@@ -211,7 +211,7 @@ const StrikeRow = memo(function StrikeRow({
       {viewMode !== 'pe' && (
         <>
           {/* B/S */}
-          <td className="px-1 py-[6px] text-center">
+          <td className="px-1 py-1 text-center">
             <div className="flex gap-0.5 justify-center">
               <button
                 onClick={() => { onStrikeClick(e.strike, 'CE', e.callLtp, e.callToken); setOrderForm({ side: 'BUY' }); }}
@@ -225,24 +225,24 @@ const StrikeRow = memo(function StrikeRow({
           </td>
           {/* OI with bar — green gradient */}
           <td
-            className="px-2 py-[6px] text-right font-mono tabular-nums relative overflow-hidden"
+            className="px-1 py-1 text-right font-mono tabular-nums relative overflow-hidden"
             style={{
               background: callOiPct > 0
                 ? `linear-gradient(to right, transparent ${100 - callOiPct}%, rgba(0,220,150,0.22) ${100 - callOiPct}%)`
                 : undefined,
             }}
           >
-            <span className={cn('relative z-10 truncate block', isSelCE ? 'text-fw-accent' : 'text-fw-text')}>{formatNumber(e.callOi || 0)}</span>
+            <span className={cn('relative z-10 block', isSelCE ? 'text-fw-accent' : 'text-fw-text')}>{formatNumber(e.callOi || 0)}</span>
           </td>
           {/* OI Change */}
-          <td className="px-2 py-[6px] text-right font-mono tabular-nums">
-            <span className={cn('font-semibold truncate block', callOiChg > 0 ? 'text-emerald-400' : callOiChg < 0 ? 'text-red-400' : 'text-fw-text-muted')}>
-              {callOiChg !== 0 ? (callOiChg > 0 ? '+' : '') + callOiChg.toFixed(2) + '%' : '—'}
+          <td className="px-1 py-1 text-right font-mono tabular-nums">
+            <span className={cn('font-semibold block', callOiChg > 0 ? 'text-emerald-400' : callOiChg < 0 ? 'text-red-400' : 'text-fw-text-muted')}>
+              {callOiChg !== 0 ? (callOiChg > 0 ? '+' : '') + callOiChg.toFixed(1) + '%' : '—'}
             </span>
           </td>
           {/* Volume — green bar */}
           <td
-            className="px-2 py-[6px] text-right font-mono tabular-nums text-fw-text-secondary truncate"
+            className="px-1 py-1 text-right font-mono tabular-nums text-fw-text-secondary"
             style={{
               background: callVolPct > 0
                 ? `linear-gradient(to right, transparent ${100 - callVolPct}%, rgba(0,220,150,0.13) ${100 - callVolPct}%)`
@@ -252,13 +252,13 @@ const StrikeRow = memo(function StrikeRow({
             {formatNumber(e.callVolume || 0)}
           </td>
           {/* CALL IV */}
-          <td className="px-2 py-[6px] text-right font-mono tabular-nums text-fw-text-secondary truncate">
+          <td className="px-1 py-1 text-right font-mono tabular-nums text-fw-text-secondary">
             {displayCallIv > 0 ? displayCallIv.toFixed(1) + '%' : '—'}
           </td>
           {/* CALL LTP */}
           <td
             className={cn(
-              'px-2 py-[6px] text-right font-mono tabular-nums font-bold cursor-pointer hover:underline truncate',
+              'px-1 py-1 text-right font-mono tabular-nums font-bold cursor-pointer hover:underline',
               isSelCE ? 'text-fw-accent' : e.callLtp > 0 ? 'text-emerald-400' : 'text-fw-text-muted',
             )}
             onClick={() => onStrikeClick(e.strike, 'CE', e.callLtp, e.callToken)}
@@ -270,11 +270,11 @@ const StrikeRow = memo(function StrikeRow({
 
       {/* ── STRIKE CENTER ── */}
       <td className={cn(
-        'px-1 py-[6px] text-center font-mono font-bold tabular-nums border-x border-fw-border/40 bg-fw-surface-2 whitespace-nowrap overflow-hidden',
-        isAtm ? 'text-fw-accent text-[13px]' : 'text-fw-text text-[12px]',
+        'px-1 py-1 text-center font-mono font-bold tabular-nums border-x border-fw-border/40 bg-fw-surface-2 whitespace-nowrap overflow-hidden',
+        isAtm ? 'text-fw-accent text-[11px]' : 'text-fw-text text-[10px]',
       )}>
         {isAtm && (
-          <div className="text-[8px] font-extrabold tracking-widest text-fw-accent/80 uppercase leading-none mb-[2px]">ATM</div>
+          <div className="text-[7px] font-extrabold tracking-widest text-fw-accent/80 uppercase leading-none mb-[2px]">ATM</div>
         )}
         {formatPrice(e.strike)}
       </td>
@@ -285,7 +285,7 @@ const StrikeRow = memo(function StrikeRow({
           {/* PUT LTP */}
           <td
             className={cn(
-              'px-2 py-[6px] text-left font-mono tabular-nums font-bold cursor-pointer hover:underline truncate',
+              'px-1 py-1 text-left font-mono tabular-nums font-bold cursor-pointer hover:underline',
               isSelPE ? 'text-fw-accent' : e.putLtp > 0 ? 'text-red-400' : 'text-fw-text-muted',
             )}
             onClick={() => onStrikeClick(e.strike, 'PE', e.putLtp, e.putToken)}
@@ -293,12 +293,12 @@ const StrikeRow = memo(function StrikeRow({
             {e.putLtp > 0 ? formatPrice(e.putLtp) : '—'}
           </td>
           {/* PUT IV */}
-          <td className="px-2 py-[6px] text-left font-mono tabular-nums text-fw-text-secondary truncate">
+          <td className="px-1 py-1 text-left font-mono tabular-nums text-fw-text-secondary">
             {displayPutIv > 0 ? displayPutIv.toFixed(1) + '%' : '—'}
           </td>
           {/* Volume — red bar */}
           <td
-            className="px-2 py-[6px] text-left font-mono tabular-nums text-fw-text-secondary truncate"
+            className="px-1 py-1 text-left font-mono tabular-nums text-fw-text-secondary"
             style={{
               background: putVolPct > 0
                 ? `linear-gradient(to left, transparent ${100 - putVolPct}%, rgba(255,70,90,0.13) ${100 - putVolPct}%)`
@@ -308,24 +308,24 @@ const StrikeRow = memo(function StrikeRow({
             {formatNumber(e.putVolume || 0)}
           </td>
           {/* OI Change */}
-          <td className="px-2 py-[6px] text-left font-mono tabular-nums">
-            <span className={cn('font-semibold truncate block', putOiChg > 0 ? 'text-emerald-400' : putOiChg < 0 ? 'text-red-400' : 'text-fw-text-muted')}>
-              {putOiChg !== 0 ? (putOiChg > 0 ? '+' : '') + putOiChg.toFixed(2) + '%' : '—'}
+          <td className="px-1 py-1 text-left font-mono tabular-nums">
+            <span className={cn('font-semibold block', putOiChg > 0 ? 'text-emerald-400' : putOiChg < 0 ? 'text-red-400' : 'text-fw-text-muted')}>
+              {putOiChg !== 0 ? (putOiChg > 0 ? '+' : '') + putOiChg.toFixed(1) + '%' : '—'}
             </span>
           </td>
           {/* OI with bar — red gradient */}
           <td
-            className="px-2 py-[6px] text-left font-mono tabular-nums relative overflow-hidden"
+            className="px-1 py-1 text-left font-mono tabular-nums relative overflow-hidden"
             style={{
               background: putOiPct > 0
                 ? `linear-gradient(to left, transparent ${100 - putOiPct}%, rgba(255,70,90,0.22) ${100 - putOiPct}%)`
                 : undefined,
             }}
           >
-            <span className={cn('relative z-10 truncate block', isSelPE ? 'text-fw-accent' : 'text-fw-text')}>{formatNumber(e.putOi || 0)}</span>
+            <span className={cn('relative z-10 block', isSelPE ? 'text-fw-accent' : 'text-fw-text')}>{formatNumber(e.putOi || 0)}</span>
           </td>
           {/* B/S */}
-          <td className="px-1 py-[6px] text-center">
+          <td className="px-1 py-1 text-center">
             <div className="flex gap-0.5 justify-center">
               <button
                 onClick={() => { onStrikeClick(e.strike, 'PE', e.putLtp, e.putToken); setOrderForm({ side: 'BUY' }); }}
@@ -893,28 +893,27 @@ export function OptionChainModal() {
 
         ) : (
           /* ── Professional Option Chain Table ── */
-          <table className="w-full border-collapse table-fixed" style={{ fontSize: '12px' }}>
-            {/* Explicit column sizing so PUTS never overflow */}
+          <table className="w-full border-collapse table-fixed" style={{ fontSize: '10px' }}>
             <colgroup>
               {viewMode !== 'pe' && (
                 <>
-                  <col style={{ width: '32px' }} />   {/* B/S */}
-                  <col style={{ width: '12%' }} />     {/* OI */}
-                  <col style={{ width: '9%' }} />      {/* OI Chg */}
-                  <col style={{ width: '10%' }} />     {/* Volume */}
-                  <col style={{ width: '8%' }} />      {/* IV */}
-                  <col style={{ width: '9%' }} />      {/* LTP */}
+                  <col style={{ width: '6%' }} />   {/* B/S */}
+                  <col style={{ width: '9%' }} />   {/* OI */}
+                  <col style={{ width: '8%' }} />   {/* OI Chg */}
+                  <col style={{ width: '8%' }} />   {/* Vol */}
+                  <col style={{ width: '7%' }} />   {/* IV */}
+                  <col style={{ width: '9%' }} />   {/* LTP */}
                 </>
               )}
-              <col style={{ width: '80px' }} />        {/* STRIKE — fixed */}
+              <col style={{ width: '10%' }} />       {/* STRIKE */}
               {viewMode !== 'ce' && (
                 <>
-                  <col style={{ width: '9%' }} />      {/* LTP */}
-                  <col style={{ width: '8%' }} />      {/* IV */}
-                  <col style={{ width: '10%' }} />     {/* Volume */}
-                  <col style={{ width: '9%' }} />      {/* OI Chg */}
-                  <col style={{ width: '12%' }} />     {/* OI */}
-                  <col style={{ width: '32px' }} />    {/* B/S */}
+                  <col style={{ width: '9%' }} />   {/* LTP */}
+                  <col style={{ width: '7%' }} />   {/* IV */}
+                  <col style={{ width: '8%' }} />   {/* Vol */}
+                  <col style={{ width: '8%' }} />   {/* OI Chg */}
+                  <col style={{ width: '9%' }} />   {/* OI */}
+                  <col style={{ width: '6%' }} />   {/* B/S */}
                 </>
               )}
             </colgroup>
@@ -934,26 +933,26 @@ export function OptionChainModal() {
                   </th>
                 )}
               </tr>
-              <tr className="bg-fw-bg border-b-2 border-fw-border text-[11px] text-fw-text-secondary uppercase font-semibold">
+              <tr className="bg-fw-bg border-b-2 border-fw-border text-[10px] text-fw-text-secondary uppercase font-semibold">
                 {viewMode !== 'pe' && (
                   <>
-                    <th className="px-1 py-1.5 text-center">B/S</th>
-                    <th className="px-2 py-1.5 text-right truncate">OI</th>
-                    <th className="px-2 py-1.5 text-right truncate">OI Chg</th>
-                    <th className="px-2 py-1.5 text-right truncate">Vol</th>
-                    <th className="px-2 py-1.5 text-right truncate">IV</th>
-                    <th className="px-2 py-1.5 text-right truncate">LTP</th>
+                    <th className="px-1 py-1 text-center">B/S</th>
+                    <th className="px-1 py-1 text-right">OI</th>
+                    <th className="px-1 py-1 text-right">OI Chg</th>
+                    <th className="px-1 py-1 text-right">Vol</th>
+                    <th className="px-1 py-1 text-right">IV</th>
+                    <th className="px-1 py-1 text-right">LTP</th>
                   </>
                 )}
-                <th className="px-1 py-1.5 text-center bg-fw-surface-2 border-x border-fw-border/60 text-fw-text">Strike</th>
+                <th className="px-1 py-1 text-center bg-fw-surface-2 border-x border-fw-border/60 text-fw-text">Strike</th>
                 {viewMode !== 'ce' && (
                   <>
-                    <th className="px-2 py-1.5 text-left truncate">LTP</th>
-                    <th className="px-2 py-1.5 text-left truncate">IV</th>
-                    <th className="px-2 py-1.5 text-left truncate">Vol</th>
-                    <th className="px-2 py-1.5 text-left truncate">OI Chg</th>
-                    <th className="px-2 py-1.5 text-left truncate">OI</th>
-                    <th className="px-1 py-1.5 text-center">B/S</th>
+                    <th className="px-1 py-1 text-left">LTP</th>
+                    <th className="px-1 py-1 text-left">IV</th>
+                    <th className="px-1 py-1 text-left">Vol</th>
+                    <th className="px-1 py-1 text-left">OI Chg</th>
+                    <th className="px-1 py-1 text-left">OI</th>
+                    <th className="px-1 py-1 text-center">B/S</th>
                   </>
                 )}
               </tr>
