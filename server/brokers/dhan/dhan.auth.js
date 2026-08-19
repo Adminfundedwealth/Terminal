@@ -46,6 +46,7 @@ export class DhanAuthService extends EventEmitter {
     // Token metadata — parse exp from JWT if possible
     this._tokenIssuedAt = Date.now();
     this._tokenExpiresAt = this._parseJwtExpiry() || (Date.now() + TOKEN_VALIDITY_MS);
+    this._tokenRejected = false; // set true when Dhan returns 401; cleared on env-var rotation
     this._refreshTimer = null;
     this._cronTimer = null;
     this._isRefreshing = false;
@@ -96,20 +97,34 @@ export class DhanAuthService extends EventEmitter {
 
   /**
    * Check if current token is still valid.
-   * We trust the token is valid as long as credentials are present.
-   * A 401 response from Dhan is the only reliable signal it has been revoked.
+   * Always re-reads from process.env so a Railway env var update takes effect
+   * without a full restart. We trust the token is valid until Dhan returns 401.
    */
   get isTokenValid() {
+    // Re-read from env on every check — catches Railway token rotation
+    const liveToken = (process.env.DHAN_ACCESS_TOKEN || '').trim();
+    const liveClient = (process.env.DHAN_CLIENT_ID || '').trim();
+    if (liveToken && liveToken !== this.accessToken) {
+      // Env var was updated (or token was rotated) — restore in-memory and clear rejection flag
+      this.accessToken = liveToken;
+      this._tokenRejected = false;
+    }
+    if (liveClient && liveClient !== this.clientId) {
+      this.clientId = liveClient;
+    }
+    if (this._tokenRejected) return false;
     return !!(this.accessToken && this.clientId);
   }
 
   /**
-   * Mark the token as invalid after receiving a 401 from Dhan.
-   * Called by DhanHistoricalService / adapter when Dhan returns 401.
+   * Mark the token as invalid after receiving a confirmed 401 from Dhan.
+   * Sets a rejected flag rather than nulling accessToken so that:
+   * 1. Angel One fallback activates immediately (isTokenValid → false)
+   * 2. A Railway env var rotation (new token) auto-recovers without restart
    */
   markTokenInvalid() {
-    console.warn('[DhanAuth] Dhan API returned 401 — marking token invalid, Angel One fallback active');
-    this.accessToken = null;
+    console.warn('[DhanAuth] Dhan API returned 401 — token rejected by Dhan server. Update DHAN_ACCESS_TOKEN in Railway to recover.');
+    this._tokenRejected = true;
     this.emit('token:invalid');
   }
 
