@@ -1280,17 +1280,31 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
     // Fallback: existing Angel One optionChainService
     if (!optionChainService) return res.json([]);
 
-    await optionChainService._ensureToken();
-
+    // Try to get token — retry up to 3s if it's still initializing
     if (!optionChainService.jwtToken) {
-      console.warn('[OptionChain] No JWT token — returning 503 so client retries');
-      return res.status(503).json({ message: 'Market data service initializing. Retrying…' });
+      await optionChainService._ensureToken();
+    }
+    // Second chance: if still no token after _ensureToken, wait briefly and retry once
+    if (!optionChainService.jwtToken && optionChainService._refreshCallback) {
+      try {
+        const tok = await optionChainService._refreshCallback();
+        if (tok) optionChainService.setAuthToken(tok);
+      } catch (_) {}
     }
 
-    const chain = await optionChainService.getOptionChain(symbol, expiry);
-    console.log(`[OptionChain] Response via Angel: ${chain.length} strikes returned`);
+    if (!optionChainService.jwtToken) {
+      console.warn('[OptionChain] No JWT token available from any source — returning empty chain');
+      return res.json([]);
+    }
 
-    return res.json(chain);
+    try {
+      const chain = await optionChainService.getOptionChain(symbol, expiry);
+      console.log(`[OptionChain] Response via Angel: ${chain.length} strikes returned`);
+      return res.json(chain);
+    } catch (err) {
+      console.error('[OptionChain] Angel fallback failed:', err.message);
+      return res.json([]);
+    }
   });
 
   router.get('/market/expiries', async (req, res) => {
@@ -1496,7 +1510,9 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
   router.get('/market/oi-analytics', async (req, res) => {
     try {
       const { OIAnalyticsService } = await import('../services/oiAnalyticsService.js');
-      const oiService = new OIAnalyticsService(optionChainService);
+      // Primary: DataProviderSwitch (routes to Dhan — native OI change + Greeks)
+      // Fallback: Angel One optionChainService (used when Dhan unavailable)
+      const oiService = new OIAnalyticsService(dataProviderSwitch, optionChainService);
       const data = await oiService.getOIAnalytics(req.query.symbol || 'NIFTY', req.query.expiry || null);
       res.json(data);
     } catch (err) {

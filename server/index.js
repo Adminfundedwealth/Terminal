@@ -741,6 +741,36 @@ async function connectAngelFeedForBroker() {
     angelFeed.onTokenRefresh(propagateToken);
     propagateToken(angelFeed.session);
 
+    // ── Wire Angel JWT into data services (candleService + optionChainService) ──
+    // This is CRITICAL: without this, historical chart fallback and option chain
+    // fallback via Angel One both fail silently (jwtToken stays null).
+    const wireDataServices = (session) => {
+      if (!session?.jwtToken) return;
+      candleService.setAuthToken(session.jwtToken);
+      optionChainService.setAuthToken(session.jwtToken);
+      console.log('[AngelFeed] ✓ JWT wired into candleService + optionChainService for data fallback');
+    };
+    // Wire on connect + on every refresh
+    wireDataServices(angelFeed.session);
+    angelFeed.onTokenRefresh(wireDataServices);
+
+    // Also wire the refresh callback so services can self-renew their token
+    const refreshFn = async () => {
+      try {
+        const tok = await angelFeed.ensureValidToken();
+        if (tok) {
+          candleService.setAuthToken(tok);
+          optionChainService.setAuthToken(tok);
+        }
+        return tok;
+      } catch (e) {
+        console.warn('[AngelFeed] Token refresh callback failed:', e.message);
+        return null;
+      }
+    };
+    candleService.setRefreshCallback(refreshFn);
+    optionChainService.setRefreshCallback(refreshFn);
+
     // Register a shared AngelOneAdapter instance for order execution
     const { AngelOneAdapter } = await import('./brokers/angelone/angelone.adapter.js');
     const sharedAdapter = new AngelOneAdapter();
