@@ -1028,17 +1028,28 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
 
         if (candles.length > 0) {
           // Normalize candle format: ensure flat array with { time, open, high, low, close, volume }
-          const normalized = candles.map(c => ({
-            time: typeof c.time === 'number' ? c.time : Math.floor(new Date(c.timestamp || c.datetime || c.date || 0).getTime() / 1000),
-            open: Number(c.open) || 0,
-            high: Number(c.high) || 0,
-            low: Number(c.low) || 0,
-            close: Number(c.close) || 0,
-            volume: Number(c.volume || 0),
-          })).filter(c => c.time > 0 && c.close > 0 && !isNaN(c.time) && !isNaN(c.close));
+          const normalized = candles.map(c => {
+            const close = Number(c.close) || 0;
+            const open  = Number(c.open)  || close;
+            const high  = Number(c.high)  || Math.max(open, close);
+            const low   = Number(c.low)   || Math.min(open, close);
+            return {
+              time:   typeof c.time === 'number' ? c.time : Math.floor(new Date(c.timestamp || c.datetime || c.date || 0).getTime() / 1000),
+              open,
+              high,
+              low,
+              close,
+              volume: Number(c.volume || 0),
+            };
+          }).filter(c => c.time > 0 && c.close > 0 && !isNaN(c.time) && !isNaN(c.close));
 
           if (normalized.length > 0) {
-            return res.json(normalized);
+            // Deduplicate by timestamp and sort ascending — required by Lightweight Charts
+            const seen = new Set();
+            const deduped = normalized
+              .filter(c => { if (seen.has(c.time)) return false; seen.add(c.time); return true; })
+              .sort((a, b) => a.time - b.time);
+            return res.json(deduped);
           }
         }
 

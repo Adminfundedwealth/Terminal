@@ -452,34 +452,67 @@ export class DhanHistoricalService {
 
   _parse(data) {
     const raw = data?.data || data;
-    const timestamps = raw?.timestamp || raw?.start_Time || [];
-    const opens = raw?.open || [];
-    const highs = raw?.high || [];
-    const lows = raw?.low || [];
-    const closes = raw?.close || [];
-    const volumes = raw?.volume || [];
+    if (!raw || typeof raw !== 'object') return [];
 
-    if (!timestamps.length) return [];
+    // ── Format A: parallel arrays (standard Dhan format) ─────────────────
+    // { timestamp: [...], open: [...], high: [...], low: [...], close: [...], volume: [...] }
+    const timestamps = raw?.timestamp || raw?.start_Time || raw?.timestamps || null;
+    if (Array.isArray(timestamps) && timestamps.length > 0) {
+      const opens = raw?.open || [];
+      const highs = raw?.high || [];
+      const lows = raw?.low || [];
+      const closes = raw?.close || [];
+      const volumes = raw?.volume || [];
 
-    const candles = [];
-    for (let i = 0; i < timestamps.length; i++) {
-      const time = this._normalizeTs(timestamps[i]);
-      const o = parseFloat(opens[i]) || 0;
-      const h = parseFloat(highs[i]) || 0;
-      const l = parseFloat(lows[i]) || 0;
-      const c = parseFloat(closes[i]) || 0;
-      const v = parseInt(volumes[i]) || 0;
+      const candles = [];
+      for (let i = 0; i < timestamps.length; i++) {
+        const time = this._normalizeTs(timestamps[i]);
+        const o = parseFloat(opens[i]) || 0;
+        const h = parseFloat(highs[i]) || 0;
+        const l = parseFloat(lows[i]) || 0;
+        const c = parseFloat(closes[i]) || 0;
+        const v = parseInt(volumes[i]) || 0;
 
-      if (time <= 0 || o <= 0 || h <= 0 || l <= 0 || c <= 0) continue;
-      if (h < l || h < o || h < c || l > o || l > c) continue;
-      candles.push({ time, open: o, high: h, low: l, close: c, volume: v });
+        if (time <= 0 || c <= 0 || isNaN(time) || isNaN(c)) continue;
+        // Fix degenerate OHLC (Dhan sometimes sends h=0 or l=0 for indices)
+        const fixedH = h > 0 ? h : Math.max(o || c, c);
+        const fixedL = l > 0 ? l : Math.min(o || c, c);
+        const fixedO = o > 0 ? o : c;
+        candles.push({ time, open: fixedO, high: fixedH, low: fixedL, close: c, volume: v });
+      }
+      return candles;
     }
-    return candles;
+
+    // ── Format B: array of row objects ────────────────────────────────────
+    // [{ time, open, high, low, close, volume }, ...] or [{ start_Time, ... }]
+    if (Array.isArray(raw)) {
+      const candles = [];
+      for (const bar of raw) {
+        const time = this._normalizeTs(bar?.time || bar?.start_Time || bar?.timestamp || bar?.[0]);
+        const o = parseFloat(bar?.open ?? bar?.[1]) || 0;
+        const h = parseFloat(bar?.high ?? bar?.[2]) || 0;
+        const l = parseFloat(bar?.low  ?? bar?.[3]) || 0;
+        const c = parseFloat(bar?.close ?? bar?.[4]) || 0;
+        const v = parseInt(bar?.volume ?? bar?.[5]) || 0;
+        if (time <= 0 || c <= 0 || isNaN(time)) continue;
+        const fixedH = h > 0 ? h : Math.max(o || c, c);
+        const fixedL = l > 0 ? l : Math.min(o || c, c);
+        const fixedO = o > 0 ? o : c;
+        candles.push({ time, open: fixedO, high: fixedH, low: fixedL, close: c, volume: v });
+      }
+      return candles;
+    }
+
+    return [];
   }
 
   _normalizeTs(ts) {
-    if (typeof ts === 'number') return ts > 9999999999 ? Math.floor(ts / 1000) : ts;
-    if (typeof ts === 'string') { const d = new Date(ts).getTime(); return isNaN(d) ? 0 : Math.floor(d / 1000); }
+    if (typeof ts === 'number') return ts > 9_999_999_999 ? Math.floor(ts / 1000) : ts;
+    if (typeof ts === 'string') {
+      // ISO string: "2026-08-19T09:15:00" or "2026-08-19 09:15:00"
+      const ms = new Date(ts).getTime();
+      return isNaN(ms) ? 0 : Math.floor(ms / 1000);
+    }
     return 0;
   }
 
