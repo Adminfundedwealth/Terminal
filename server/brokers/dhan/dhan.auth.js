@@ -29,8 +29,10 @@ const IPV4_AGENT = new https.Agent({ family: 4 });
 
 // Refresh 1 hour before expiry as timer-based backup
 const REFRESH_BUFFER_MS = 60 * 60 * 1000;
-// Token validity: 24 hours
-const TOKEN_VALIDITY_MS = 24 * 60 * 60 * 1000;
+// Token validity: 30 days (Dhan developer console tokens are valid 30 days,
+// NOT 24h — the 24h assumption was causing false token-expired states and
+// blank charts after a server has been running for more than a day).
+const TOKEN_VALIDITY_MS = 30 * 24 * 60 * 60 * 1000;
 
 export class DhanAuthService extends EventEmitter {
   constructor() {

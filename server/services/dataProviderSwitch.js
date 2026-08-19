@@ -70,14 +70,33 @@ export class DataProviderSwitch {
       }
     }
 
-    // Fallback only when Dhan returns empty or errors
+    // Fallback to Angel One — must remap Dhan segment names back to Angel exchange names
     if (this._angelCandle) {
       try {
-        const candles = await this._angelCandle.getHistoricalCandles(token, timeframe, exchange, fromTimestamp, toTimestamp);
+        // Remap Dhan segment → Angel One exchange name
+        const DHAN_TO_ANGEL_EXCHANGE = {
+          'IDX_I': 'NSE',       // Index → NSE token works for Angel historical
+          'NSE_EQ': 'NSE',
+          'BSE_EQ': 'BSE',
+          'NSE_FNO': 'NFO',
+          'BSE_FNO': 'BFO',
+          'MCX_COMM': 'MCX',
+          'NSE_CURRENCY': 'CDS',
+          'NSE': 'NSE',
+          'BSE': 'BSE',
+          'NFO': 'NFO',
+          'MCX': 'MCX',
+          'CDS': 'CDS',
+        };
+        const angelExchange = DHAN_TO_ANGEL_EXCHANGE[exchange] || exchange || 'NSE';
+        const candles = await this._angelCandle.getHistoricalCandles(token, timeframe, angelExchange, fromTimestamp, toTimestamp);
         if (candles && candles.length > 0) {
+          console.log(`[DataProvider] Angel fallback returned ${candles.length} candles for ${token}/${timeframe}`);
           return { data: candles, provider: 'ANGELONE_FALLBACK' };
         }
-      } catch (_) {}
+      } catch (err) {
+        console.warn(`[DataProvider] Angel fallback also failed for ${token}/${timeframe}: ${err.message}`);
+      }
     }
     return { data: [], provider: 'NONE' };
   }

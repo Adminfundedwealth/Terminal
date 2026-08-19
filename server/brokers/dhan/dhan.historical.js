@@ -53,13 +53,14 @@ const SEGMENT_MAP = {
 // ─── Timeframe config ─────────────────────────────────────────────────────────
 // Intraday: max 5 calendar days per request
 // Historical: unlimited range for daily
+// Dhan supported intraday intervals: 1, 3, 5, 10, 15, 25, 60 minutes
 const TF_CONFIG = {
-  '1':   { type: 'intraday', interval: '1',  lookbackDays: 5 },
-  '3':   { type: 'intraday', interval: '5',  lookbackDays: 5 },
-  '5':   { type: 'intraday', interval: '5',  lookbackDays: 5 },
-  '15':  { type: 'intraday', interval: '15', lookbackDays: 10 },
-  '30':  { type: 'intraday', interval: '25', lookbackDays: 15 },
-  '60':  { type: 'intraday', interval: '60', lookbackDays: 30 },
+  '1':   { type: 'intraday', interval: '1',  lookbackDays: 10 },
+  '3':   { type: 'intraday', interval: '3',  lookbackDays: 10 },
+  '5':   { type: 'intraday', interval: '5',  lookbackDays: 15 },
+  '15':  { type: 'intraday', interval: '15', lookbackDays: 30 },
+  '30':  { type: 'intraday', interval: '25', lookbackDays: 30 },
+  '60':  { type: 'intraday', interval: '60', lookbackDays: 60 },
   '240': { type: 'historical', interval: 'DAY', lookbackYears: 2 },
   'D':   { type: 'historical', interval: 'DAY', lookbackYears: 5 },
   'W':   { type: 'historical', interval: 'DAY', lookbackYears: 5 },
@@ -79,18 +80,27 @@ export class DhanHistoricalService {
    */
   async getCandles(token, exchange, timeframe, fromTimestamp, toTimestamp) {
     if (!this.auth.isTokenValid) {
+      // Try a refresh before giving up — token may have just expired
       const refreshed = await this.auth.refreshToken();
       if (!refreshed && !this.auth.isTokenValid) {
-        throw new Error('[DhanHist] No valid token');
+        // Return empty array so the caller (DataProviderSwitch) can try Angel One fallback
+        console.warn(`[DhanHist] Token invalid for ${token}/${timeframe} — falling back to Angel`);
+        return [];
       }
     }
 
     const tf = TF_CONFIG[timeframe];
-    if (!tf) throw new Error(`[DhanHist] Unsupported timeframe: ${timeframe}`);
+    if (!tf) {
+      console.warn(`[DhanHist] Unsupported timeframe: ${timeframe} — falling back to Angel`);
+      return [];
+    }
 
     // Resolve instrument identity
     const resolved = await this._resolve(token, exchange);
-    if (!resolved) throw new Error(`[DhanHist] Cannot resolve ${token}/${exchange}`);
+    if (!resolved) {
+      console.warn(`[DhanHist] Cannot resolve ${token}/${exchange} — falling back to Angel`);
+      return [];
+    }
 
     // Calculate proper date range
     const now = new Date();
@@ -160,26 +170,28 @@ export class DhanHistoricalService {
       } catch (err) {
         // On auth error, try refresh once
         if (err.response?.status === 401 || err.response?.status === 400) {
-          const errMsg = err.response?.data?.errorMessage || err.response?.data?.data;
-          if (String(errMsg).includes('Token') || String(errMsg).includes('Authentication')) {
+          const errMsg = err.response?.data?.errorMessage || err.response?.data?.data || '';
+          if (String(errMsg).includes('Token') || String(errMsg).includes('Authentication') || err.response?.status === 401) {
+            console.warn(`[DhanHist] Auth error on chunk ${this._fmt(cursor)}→${this._fmt(chunkEnd)}, attempting token refresh`);
             const refreshed = await this.auth.refreshToken();
             if (refreshed) {
               try {
                 const resp = await this._post(`${DHAN_API_BASE}/charts/intraday`, payload);
                 allCandles.push(...this._parse(resp.data));
+                cursor.setDate(cursor.getDate() + 5);
+                continue;
               } catch (_) {}
-            } else {
-              // Token refresh failed — stop trying more chunks
-              console.error('[DhanHist] Token refresh failed, aborting intraday fetch');
-              break;
             }
+            // Refresh failed — abort all chunks, let Angel fallback handle it
+            console.error('[DhanHist] Token refresh failed, aborting intraday fetch — Angel fallback will be used');
+            break;
           } else {
-            console.warn(`[DhanHist] Chunk error (non-auth): ${JSON.stringify(err.response?.data).slice(0, 100)}`);
+            console.warn(`[DhanHist] Chunk error (non-auth 400): ${JSON.stringify(err.response?.data).slice(0, 120)}`);
           }
         } else {
           console.warn(`[DhanHist] Chunk network error: ${err.message}`);
         }
-        // Continue with next chunk
+        // Continue with next chunk on non-fatal errors
       }
 
       cursor.setDate(cursor.getDate() + 5);

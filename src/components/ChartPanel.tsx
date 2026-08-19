@@ -1000,23 +1000,29 @@ export function ChartPanel() {
     if (!chartRef.current || !activeSymbol) return;
     setIsLoading(true);
     setNoData(false);
-    try {
-      const data = await getHistoricalData(activeSymbol.token, timeframe, activeSymbol.exchange);
-      if (data && data.length > 0) {
-        rawDataRef.current = data;
-        updateChartSeries(data);
-        applyIndicators();
-        applyOverlayDrawings(drawings);
-        applyTextMarkers(drawings);
-        setNoData(false);
-        // notifyChartReady handled by PositionManager on next render
-      } else {
-        setNoData(true);
-      }
-    } catch (err) {
-      console.error('[ChartPanel] loadChartData failed:', err);
+    // Retry up to 3 times with exponential backoff before showing "unavailable"
+    let data: OHLC[] | null = null;
+    let lastErr: unknown = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        if (attempt > 0) await new Promise(r => setTimeout(r, attempt * 1500));
+        const result = await getHistoricalData(activeSymbol.token, timeframe, activeSymbol.exchange);
+        if (result && result.length > 0) { data = result; break; }
+      } catch (err) { lastErr = err; }
+    }
+    if (data && data.length > 0) {
+      rawDataRef.current = data;
+      updateChartSeries(data);
+      applyIndicators();
+      applyOverlayDrawings(drawings);
+      applyTextMarkers(drawings);
+      setNoData(false);
+      // notifyChartReady handled by PositionManager on next render
+    } else {
+      if (lastErr) console.error('[ChartPanel] loadChartData failed after retries:', lastErr);
       setNoData(true);
-    } finally { setIsLoading(false); }
+    }
+    setIsLoading(false);
   };
 
   const updateChartSeries = (data: OHLC[]) => {
