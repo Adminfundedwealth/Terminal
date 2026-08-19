@@ -54,7 +54,12 @@ export class DhanAuthService extends EventEmitter {
   }
 
   /**
-   * Parse expiry from JWT token (Dhan JWTs have standard exp claim).
+   * Parse expiry from JWT token.
+   * NOTE: Dhan developer console tokens have an 'exp' claim, but the actual
+   * server-side validity period is managed by Dhan independently. We no longer
+   * trust the exp claim to gate API calls — a 401 response is the only reliable
+   * signal that the token has been revoked. If exp is in the future we use it;
+   * if exp is in the past we IGNORE it and assume 30-day validity from now.
    */
   _parseJwtExpiry() {
     try {
@@ -62,7 +67,14 @@ export class DhanAuthService extends EventEmitter {
       const parts = this.accessToken.split('.');
       if (parts.length !== 3) return null;
       const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
-      if (payload.exp) return payload.exp * 1000; // Convert to ms
+      if (payload.exp) {
+        const expMs = payload.exp * 1000;
+        // Only trust the exp claim if it's in the future
+        if (expMs > Date.now()) return expMs;
+        // Expired JWT claim — ignore it, use TOKEN_VALIDITY_MS fallback
+        console.warn(`[DhanAuth] JWT exp claim is in the past (${new Date(expMs).toISOString()}) — ignoring exp, trusting token until 401`);
+        return null;
+      }
       return null;
     } catch { return null; }
   }
@@ -84,29 +96,43 @@ export class DhanAuthService extends EventEmitter {
 
   /**
    * Check if current token is still valid.
+   * We trust the token is valid as long as credentials are present.
+   * A 401 response from Dhan is the only reliable signal it has been revoked.
    */
   get isTokenValid() {
-    if (!this.accessToken) return false;
-    return Date.now() < this._tokenExpiresAt;
+    return !!(this.accessToken && this.clientId);
   }
 
   /**
-   * Get current access token (or null if expired/missing).
+   * Mark the token as invalid after receiving a 401 from Dhan.
+   * Called by DhanHistoricalService / adapter when Dhan returns 401.
+   */
+  markTokenInvalid() {
+    console.warn('[DhanAuth] Dhan API returned 401 — marking token invalid, Angel One fallback active');
+    this.accessToken = null;
+    this.emit('token:invalid');
+  }
+
+  /**
+   * Get current access token (or null if missing).
    */
   getToken() {
-    if (!this.isTokenValid) return null;
-    return this.accessToken;
+    return this.accessToken || null;
   }
 
   /**
    * Get standard headers for Dhan API calls.
+   * Always reads from process.env so a token rotation in Railway env vars
+   * takes effect without a full restart.
    */
   getHeaders() {
+    const token = (process.env.DHAN_ACCESS_TOKEN || this.accessToken || '').trim();
+    const clientId = (process.env.DHAN_CLIENT_ID || this.clientId || '').trim();
     return {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
-      'access-token': this.accessToken,
-      'client-id': this.clientId,
+      'access-token': token,
+      'client-id': clientId,
     };
   }
 
@@ -119,17 +145,11 @@ export class DhanAuthService extends EventEmitter {
       return false;
     }
 
-    // Check JWT expiry claim first — if expired, no point trying
-    if (this._tokenExpiresAt && Date.now() >= this._tokenExpiresAt) {
-      console.error('[DhanAuth] Token JWT has expired (exp claim). Generate a new one from dhanhq.co/app/developer');
-      this.emit('token:invalid');
-      return false;
-    }
-
-    // Trust the JWT exp claim — skip profile validation.
-    // The first actual API call will reveal if the token is server-side revoked.
-    // This prevents false negatives from profile endpoint quirks.
-    console.log(`[DhanAuth] Token accepted (JWT exp: ${new Date(this._tokenExpiresAt).toISOString()}). Client: ${this.clientId}`);
+    // Never reject a token purely based on local clock / JWT exp claim.
+    // The JWT exp in Dhan dev-portal tokens doesn't reliably reflect server-side
+    // validity — only a 401 from the API proves the token is revoked.
+    // We always proceed and let the first real API call surface any auth error.
+    console.log(`[DhanAuth] Token loaded for client ${this.clientId} (valid until ${new Date(this._tokenExpiresAt).toISOString()} or next 401)`);
     this.emit('token:valid', { clientId: this.clientId });
 
     // Schedule daily cron at 8:00 AM IST

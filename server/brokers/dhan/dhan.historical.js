@@ -182,7 +182,8 @@ export class DhanHistoricalService {
                 continue;
               } catch (_) {}
             }
-            // Refresh failed — abort all chunks, let Angel fallback handle it
+            // Refresh failed — mark token invalid and abort
+            this.auth.markTokenInvalid();
             console.error('[DhanHist] Token refresh failed, aborting intraday fetch — Angel fallback will be used');
             break;
           } else {
