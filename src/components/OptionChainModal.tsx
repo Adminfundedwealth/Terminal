@@ -760,7 +760,11 @@ export function OptionChainModal() {
       token,
       symbol: `${underlying} ${strike} ${type}`,
       name: `${underlying} ${selectedExpiry} ${strike} ${type}`,
-      segment: 'NFO',
+      // Use the correct F&O segment for each exchange:
+      //   NSE underlyings (NIFTY, BANKNIFTY, stocks) → NFO
+      //   BSE underlyings (SENSEX) → BFO
+      // optExchange is already derived from the underlying's activeSymbol.segment/exchange.
+      segment: optExchange === 'BSE' ? 'BFO' : 'NFO',
       instrumentType: type,
       exchange: optExchange,
       lotSize,
