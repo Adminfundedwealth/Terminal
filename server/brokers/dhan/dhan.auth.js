@@ -341,24 +341,58 @@ export class DhanAuthService extends EventEmitter {
   }
 
   /**
-   * Schedule timer-based renewal as backup — 1 hour before computed expiry.
+   * Schedule timer-based renewal — fires 1 hour before the computed token expiry.
+   *
+   * NODE.JS OVERFLOW PROTECTION:
+   * setTimeout silently wraps delays > 2,147,483,647 ms (≈24.8 days) to 1 ms,
+   * causing an immediate spurious trigger. A 30-day token has a renewal delay
+   * of ≈29 days (2,588,400,000 ms), which exceeds this limit.
+   *
+   * Fix: if the desired delay exceeds MAX_TIMEOUT_MS, schedule an intermediate
+   * "wake-up" timer for MAX_TIMEOUT_MS ms. When that fires, calculate the
+   * remaining delay and reschedule. This continues until the remaining delay
+   * fits in a 32-bit integer, then sets the final renewal timer.
+   *
+   * Result: exactly ONE timer is active at any moment; no overflow; no loop;
+   * renewal still fires precisely 1 hour before actual expiry.
    */
   _scheduleTimerRenewal() {
+    // Cancel any existing timer — guarantees only one is active at a time
     if (this._refreshTimer) {
       clearTimeout(this._refreshTimer);
+      this._refreshTimer = null;
     }
 
-    const timeUntilRefresh = Math.max(
-      (this._tokenExpiresAt - REFRESH_BUFFER_MS) - Date.now(),
-      60000 // At least 1 minute from now
-    );
+    // Node.js 32-bit signed integer limit for setTimeout (≈24.8 days)
+    const MAX_TIMEOUT_MS = 2_147_483_647;
 
-    console.log(`[DhanAuth] Timer-based renewal backup in ${Math.round(timeUntilRefresh / 60000)} minutes`);
+    const targetMs = (this._tokenExpiresAt - REFRESH_BUFFER_MS);
+    const desiredDelayMs = Math.max(targetMs - Date.now(), 60_000); // at least 1 minute
 
-    this._refreshTimer = setTimeout(async () => {
-      console.log('[DhanAuth] Timer-based renewal triggered (1h before expiry)...');
-      await this.renewToken();
-    }, timeUntilRefresh);
+    if (desiredDelayMs > MAX_TIMEOUT_MS) {
+      // Too far away for a single setTimeout — schedule an intermediate wake-up.
+      // We wake up at MAX_TIMEOUT_MS and then call _scheduleTimerRenewal() again
+      // to recalculate the remaining delay. This repeats until we are within range.
+      const wakeInMinutes = Math.round(MAX_TIMEOUT_MS / 60_000);
+      console.log(`[DhanAuth] Renewal >24 days away — intermediate timer in ${wakeInMinutes} min (overflow guard)`);
+
+      this._refreshTimer = setTimeout(() => {
+        this._refreshTimer = null;
+        // Recalculate: either schedule another intermediate or the final renewal
+        this._scheduleTimerRenewal();
+      }, MAX_TIMEOUT_MS);
+
+    } else {
+      // Delay is within the safe 32-bit range — schedule the real renewal
+      const minutes = Math.round(desiredDelayMs / 60_000);
+      console.log(`[DhanAuth] Timer-based renewal backup in ${minutes} minutes`);
+
+      this._refreshTimer = setTimeout(async () => {
+        this._refreshTimer = null;
+        console.log('[DhanAuth] Timer-based renewal triggered (1h before expiry)...');
+        await this.renewToken();
+      }, desiredDelayMs);
+    }
   }
 
   /**
