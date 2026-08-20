@@ -284,10 +284,16 @@ export class DhanWebSocketFeed extends EventEmitter {
       const volHigh = buf.length >= 36 ? buf.readUInt32LE(32) : 0;
       const volume  = volHigh * 0x100000000 + volLow; // safe for < 2^53
 
+      // OI and Prev OI at offsets 44 and 48 (int32 LE each)
+      // Only read if packet is long enough — older packets may not include these.
+      const oi     = buf.length >= 48 ? buf.readInt32LE(44) : 0;
+      const prevOi = buf.length >= 52 ? buf.readInt32LE(48) : 0;
+
       if (!ltp || ltp <= 0) return;
       this.emit('tick', {
         token: String(securityId),
         ltp, open, high, low, close, volume,
+        oi, prevOi,
         type: 'quote',
       });
     } catch (_) {}

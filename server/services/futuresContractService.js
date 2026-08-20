@@ -272,9 +272,9 @@ export class FuturesContractService {
         // ── NSE / BSE equity+index futures ──────────────────────────────
         const raw = this._dhanHistorical.getActiveFuturesContract(underlying, exchange);
         if (raw) {
-          // Augment with lot size from scrip master
-          const lotSize  = this._dhanHistorical.getLotSize(underlying) || 1;
-          const tickSize = this._inferTickSize(underlying, exchange);
+          // Augment with lot size and tick size from scrip master
+          const lotSize  = this._dhanHistorical.getLotSize(underlying) || raw.lotSize || 1;
+          const tickSize = this._dhanHistorical.getTickSize(underlying) || raw.tickSize || 0.05;
           contract = { ...raw, lotSize, tickSize };
         }
       } else {

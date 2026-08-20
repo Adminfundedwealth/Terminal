@@ -384,21 +384,38 @@ export class DhanHistoricalService {
       const lines = resp.data.split('\n');
       const header = lines[0].split(',');
 
-      // Detect column indices from header
-      const expiryCol = header.findIndex(h => h.trim().toUpperCase().includes('EXPIRY'));
+      // Detect column indices from header.
+      // IMPORTANT: SEM_EXPIRY_CODE (col 4) is an integer code, NOT the date.
+      //            SEM_EXPIRY_DATE (col 8) is the ISO datetime string we need.
+      //            We must find 'SEM_EXPIRY_DATE' exactly, not any column
+      //            that merely contains the word 'EXPIRY'.
+      const expiryCol    = header.findIndex(h => h.trim().toUpperCase() === 'SEM_EXPIRY_DATE');
       const symbolNameCol = header.findIndex(h => h.trim().toUpperCase() === 'SM_SYMBOL_NAME');
+      const tickSizeCol  = header.findIndex(h => h.trim().toUpperCase() === 'SEM_TICK_SIZE');
 
       // Column indices: SEM_SEGMENT(1), SEM_SMST_SECURITY_ID(2), SEM_INSTRUMENT_NAME(3), SEM_TRADING_SYMBOL(5)
       const byId = new Map();      // securityId → { securityId, segment, instrument }
       const bySymbol = new Map();  // "SYMBOL:SEGMENT" → { securityId, segment, instrument }
       // underlyingLotSize: underlying symbol (uppercased) → lot size (integer)
-      // Sourced from the first OPTIDX/OPTSTK row for that underlying.
+      // Sourced from the first OPTIDX/OPTSTK/FUTIDX/FUTSTK row for that underlying.
       // Column SEM_LOT_UNITS (index 6) is the exchange-mandated lot size.
       const underlyingLotSize = new Map();
+      // underlyingTickSize: underlying → tick size (float) from SEM_TICK_SIZE
+      const underlyingTickSize = new Map();
 
+      // seg=D covers BOTH NSE_FNO and BSE_FNO rows — distinguish by SEM_EXM_EXCH_ID (col 0).
+      // No 'BD' segment exists in this master; BSE FNO rows have seg=D and exch=BSE.
       const segMap = { 'E': 'NSE_EQ', 'D': 'NSE_FNO', 'M': 'MCX_COMM', 'C': 'NSE_CURRENCY', 'BE': 'BSE_EQ' };
 
-      // Store raw futures entries for MCX/CDS active contract resolution
+      // BSE symName codes → canonical underlying name used by FuturesContractService
+      const BSE_SYMNAME_MAP = {
+        'BSXFUT': 'SENSEX',
+        'BKXFUT': 'BANKEX',
+        'SX50FUT': 'SENSEX50',
+        'BITFUT': 'FOCIT',
+      };
+
+      // Store raw futures entries for MCX/CDS/NSE-FNO/BSE-FNO active contract resolution
       const futuresEntries = []; // { securityId, segment, symbol, instrument, expiry }
 
       for (let i = 1; i < lines.length; i++) {
@@ -449,27 +466,76 @@ export class DhanHistoricalService {
         }
 
         // Store MCX/CDS/NSE-FNO/BSE-FNO futures for active contract resolution.
-        // seg D = NSE_FNO (index + stock futures), BD = BSE_FNO (SENSEX futures),
+        // seg=D covers BOTH NSE (NSE_FNO) and BSE (BSE_FNO) futures — distinguished
+        // by SEM_EXM_EXCH_ID (col 0).  No 'BD' segment code exists in this master.
         // M = MCX_COMM (commodity futures), C = NSE_CURRENCY (currency futures).
         const isFutureInst = inst === 'FUTCOM' || inst === 'FUTCUR' || inst === 'FUTIDX' || inst === 'FUTSTK';
-        if (isFutureInst && (seg === 'M' || seg === 'C' || seg === 'D' || seg === 'BD')) {
-          // For NSE/BSE FNO, extract the underlying symbol from the trading symbol.
-          // Dhan trading symbol format: "NIFTY-AUG2026-FUT", "RELIANCE-AUG2026-FUT".
-          // SM_SYMBOL_NAME (symName) for FNO rows typically holds the plain underlying
-          // name e.g. "NIFTY", "RELIANCE" — use that when available.
-          let underlyingName = symName || null;
-          if (!underlyingName && symbol) {
-            // Strip the month/year expiry suffix and "-FUT" to get underlying.
-            // Handles "NIFTY-AUG2026-FUT", "BANKNIFTY-27AUG2026-FUT", "RELIANCE-28AUG2026-FUT"
-            underlyingName = symbol.replace(/-[A-Z0-9]+-FUT$/i, '').trim().toUpperCase();
+        if (isFutureInst && (seg === 'M' || seg === 'C' || seg === 'D')) {
+          const exch = f[0]?.trim();   // SEM_EXM_EXCH_ID — 'NSE' or 'BSE'
+
+          // Determine Dhan segment precisely:
+          //   seg=D + exch=NSE  → NSE_FNO
+          //   seg=D + exch=BSE  → BSE_FNO
+          //   seg=M             → MCX_COMM
+          //   seg=C             → NSE_CURRENCY
+          let dhanFnoSeg;
+          if (seg === 'D') {
+            dhanFnoSeg = exch === 'BSE' ? 'BSE_FNO' : 'NSE_FNO';
+          } else {
+            dhanFnoSeg = dhanSeg; // MCX_COMM or NSE_CURRENCY (segMap values)
           }
+
+          // ── Canonical underlying name ──────────────────────────────────────
+          // Priority 1: BSE_SYMNAME_MAP lookup (BSE futures use codes like BSXFUT)
+          // Priority 2: SM_SYMBOL_NAME when non-empty
+          // Priority 3: Extract prefix from SEM_TRADING_SYMBOL
+          //   Format: "NIFTY-Aug2026-FUT", "RELIANCE-Aug2026-FUT"
+          //   The prefix is everything before the FIRST '-'.
+          //   Do NOT use a regex that requires uppercase-only after '-' because
+          //   Dhan uses mixed-case month names like "Aug2026".
+          let underlyingName = null;
+          if (symName && BSE_SYMNAME_MAP[symName]) {
+            underlyingName = BSE_SYMNAME_MAP[symName];          // e.g. BSXFUT → SENSEX
+          } else if (symName && symName.trim().length > 0) {
+            underlyingName = symName.trim().toUpperCase();       // e.g. "RELIANCE"
+          } else if (symbol) {
+            // Extract prefix before the first '-'
+            // "NIFTY-Aug2026-FUT"     → "NIFTY"
+            // "BANKNIFTY-Aug2026-FUT" → "BANKNIFTY"
+            // "RELIANCE-Aug2026-FUT"  → "RELIANCE"
+            const dashIdx = symbol.indexOf('-');
+            underlyingName = dashIdx > 0
+              ? symbol.slice(0, dashIdx).toUpperCase()
+              : symbol.toUpperCase();
+          }
+
+          // ── Lot-size from FUT row itself ───────────────────────────────────
+          // FUTSTK/FUTIDX rows carry SEM_LOT_UNITS (col 6) directly.
+          // We store the lot size here using the canonical underlying name so
+          // that getLotSize('NIFTY') / getLotSize('RELIANCE') etc. all work.
+          if (underlyingName && lotRaw) {
+            const lot = parseFloat(lotRaw);
+            if (Number.isFinite(lot) && lot > 0 && !underlyingLotSize.has(underlyingName)) {
+              underlyingLotSize.set(underlyingName, Math.round(lot));
+            }
+          }
+
+          // ── Tick size from FUT row ─────────────────────────────────────────
+          const tickRaw = tickSizeCol >= 0 && f.length > tickSizeCol ? f[tickSizeCol]?.trim() : null;
+          const tickSize = tickRaw ? parseFloat(tickRaw) : null;
+          if (underlyingName && Number.isFinite(tickSize) && tickSize > 0 && !underlyingTickSize.has(underlyingName)) {
+            underlyingTickSize.set(underlyingName, tickSize);
+          }
+
           futuresEntries.push({
-            securityId: secId,
-            segment: dhanSeg,
-            symbol: underlyingName || symbol,
+            securityId:    secId,
+            segment:       dhanFnoSeg,
+            symbol:        underlyingName || symbol,
             tradingSymbol: symbol,
-            instrument: inst,
+            instrument:    inst,
             expiry,
+            lotSize:       underlyingName ? underlyingLotSize.get(underlyingName) || null : null,
+            tickSize:      Number.isFinite(tickSize) && tickSize > 0 ? tickSize : null,
           });
         }
       }
@@ -501,7 +567,7 @@ export class DhanHistoricalService {
       // automatically. No hardcoding added — fallback to 1 is the correct behaviour.
 
       console.log(`[DhanHist] Scrip master loaded: ${byId.size} IDs, ${bySymbol.size} symbols, ${futuresEntries.length} futures contracts, ${underlyingLotSize.size} underlying lot sizes`);
-      return { byId, bySymbol, futuresEntries, underlyingLotSize };
+      return { byId, bySymbol, futuresEntries, underlyingLotSize, underlyingTickSize };
     } catch (err) {
       console.error('[DhanHist] Scrip master fetch error:', err.message);
       return null;
@@ -703,6 +769,19 @@ export class DhanHistoricalService {
     if (!this._scripMaster?.underlyingLotSize) return 1;
     const key = String(symbol || '').toUpperCase().trim();
     return this._scripMaster.underlyingLotSize.get(key) || 1;
+  }
+
+  /**
+   * Get the exchange-mandated tick size for a futures underlying.
+   * Sourced from SEM_TICK_SIZE in the Dhan scrip master.
+   *
+   * @param {string} symbol - e.g. 'NIFTY', 'BANKNIFTY', 'RELIANCE', 'GOLD'
+   * @returns {number} tick size, or 0.05 as a safe NSE_FNO default if not found.
+   */
+  getTickSize(symbol) {
+    if (!this._scripMaster?.underlyingTickSize) return 0.05;
+    const key = String(symbol || '').toUpperCase().trim();
+    return this._scripMaster.underlyingTickSize.get(key) || 0.05;
   }
 
   // ─── Response parser ─────────────────────────────────────────────────────
