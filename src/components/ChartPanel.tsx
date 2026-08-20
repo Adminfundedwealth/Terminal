@@ -1030,7 +1030,13 @@ export function ChartPanel() {
       }
       try {
         if (attempt > 0) await new Promise(r => setTimeout(r, attempt * 1500));
-        const result = await getHistoricalData(activeSymbol.token, timeframe, activeSymbol.exchange);
+        // Use segment as exchange hint for MCX/CDS so the backend routes to the correct segment.
+        // For CDS the instrument.exchange is 'NSE' but we need to pass 'CDS' so the backend
+        // maps it to NSE_CURRENCY instead of treating it as an equity.
+        const exchangeHint = (activeSymbol.segment === 'MCX' || activeSymbol.segment === 'CDS')
+          ? activeSymbol.segment
+          : activeSymbol.exchange;
+        const result = await getHistoricalData(activeSymbol.token, timeframe, exchangeHint);
         if (result && result.length > 0) { data = result; break; }
       } catch (err) { lastErr = err; }
     }
@@ -1720,9 +1726,13 @@ export function ChartPanel() {
             {activeSymbol && noData && !isLoading && (
               <div className="absolute inset-0 flex items-center justify-center z-10">
                 <div className="text-center flex flex-col items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-fw-hover flex items-center justify-center text-fw-text-muted text-lg">📡</div>
-                  <p className="text-[14px] text-fw-text-secondary font-medium">Chart data unavailable</p>
-                  <p className="text-[14px] text-fw-text-muted">Market feed reconnecting…</p>
+                  <div className="w-10 h-10 rounded-full bg-fw-hover flex items-center justify-center text-fw-text-muted text-lg">📊</div>
+                  <p className="text-[14px] text-fw-text-secondary font-medium">Historical data unavailable</p>
+                  <p className="text-[14px] text-fw-text-muted">
+                    {activeSymbol.segment === 'MCX' || activeSymbol.segment === 'CDS'
+                      ? 'Could not load chart data for this contract'
+                      : 'No candle data returned from provider'}
+                  </p>
                   <button
                     onClick={() => loadChartData()}
                     className="mt-1 px-3 py-1 rounded text-[14px] bg-fw-accent/20 hover:bg-fw-accent/40 text-fw-accent border border-fw-accent/30 transition-colors"

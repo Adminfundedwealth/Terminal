@@ -216,7 +216,7 @@ const workspaceDefaults: Record<Workspace, Instrument | null> = {
   futures:  { token: '26000',    symbol: 'NIFTY FUT',      name: 'Nifty Futures',       segment: 'NFO', instrumentType: 'FUT', exchange: 'NSE', lotSize: 50,   tickSize: 0.05, expiry: '2026-07-31' },
   options:  { token: '99926000', symbol: 'NIFTY',          name: 'Nifty 50',           segment: 'NSE', instrumentType: 'EQ',  exchange: 'NSE', lotSize: 50,   tickSize: 0.05 },
   mcx:      { token: '429604',   symbol: 'GOLD',           name: 'Gold Futures',        segment: 'MCX', instrumentType: 'FUT', exchange: 'MCX', lotSize: 100,  tickSize: 1,    expiry: '2026-08-05' },
-  cds:      { token: '11091',    symbol: 'USDINR',         name: 'USD/INR Futures',     segment: 'CDS', instrumentType: 'FUT', exchange: 'NSE', lotSize: 1000, tickSize: 0.0025, expiry: '2026-07-30' },
+  cds:      { token: '11091',    symbol: 'USDINR',         name: 'USD/INR Futures',     segment: 'CDS', instrumentType: 'FUT', exchange: 'CDS', lotSize: 1000, tickSize: 0.0025, expiry: '2026-07-30' },
   etf:      { token: '2150',     symbol: 'NIFTYBEES',      name: 'Nippon India ETF Nifty BeES', segment: 'NSE', instrumentType: 'EQ', exchange: 'NSE', lotSize: 1, tickSize: 0.01 },
   ord:      null,
   wl:       null,

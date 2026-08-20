@@ -107,12 +107,12 @@ export class InstrumentService {
       { token: 'NG_F',        symbol: 'NATURALGAS', name: 'Natural Gas Futures', segment: 'MCX', instrumentType: 'FUT', exchange: 'MCX', lotSize: 1250, tickSize: 0.1,  expiry: '2026-07-26', isPlaceholder: true },
 
       // Currency Derivatives — PLACEHOLDER TOKENS
-      { token: 'USDINR_F',  symbol: 'USDINR FUT',     name: 'USD/INR Futures (current)', segment: 'CDS', instrumentType: 'FUT', exchange: 'NSE', lotSize: 1000, tickSize: 0.0025, expiry: '2026-08-27', isPlaceholder: true },
-      { token: 'USDINR_FN', symbol: 'USDINR FUT JUL', name: 'USD/INR Futures Jul 2026',  segment: 'CDS', instrumentType: 'FUT', exchange: 'NSE', lotSize: 1000, tickSize: 0.0025, expiry: '2026-07-29', isPlaceholder: true },
-      { token: 'USDINR_FF', symbol: 'USDINR FUT AUG', name: 'USD/INR Futures Aug 2026',  segment: 'CDS', instrumentType: 'FUT', exchange: 'NSE', lotSize: 1000, tickSize: 0.0025, expiry: '2026-08-27', isPlaceholder: true },
-      { token: 'EURINR_F',  symbol: 'EURINR FUT',     name: 'EUR/INR Futures (current)', segment: 'CDS', instrumentType: 'FUT', exchange: 'NSE', lotSize: 1000, tickSize: 0.0025, expiry: '2026-08-27', isPlaceholder: true },
-      { token: 'GBPINR_F',  symbol: 'GBPINR FUT',     name: 'GBP/INR Futures (current)', segment: 'CDS', instrumentType: 'FUT', exchange: 'NSE', lotSize: 1000, tickSize: 0.0025, expiry: '2026-08-27', isPlaceholder: true },
-      { token: 'JPYINR_F',  symbol: 'JPYINR FUT',     name: 'JPY/INR Futures (current)', segment: 'CDS', instrumentType: 'FUT', exchange: 'NSE', lotSize: 1000, tickSize: 0.0025, expiry: '2026-08-27', isPlaceholder: true },
+      { token: 'USDINR_F',  symbol: 'USDINR FUT',     name: 'USD/INR Futures (current)', segment: 'CDS', instrumentType: 'FUT', exchange: 'CDS', lotSize: 1000, tickSize: 0.0025, expiry: '2026-08-27', isPlaceholder: true },
+      { token: 'USDINR_FN', symbol: 'USDINR FUT JUL', name: 'USD/INR Futures Jul 2026',  segment: 'CDS', instrumentType: 'FUT', exchange: 'CDS', lotSize: 1000, tickSize: 0.0025, expiry: '2026-07-29', isPlaceholder: true },
+      { token: 'USDINR_FF', symbol: 'USDINR FUT AUG', name: 'USD/INR Futures Aug 2026',  segment: 'CDS', instrumentType: 'FUT', exchange: 'CDS', lotSize: 1000, tickSize: 0.0025, expiry: '2026-08-27', isPlaceholder: true },
+      { token: 'EURINR_F',  symbol: 'EURINR FUT',     name: 'EUR/INR Futures (current)', segment: 'CDS', instrumentType: 'FUT', exchange: 'CDS', lotSize: 1000, tickSize: 0.0025, expiry: '2026-08-27', isPlaceholder: true },
+      { token: 'GBPINR_F',  symbol: 'GBPINR FUT',     name: 'GBP/INR Futures (current)', segment: 'CDS', instrumentType: 'FUT', exchange: 'CDS', lotSize: 1000, tickSize: 0.0025, expiry: '2026-08-27', isPlaceholder: true },
+      { token: 'JPYINR_F',  symbol: 'JPYINR FUT',     name: 'JPY/INR Futures (current)', segment: 'CDS', instrumentType: 'FUT', exchange: 'CDS', lotSize: 1000, tickSize: 0.0025, expiry: '2026-08-27', isPlaceholder: true },
     ];
   }
 
@@ -215,5 +215,105 @@ export class InstrumentService {
     }
 
     return expiries;
+  }
+
+  /**
+   * Patch placeholder futures instruments with real broker securityIds,
+   * expiry dates, and lot sizes sourced from FuturesContractService.
+   *
+   * Called once from server/index.js after FuturesContractService.warmCache()
+   * resolves. Safe to call multiple times (subsequent calls update stale expiry
+   * dates on monthly rollover).
+   *
+   * @param {import('./futuresContractService.js').FuturesContractService} fcs
+   */
+  patchFuturesTokens(fcs) {
+    const contracts = fcs.getCachedContracts();
+    if (!contracts.length) return;
+
+    // Build a lookup: underlying → contract, preferring front-month (earliest expiry)
+    // Multiple entries per underlying can exist (e.g. NIFTY NSE_FNO current, next, far)
+    const byUnderlying = new Map(); // underlying → contract
+    for (const c of contracts) {
+      if (!c.securityId || !/^\d+$/.test(c.securityId)) continue;
+      const existing = byUnderlying.get(c.underlying);
+      if (!existing) {
+        byUnderlying.set(c.underlying, c);
+      } else {
+        // Keep the one with the earliest expiry (front month)
+        const d1 = existing.expiry ? new Date(existing.expiry).getTime() : Infinity;
+        const d2 = c.expiry       ? new Date(c.expiry).getTime()        : Infinity;
+        if (d2 < d1) byUnderlying.set(c.underlying, c);
+      }
+    }
+
+    // Mapping from InstrumentService placeholder symbol → canonical underlying name
+    // used as key in byUnderlying map above.
+    const SYMBOL_TO_UNDERLYING = {
+      'NIFTY FUT':       'NIFTY',
+      'NIFTY FUT JUL':   'NIFTY',
+      'NIFTY FUT AUG':   'NIFTY',
+      'BANKNIFTY FUT':   'BANKNIFTY',
+      'BANKNIFTY FUT JUL': 'BANKNIFTY',
+      'FINNIFTY FUT':    'FINNIFTY',
+      'MIDCPNIFTY FUT':  'MIDCPNIFTY',
+      'SENSEX FUT':      'SENSEX',
+      'RELIANCE FUT':    'RELIANCE',
+      'SBIN FUT':        'SBIN',
+      'HDFCBANK FUT':    'HDFCBANK',
+      'ICICIBANK FUT':   'ICICIBANK',
+      'TCS FUT':         'TCS',
+      'INFY FUT':        'INFY',
+      'ITC FUT':         'ITC',
+      'LT FUT':          'LT',
+      'AXISBANK FUT':    'AXISBANK',
+      'HCLTECH FUT':     'HCLTECH',
+      'BAJFINANCE FUT':  'BAJFINANCE',
+      'KOTAKBANK FUT':   'KOTAKBANK',
+      'TATAMOTORS FUT':  'TATAMOTORS',
+      'TATASTEEL FUT':   'TATASTEEL',
+      'MARUTI FUT':      'MARUTI',
+      'TITAN FUT':       'TITAN',
+      'ADANIENT FUT':    'ADANIENT',
+      'ADANIPORTS FUT':  'ADANIPORTS',
+      'BEL FUT':         'BEL',
+      'HAL FUT':         'HAL',
+      'ZOMATO FUT':      'ZOMATO',
+      'DLF FUT':         'DLF',
+      'SUNPHARMA FUT':   'SUNPHARMA',
+      'POWERGRID FUT':   'POWERGRID',
+      'NTPC FUT':        'NTPC',
+      'COALINDIA FUT':   'COALINDIA',
+      'BHARTIARTL FUT':  'BHARTIARTL',
+      'TIINDIA FUT':     'TIINDIA',
+      'VOLTAS FUT':      'VOLTAS',
+      'WIPRO FUT':       'WIPRO',
+    };
+
+    let patched = 0;
+    for (const inst of this.instruments) {
+      if (!inst.isPlaceholder) continue;
+      if (inst.instrumentType !== 'FUT') continue;
+      // Skip MCX / CDS — they have their own resolver
+      if (inst.segment === 'MCX' || inst.segment === 'CDS') continue;
+
+      const underlying = SYMBOL_TO_UNDERLYING[inst.symbol];
+      if (!underlying) continue;
+      const contract = byUnderlying.get(underlying);
+      if (!contract) continue;
+
+      // Overwrite with real values from scrip master
+      inst.token       = contract.securityId;
+      inst.expiry      = contract.expiry      || inst.expiry;
+      inst.lotSize     = contract.lotSize > 1 ? contract.lotSize : inst.lotSize;
+      inst.tickSize    = contract.tickSize    || inst.tickSize;
+      inst.isPlaceholder = false;  // now a real token
+      inst._resolvedFrom = 'scrip-master';
+      patched++;
+    }
+
+    if (patched > 0) {
+      console.log(`[InstrumentService] ✓ Patched ${patched} placeholder futures instruments with real securityIds`);
+    }
   }
 }
