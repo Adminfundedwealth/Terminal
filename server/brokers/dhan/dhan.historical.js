@@ -278,7 +278,8 @@ export class DhanHistoricalService {
           // For MCX/CDS, try active contract resolution if symbol-based lookup fails
           if (seg === 'MCX_COMM' || seg === 'NSE_CURRENCY') {
             const baseSymbol = symbol.replace(/\s*(FUT|FUTURES?|MINI|MICRO)\s*/i, '').trim().toUpperCase();
-            const activeId = this.getActiveContract(baseSymbol, seg);
+            // Use resolveActiveContractLive which tries scrip master, then live API, then static fallback
+            const activeId = await this.resolveActiveContractLive(baseSymbol, seg);
             if (activeId) {
               const activeEntry = master.byId.get(activeId);
               if (activeEntry) {
@@ -293,6 +294,9 @@ export class DhanHistoricalService {
     }
 
     // 4. Default: use token as-is with mapped segment
+    //    IMPORTANT: For MCX/CDS, the incoming token may be an Angel One placeholder
+    //    (e.g. '429604', '11091') that is NOT a valid Dhan security ID.
+    //    In that case, resolve the active contract by segment if we can infer a symbol.
     let instrument;
 
     // Try to infer instrument type from the market data engine's cached quote
@@ -313,14 +317,36 @@ export class DhanHistoricalService {
           instrument = 'FUTIDX';
         }
         break;
-      case 'MCX_COMM':
+      case 'MCX_COMM': {
+        // For MCX, try to resolve the active contract live if we have a symbol hint
+        if (inferredSymbol) {
+          const baseSymbol = inferredSymbol.replace(/\s*(FUT|FUTURES?|MINI|MICRO)\s*/i, '').trim().toUpperCase();
+          const activeId = await this.resolveActiveContractLive(baseSymbol, 'MCX_COMM');
+          if (activeId && activeId !== token) {
+            console.log(`[DhanHist] MCX fallback resolve: token ${token} (${inferredSymbol}) → active contract ${activeId}`);
+            return { securityId: activeId, segment: 'MCX_COMM', instrument: 'FUTCOM' };
+          }
+        }
         if (inferredSymbol && /\d+(CE|PE)$/i.test(inferredSymbol.replace(/[\s\-]/g, ''))) {
           instrument = 'OPTFUT';
         } else {
           instrument = 'FUTCOM';
         }
         break;
-      case 'NSE_CURRENCY': instrument = 'FUTCUR'; break;
+      }
+      case 'NSE_CURRENCY': {
+        // For CDS, try to resolve the active contract live if we have a symbol hint
+        if (inferredSymbol) {
+          const baseSymbol = inferredSymbol.replace(/\s*(FUT|FUTURES?)\s*/i, '').trim().toUpperCase();
+          const activeId = await this.resolveActiveContractLive(baseSymbol, 'NSE_CURRENCY');
+          if (activeId && activeId !== token) {
+            console.log(`[DhanHist] CDS fallback resolve: token ${token} (${inferredSymbol}) → active contract ${activeId}`);
+            return { securityId: activeId, segment: 'NSE_CURRENCY', instrument: 'FUTCUR' };
+          }
+        }
+        instrument = 'FUTCUR';
+        break;
+      }
       case 'IDX_I': instrument = 'INDEX'; break;
       default: instrument = 'EQUITY'; break;
     }
@@ -365,6 +391,10 @@ export class DhanHistoricalService {
       // Column indices: SEM_SEGMENT(1), SEM_SMST_SECURITY_ID(2), SEM_INSTRUMENT_NAME(3), SEM_TRADING_SYMBOL(5)
       const byId = new Map();      // securityId → { securityId, segment, instrument }
       const bySymbol = new Map();  // "SYMBOL:SEGMENT" → { securityId, segment, instrument }
+      // underlyingLotSize: underlying symbol (uppercased) → lot size (integer)
+      // Sourced from the first OPTIDX/OPTSTK row for that underlying.
+      // Column SEM_LOT_UNITS (index 6) is the exchange-mandated lot size.
+      const underlyingLotSize = new Map();
 
       const segMap = { 'E': 'NSE_EQ', 'D': 'NSE_FNO', 'M': 'MCX_COMM', 'C': 'NSE_CURRENCY', 'BE': 'BSE_EQ' };
 
@@ -373,12 +403,13 @@ export class DhanHistoricalService {
 
       for (let i = 1; i < lines.length; i++) {
         const f = lines[i].split(',');
-        if (f.length < 6) continue;
+        if (f.length < 7) continue;
 
         const seg = f[1]?.trim();
         const secId = f[2]?.trim();
         const inst = f[3]?.trim();
-        const symbol = f[5]?.trim();
+        const symbol = f[5]?.trim();             // SEM_TRADING_SYMBOL  e.g. "NIFTY-Aug2026-24500-CE"
+        const lotRaw = f[6]?.trim();             // SEM_LOT_UNITS       e.g. "50.0"
         const expiry = expiryCol >= 0 && f.length > expiryCol ? f[expiryCol]?.trim() : null;
         // Also try to get the underlying symbol name (SM_SYMBOL_NAME)
         const symName = symbolNameCol >= 0 && f.length > symbolNameCol ? f[symbolNameCol]?.trim() : null;
@@ -390,6 +421,20 @@ export class DhanHistoricalService {
 
         // Store by security ID
         byId.set(secId, entry);
+
+        // ── Lot-size extraction for OPTIDX and OPTSTK rows ─────────────────
+        // The trading symbol format is "UNDERLYING-MonYear-Strike-CE/PE".
+        // We extract the underlying by splitting on '-' and taking the first part.
+        // Store the first (smallest-lot) entry for each underlying so that
+        // repeated monthly/weekly rows don't overwrite with a different value.
+        if ((inst === 'OPTIDX' || inst === 'OPTSTK') && lotRaw && symbol) {
+          const dashIdx = symbol.indexOf('-');
+          const underlying = dashIdx > 0 ? symbol.slice(0, dashIdx).toUpperCase() : symbol.toUpperCase();
+          const lot = parseFloat(lotRaw);
+          if (Number.isFinite(lot) && lot > 0 && !underlyingLotSize.has(underlying)) {
+            underlyingLotSize.set(underlying, Math.round(lot));
+          }
+        }
 
         // Store by symbol + segment (for reverse lookup)
         if (symbol && (inst === 'EQUITY' || inst === 'INDEX')) {
@@ -403,9 +448,29 @@ export class DhanHistoricalService {
           bySymbol.set(`${symbol}:E`, entry);
         }
 
-        // Store MCX/CDS futures for active contract resolution
-        if ((seg === 'M' || seg === 'C') && (inst === 'FUTCOM' || inst === 'FUTCUR' || inst === 'FUTIDX')) {
-          futuresEntries.push({ securityId: secId, segment: dhanSeg, symbol: symName || symbol, tradingSymbol: symbol, instrument: inst, expiry });
+        // Store MCX/CDS/NSE-FNO/BSE-FNO futures for active contract resolution.
+        // seg D = NSE_FNO (index + stock futures), BD = BSE_FNO (SENSEX futures),
+        // M = MCX_COMM (commodity futures), C = NSE_CURRENCY (currency futures).
+        const isFutureInst = inst === 'FUTCOM' || inst === 'FUTCUR' || inst === 'FUTIDX' || inst === 'FUTSTK';
+        if (isFutureInst && (seg === 'M' || seg === 'C' || seg === 'D' || seg === 'BD')) {
+          // For NSE/BSE FNO, extract the underlying symbol from the trading symbol.
+          // Dhan trading symbol format: "NIFTY-AUG2026-FUT", "RELIANCE-AUG2026-FUT".
+          // SM_SYMBOL_NAME (symName) for FNO rows typically holds the plain underlying
+          // name e.g. "NIFTY", "RELIANCE" — use that when available.
+          let underlyingName = symName || null;
+          if (!underlyingName && symbol) {
+            // Strip the month/year expiry suffix and "-FUT" to get underlying.
+            // Handles "NIFTY-AUG2026-FUT", "BANKNIFTY-27AUG2026-FUT", "RELIANCE-28AUG2026-FUT"
+            underlyingName = symbol.replace(/-[A-Z0-9]+-FUT$/i, '').trim().toUpperCase();
+          }
+          futuresEntries.push({
+            securityId: secId,
+            segment: dhanSeg,
+            symbol: underlyingName || symbol,
+            tradingSymbol: symbol,
+            instrument: inst,
+            expiry,
+          });
         }
       }
 
@@ -417,8 +482,26 @@ export class DhanHistoricalService {
         byId.set(angelToken, dhanEntry);
       }
 
-      console.log(`[DhanHist] Scrip master loaded: ${byId.size} IDs, ${bySymbol.size} symbols, ${futuresEntries.length} futures contracts`);
-      return { byId, bySymbol, futuresEntries };
+      // ── Lot-size canonical aliases ─────────────────────────────────────────
+      // Some underlyings use a different prefix in Dhan's scrip master trading
+      // symbol than the name used in DHAN_UNDERLYING_MAP and the frontend.
+      // If the map already has the canonical name (from a matching row), skip.
+      // If not, copy the alias entry so getLotSize('TATAMOTORS') works correctly.
+      const LOT_SIZE_ALIASES = {
+        // Dhan uses "TMPV-" prefix for Tata Motors options → key stored as "TMPV"
+        'TATAMOTORS': 'TMPV',
+      };
+      for (const [canonical, alias] of Object.entries(LOT_SIZE_ALIASES)) {
+        if (!underlyingLotSize.has(canonical) && underlyingLotSize.has(alias)) {
+          underlyingLotSize.set(canonical, underlyingLotSize.get(alias));
+        }
+      }
+      // ZOMATO: not found in current scrip master snapshot. Will return 1 (fallback).
+      // When Dhan adds ZOMATO option rows with the correct prefix, this resolves
+      // automatically. No hardcoding added — fallback to 1 is the correct behaviour.
+
+      console.log(`[DhanHist] Scrip master loaded: ${byId.size} IDs, ${bySymbol.size} symbols, ${futuresEntries.length} futures contracts, ${underlyingLotSize.size} underlying lot sizes`);
+      return { byId, bySymbol, futuresEntries, underlyingLotSize };
     } catch (err) {
       console.error('[DhanHist] Scrip master fetch error:', err.message);
       return null;
@@ -439,11 +522,12 @@ export class DhanHistoricalService {
     const target = symbol.toUpperCase();
     const matches = this._scripMaster.futuresEntries.filter(item => {
       if (item.segment !== segment) return false;
-      // Match by symbol name or trading symbol
+      // Match by symbol name (SM_SYMBOL_NAME) OR trading symbol prefix.
+      // NOTE: NSE CDS entries have empty SM_SYMBOL_NAME — must use tradingSymbol.
       const sym = (item.symbol || '').toUpperCase();
       const tsym = (item.tradingSymbol || '').toUpperCase();
       if (sym !== target && !tsym.startsWith(target)) return false;
-      // Must have future expiry (or no expiry = always valid)
+      // Must have a future expiry
       if (!item.expiry) return true;
       try {
         const expDate = new Date(item.expiry);
@@ -451,7 +535,10 @@ export class DhanHistoricalService {
       } catch { return false; }
     });
 
-    if (matches.length === 0) return null;
+    if (matches.length === 0) {
+      console.warn(`[DhanHist] No future-dated contract in scrip master for ${symbol}/${segment} — scrip master may be stale`);
+      return null;
+    }
 
     // Sort by earliest expiry (nearest month = front month contract)
     matches.sort((a, b) => {
@@ -464,7 +551,154 @@ export class DhanHistoricalService {
     return matches[0].securityId;
   }
 
+  /**
+   * Get the nearest active NSE_FNO or BSE_FNO futures contract for an underlying.
+   *
+   * Works identically to getActiveContract() but targets the NSE_FNO segment
+   * (index futures: NIFTY, BANKNIFTY, FINNIFTY, MIDCPNIFTY) and FUTSTK
+   * (stock futures: RELIANCE, SBIN, …).
+   *
+   * The underlying matching uses both SM_SYMBOL_NAME (exact) and the prefix
+   * of the trading symbol so both "NIFTY-AUG2026-FUT" and plain "NIFTY"
+   * sources are handled.
+   *
+   * @param {string} underlying  - e.g. 'NIFTY', 'BANKNIFTY', 'RELIANCE', 'SENSEX'
+   * @param {string} [exchange]  - 'NSE_FNO' (default) or 'BSE_FNO'
+   * @returns {{ securityId: string, segment: string, instrument: string,
+   *             expiry: string|null, tradingSymbol: string|null }|null}
+   */
+  getActiveFuturesContract(underlying, exchange = 'NSE_FNO') {
+    if (!this._scripMaster?.futuresEntries) return null;
+
+    const now   = new Date();
+    const target = underlying.toUpperCase().trim();
+    const seg    = exchange === 'BSE_FNO' ? 'BSE_FNO' : 'NSE_FNO';
+
+    const matches = this._scripMaster.futuresEntries.filter(item => {
+      if (item.segment !== seg) return false;
+
+      // Match by extracted underlying name (symbol field) OR trading symbol prefix.
+      const sym  = (item.symbol  || '').toUpperCase();
+      const tsym = (item.tradingSymbol || '').toUpperCase();
+      if (sym !== target && !tsym.startsWith(target + '-') && tsym !== target) return false;
+
+      // Only contracts expiring in the future (or no expiry recorded → include)
+      if (!item.expiry) return true;
+      try {
+        const exp = new Date(item.expiry);
+        return !isNaN(exp.getTime()) && exp >= now;
+      } catch { return false; }
+    });
+
+    if (matches.length === 0) {
+      console.warn(`[DhanHist] No active ${seg} contract in scrip master for ${underlying}. Scrip master may be stale or not yet loaded.`);
+      return null;
+    }
+
+    // Nearest (front-month) expiry first
+    matches.sort((a, b) => {
+      const da = a.expiry ? new Date(a.expiry).getTime() : Infinity;
+      const db = b.expiry ? new Date(b.expiry).getTime() : Infinity;
+      return da - db;
+    });
+
+    const best = matches[0];
+    console.log(`[DhanHist] Active ${seg} contract: ${underlying} → ${best.securityId} tradingSymbol=${best.tradingSymbol} expiry=${best.expiry}`);
+    return {
+      securityId:    best.securityId,
+      segment:       best.segment,
+      instrument:    best.instrument,
+      expiry:        best.expiry || null,
+      tradingSymbol: best.tradingSymbol || null,
+    };
+  }
+
+  /**
+   * Search Dhan's scrip API for the nearest active contract when the local
+   * scrip master is stale (no future-dated entries for a symbol).
+   * Falls back to well-known static IDs for the most common MCX/CDS pairs.
+   * @param {string} symbol - e.g. 'GOLD', 'USDINR'
+   * @param {string} segment - 'MCX_COMM' or 'NSE_CURRENCY'
+   * @returns {Promise<string|null>}
+   */
+  async resolveActiveContractLive(symbol, segment) {
+    // 1. Try scrip master first (fast path, works when master is fresh)
+    const cached = this.getActiveContract(symbol, segment);
+    if (cached) return cached;
+
+    // 2. Try the Dhan scrip search API
+    try {
+      const dhanSeg = segment === 'MCX_COMM' ? 'MCX' : 'CUR';
+      const resp = await this._post(`https://api.dhan.co/v2/searchScrip`, {
+        searchString: symbol,
+        exchange: dhanSeg,
+      });
+      const items = resp.data?.data || [];
+      // Filter to FUTCOM/FUTCUR with future expiry
+      const now = new Date();
+      const futures = items.filter(item => {
+        if (!item.expiryDate) return false;
+        const exp = new Date(item.expiryDate);
+        return !isNaN(exp.getTime()) && exp >= now &&
+          (item.instrumentType === 'FUTCOM' || item.instrumentType === 'FUTCUR' || item.instrumentType === 'FUT');
+      });
+      if (futures.length > 0) {
+        // Sort by nearest expiry
+        futures.sort((a, b) => new Date(a.expiryDate) - new Date(b.expiryDate));
+        const id = String(futures[0].securityId || futures[0].SEM_SMST_SECURITY_ID);
+        console.log(`[DhanHist] Live scrip search: ${symbol}/${segment} → ${id} (exp: ${futures[0].expiryDate})`);
+        return id;
+      }
+    } catch (err) {
+      console.warn(`[DhanHist] Live scrip search failed for ${symbol}/${segment}: ${err.message}`);
+    }
+
+    // 3. Last resort: well-known static IDs (updated from live scrip master Aug 2026)
+    // These are the current front-month contracts as of Aug 2026.
+    // They will need manual update if the scrip master and API both fail consistently.
+    const STATIC_IDS = {
+      'GOLD:MCX_COMM':        '483079', // GOLD-05Oct2026-FUT (active as of Aug 2026)
+      'SILVER:MCX_COMM':      '471725', // SILVER-04Sep2026-FUT
+      'CRUDEOIL:MCX_COMM':    '565899', // CRUDEOIL-21Sep2026-FUT
+      'NATURALGAS:MCX_COMM':  '568245', // NATURALGAS-25Sep2026-FUT
+      'COPPER:MCX_COMM':      '568831', // COPPER-31Aug2026-FUT
+      // CDS: scrip master has no Aug 2026+ contracts — use most recent known IDs
+      // These will be resolved via live scrip search above; static IDs here are last-resort
+      'USDINR:NSE_CURRENCY':  '6601',   // USDINR-Jun2026-FUT (latest in master — expired)
+      'EURINR:NSE_CURRENCY':  '6572',   // EURINR-Jun2026-FUT
+      'GBPINR:NSE_CURRENCY':  '6598',   // GBPINR-Jun2026-FUT
+      'JPYINR:NSE_CURRENCY':  '6600',   // JPYINR-Jun2026-FUT
+    };
+    const key = `${symbol.toUpperCase()}:${segment}`;
+    if (STATIC_IDS[key]) {
+      console.warn(`[DhanHist] Using static fallback ID for ${key}: ${STATIC_IDS[key]} — update when contract expires`);
+      return STATIC_IDS[key];
+    }
+
+    return null;
+  }
+
   // (CSV parsing handled inline in _loadScripMaster)
+
+  /**
+   * Get the NSE/BSE exchange-mandated lot size for an option underlying.
+   *
+   * Sources the value from the Dhan scrip master (SEM_LOT_UNITS column),
+   * which is the authoritative source for all exchange lot sizes.
+   *
+   * @param {string} symbol - e.g. 'RELIANCE', 'NIFTY', 'BANKNIFTY', 'SENSEX'
+   * @returns {number} lot size, or 1 if the scrip master is not loaded yet
+   *                   or the symbol is not found in it.
+   *
+   * NOTE: Returns 1 (not null) so that callers that use `lotSize || 1`
+   * continue to work safely during the short window before the scrip
+   * master has been downloaded at server startup.
+   */
+  getLotSize(symbol) {
+    if (!this._scripMaster?.underlyingLotSize) return 1;
+    const key = String(symbol || '').toUpperCase().trim();
+    return this._scripMaster.underlyingLotSize.get(key) || 1;
+  }
 
   // ─── Response parser ─────────────────────────────────────────────────────
 

@@ -230,6 +230,9 @@ export const getOptionChain = (symbol: string, expiry: string) =>
 export const getExpiries = (symbol: string) =>
   request<string[]>(`/market/expiries?symbol=${symbol}`);
 
+export const getLotSize = (symbol: string) =>
+  request<{ symbol: string; lotSize: number; source: string }>(`/market/lot-size?symbol=${encodeURIComponent(symbol)}`);
+
 export const getMarketDepth = (token: string) =>
   request<any>(`/market/depth?token=${token}`);
 

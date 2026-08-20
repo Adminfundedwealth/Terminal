@@ -5,6 +5,7 @@ import { supabase } from '../db/client.js';
 import { eventBus } from '../events/eventBus.js';
 
 import { TradingViewDatafeed } from '../realtime/tradingview.datafeed.js';
+import { futuresContractService } from '../services/futuresContractService.js';
 
 export function createApiRouter(accountService, instrumentService, marketDataEngine, candleService, depthService, optionChainService, dataProviderSwitch) {
   const router = Router();
@@ -667,6 +668,39 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
     res.json(instrumentService.getBySegment(segment));
   });
 
+  /**
+   * Option lot-size lookup — returns the exchange-mandated lot size for an
+   * option underlying from the Dhan scrip master (SEM_LOT_UNITS column).
+   *
+   * Example: GET /api/market/lot-size?symbol=RELIANCE → { symbol:"RELIANCE", lotSize:500 }
+   *
+   * The scrip master is pre-loaded at server startup.  If it is not yet
+   * available (first few seconds after cold start) the response contains
+   * { lotSize: 1, source: "fallback" } so callers can tell the difference.
+   *
+   * This endpoint is public (no auth required) because lot size is not
+   * sensitive information and is needed before the order ticket is shown.
+   */
+  router.get('/market/lot-size', (req, res) => {
+    const symbol = (req.query.symbol || '').toUpperCase().trim();
+    if (!symbol) return res.status(400).json({ error: 'symbol required' });
+
+    const dhanAdapter = dataProviderSwitch?.getDhanAdapter();
+    const historical = dhanAdapter?.historical;
+
+    if (!historical) {
+      return res.json({ symbol, lotSize: 1, source: 'fallback-no-adapter' });
+    }
+
+    // getLotSize reads from the in-memory scrip master — zero network cost
+    const lot = historical.getLotSize(symbol);
+    const source = (historical._scripMaster?.underlyingLotSize?.size > 0)
+      ? 'dhan-scrip-master'
+      : 'fallback-loading';
+
+    res.json({ symbol, lotSize: lot, source });
+  });
+
   router.get('/market/history', async (req, res) => {
     let { token, from, to, exchange } = req.query;
     const rawSymbol = req.query.symbol; // Support ?symbol= as alternative to ?token=
@@ -676,50 +710,24 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
     if (!token && rawSymbol) token = rawSymbol;
     if (!token || !tf) return res.status(400).json({ message: 'token and tf required' });
 
-    // Native Dhan mapping for placeholder tokens
+    // Native Dhan mapping for placeholder tokens.
+    // NSE/BSE Futures placeholders are resolved via FuturesContractService
+    // (real NSE_FNO/BSE_FNO securityIds from Dhan scrip master).
+    // MCX/CDS retain their own resolution path below.
+    const NSE_BSE_FUT_PLACEHOLDERS = new Set([
+      'NF_FUT','NF_FUT_N','NF_FUT_F',
+      'BNF_FUT','BNF_FUT_N',
+      'FNF_FUT','MCN_FUT','MNF_FUT',
+      'SEN_FUT','SNX_FUT',
+      'REL_FUT','HDFC_FUT','ICICI_FUT','SBIN_FUT','TCS_FUT','INFY_FUT',
+      'ITC_FUT','LT_FUT','AXIS_FUT','HCL_FUT','BAJF_FUT','KOTAK_FUT',
+      'TATAM_FUT','TATAS_FUT','MARUTI_FUT','TITAN_FUT','ADANIE_FUT',
+      'ADANIP_FUT','BEL_FUT','HAL_FUT','ZOMATO_FUT','DLF_FUT',
+      'SUNP_FUT','PWRGRD_FUT','NTPC_FUT','COAL_FUT','BHARTI_FUT',
+      'TIIN_FUT','VOLTAS_FUT','WIPRO_FUT',
+    ]);
     const PLACEHOLDER_TO_DHAN = {
-      'NF_FUT': { securityId: '13', segment: 'IDX_I', spotToken: '99926000' },
-      'NF_FUT_N': { securityId: '13', segment: 'IDX_I', spotToken: '99926000' },
-      'NF_FUT_F': { securityId: '13', segment: 'IDX_I', spotToken: '99926000' },
-      'BNF_FUT': { securityId: '25', segment: 'IDX_I', spotToken: '99926009' },
-      'BNF_FUT_N': { securityId: '25', segment: 'IDX_I', spotToken: '99926009' },
-      'FNF_FUT': { securityId: '27', segment: 'IDX_I', spotToken: '99926037' },
-      'MNF_FUT': { securityId: '442', segment: 'IDX_I', spotToken: '99926074' },
-      'SNX_FUT': { securityId: '51', segment: 'IDX_I', spotToken: '99919000' },
-      'MCN_FUT': { securityId: '442', segment: 'IDX_I', spotToken: '99926074' },
-      'SEN_FUT': { securityId: '51', segment: 'IDX_I', spotToken: '99919000' },
-      // Stock Futures — all 30 F&O stocks (resolve via spot equity token)
-      'REL_FUT': { securityId: '2885', segment: 'NSE_EQ', spotToken: '2885' },
-      'HDFC_FUT': { securityId: '1333', segment: 'NSE_EQ', spotToken: '1333' },
-      'ICICI_FUT': { securityId: '4963', segment: 'NSE_EQ', spotToken: '4963' },
-      'SBIN_FUT': { securityId: '3045', segment: 'NSE_EQ', spotToken: '3045' },
-      'TCS_FUT': { securityId: '11536', segment: 'NSE_EQ', spotToken: '11536' },
-      'INFY_FUT': { securityId: '1594', segment: 'NSE_EQ', spotToken: '1594' },
-      'ITC_FUT': { securityId: '1660', segment: 'NSE_EQ', spotToken: '1660' },
-      'LT_FUT': { securityId: '11483', segment: 'NSE_EQ', spotToken: '11483' },
-      'AXIS_FUT': { securityId: '5900', segment: 'NSE_EQ', spotToken: '5900' },
-      'HCL_FUT': { securityId: '7229', segment: 'NSE_EQ', spotToken: '7229' },
-      'BAJF_FUT': { securityId: '317', segment: 'NSE_EQ', spotToken: '317' },
-      'KOTAK_FUT': { securityId: '1922', segment: 'NSE_EQ', spotToken: '1922' },
-      'TATAM_FUT': { securityId: '3456', segment: 'NSE_EQ', spotToken: '3456' },
-      'TATAS_FUT': { securityId: '3499', segment: 'NSE_EQ', spotToken: '3499' },
-      'MARUTI_FUT': { securityId: '10999', segment: 'NSE_EQ', spotToken: '10999' },
-      'TITAN_FUT': { securityId: '3506', segment: 'NSE_EQ', spotToken: '3506' },
-      'ADANIE_FUT': { securityId: '25', segment: 'NSE_EQ', spotToken: '25' },
-      'ADANIP_FUT': { securityId: '15083', segment: 'NSE_EQ', spotToken: '15083' },
-      'BEL_FUT': { securityId: '383', segment: 'NSE_EQ', spotToken: '383' },
-      'HAL_FUT': { securityId: '2303', segment: 'NSE_EQ', spotToken: '2303' },
-      'ZOMATO_FUT': { securityId: '5097', segment: 'NSE_EQ', spotToken: '5097' },
-      'DLF_FUT': { securityId: '14732', segment: 'NSE_EQ', spotToken: '14732' },
-      'SUNP_FUT': { securityId: '881', segment: 'NSE_EQ', spotToken: '881' },
-      'PWRGRD_FUT': { securityId: '14977', segment: 'NSE_EQ', spotToken: '14977' },
-      'NTPC_FUT': { securityId: '11630', segment: 'NSE_EQ', spotToken: '11630' },
-      'COAL_FUT': { securityId: '694', segment: 'NSE_EQ', spotToken: '694' },
-      'BHARTI_FUT': { securityId: '467', segment: 'NSE_EQ', spotToken: '467' },
-      'TIIN_FUT': { securityId: '1410', segment: 'NSE_EQ', spotToken: '1410' },
-      'VOLTAS_FUT': { securityId: '3718', segment: 'NSE_EQ', spotToken: '3718' },
-      'WIPRO_FUT': { securityId: '3787', segment: 'NSE_EQ', spotToken: '3787' },
-      // MCX Commodities
+      // MCX Commodities — keep using active contract resolution
       'GOLD_F': { securityId: null, segment: 'MCX_COMM', scripSymbol: 'GOLD' },
       'GOLDM_F': { securityId: null, segment: 'MCX_COMM', scripSymbol: 'GOLDM' },
       'SILVER_F': { securityId: null, segment: 'MCX_COMM', scripSymbol: 'SILVER' },
@@ -727,12 +735,32 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
       'CRUDE_F': { securityId: null, segment: 'MCX_COMM', scripSymbol: 'CRUDEOIL' },
       'NATGAS_F': { securityId: null, segment: 'MCX_COMM', scripSymbol: 'NATURALGAS' },
       'COPPER_F': { securityId: null, segment: 'MCX_COMM', scripSymbol: 'COPPER' },
-      // CDS Currency
+      // CDS Currency — keep using active contract resolution
       'USDINR_F': { securityId: null, segment: 'NSE_CURRENCY', scripSymbol: 'USDINR' },
+      'USDINR_FN': { securityId: null, segment: 'NSE_CURRENCY', scripSymbol: 'USDINR' },
+      'USDINR_FF': { securityId: null, segment: 'NSE_CURRENCY', scripSymbol: 'USDINR' },
       'EURINR_F': { securityId: null, segment: 'NSE_CURRENCY', scripSymbol: 'EURINR' },
       'GBPINR_F': { securityId: null, segment: 'NSE_CURRENCY', scripSymbol: 'GBPINR' },
       'JPYINR_F': { securityId: null, segment: 'NSE_CURRENCY', scripSymbol: 'JPYINR' },
     };
+
+    // ── NSE/BSE Futures: resolve via FuturesContractService ──────────────
+    if (NSE_BSE_FUT_PLACEHOLDERS.has(token)) {
+      try {
+        const contract = await futuresContractService.resolve(token);
+        if (contract?.securityId) {
+          token    = contract.securityId;
+          exchange = contract.segment;
+          console.log(`[History] ${req.query.token} → FuturesContractSvc → ${token}/${exchange}`);
+        } else {
+          console.warn(`[History] FuturesContractService could not resolve ${req.query.token} — scrip master may not be loaded yet`);
+          return res.status(503).json({ message: `Futures contract not yet resolved for ${req.query.token}. Please retry in a few seconds.` });
+        }
+      } catch (fcsErr) {
+        console.error(`[History] FuturesContractService error for ${req.query.token}:`, fcsErr.message);
+        return res.status(503).json({ message: 'Futures contract resolution error' });
+      }
+    }
 
     // ─── Numeric token → segment mapping for MCX/CDS/ETF direct tokens ───
     // When the frontend passes numeric tokens with MCX/CDS exchange, map them
@@ -759,62 +787,27 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
     };
 
     // ─── Symbol name mapping (frontend may pass "NIFTY FUT", "GOLD", "USDINR", etc.) ───
+    // NSE/BSE Futures symbol names resolve via FuturesContractService (see Step 2 below).
+    // This map covers spot indices, MCX, CDS, and ETFs only.
     const SYMBOL_NAME_MAP = {
-      // Index Futures
-      'NIFTY FUT': { securityId: '13', segment: 'IDX_I', scripSymbol: 'NIFTY', futSegment: 'NSE_FNO' },
-      'BANKNIFTY FUT': { securityId: '25', segment: 'IDX_I', scripSymbol: 'BANKNIFTY', futSegment: 'NSE_FNO' },
-      'FINNIFTY FUT': { securityId: '27', segment: 'IDX_I', scripSymbol: 'FINNIFTY', futSegment: 'NSE_FNO' },
-      'MIDCPNIFTY FUT': { securityId: '442', segment: 'IDX_I', scripSymbol: 'MIDCPNIFTY', futSegment: 'NSE_FNO' },
-      'SENSEX FUT': { securityId: '51', segment: 'IDX_I', scripSymbol: 'SENSEX', futSegment: 'BSE_FNO' },
-      // Stock Futures (all 30 — resolve to spot equity for charting)
-      'RELIANCE FUT': { securityId: '2885', segment: 'NSE_EQ' },
-      'HDFCBANK FUT': { securityId: '1333', segment: 'NSE_EQ' },
-      'ICICIBANK FUT': { securityId: '4963', segment: 'NSE_EQ' },
-      'SBIN FUT': { securityId: '3045', segment: 'NSE_EQ' },
-      'TCS FUT': { securityId: '11536', segment: 'NSE_EQ' },
-      'INFY FUT': { securityId: '1594', segment: 'NSE_EQ' },
-      'ITC FUT': { securityId: '1660', segment: 'NSE_EQ' },
-      'LT FUT': { securityId: '11483', segment: 'NSE_EQ' },
-      'AXISBANK FUT': { securityId: '5900', segment: 'NSE_EQ' },
-      'HCLTECH FUT': { securityId: '7229', segment: 'NSE_EQ' },
-      'BAJFINANCE FUT': { securityId: '317', segment: 'NSE_EQ' },
-      'KOTAKBANK FUT': { securityId: '1922', segment: 'NSE_EQ' },
-      'TATAMOTORS FUT': { securityId: '3456', segment: 'NSE_EQ' },
-      'TATASTEEL FUT': { securityId: '3499', segment: 'NSE_EQ' },
-      'MARUTI FUT': { securityId: '10999', segment: 'NSE_EQ' },
-      'TITAN FUT': { securityId: '3506', segment: 'NSE_EQ' },
-      'ADANIENT FUT': { securityId: '25', segment: 'NSE_EQ' },
-      'ADANIPORTS FUT': { securityId: '15083', segment: 'NSE_EQ' },
-      'BEL FUT': { securityId: '383', segment: 'NSE_EQ' },
-      'HAL FUT': { securityId: '2303', segment: 'NSE_EQ' },
-      'ZOMATO FUT': { securityId: '5097', segment: 'NSE_EQ' },
-      'DLF FUT': { securityId: '14732', segment: 'NSE_EQ' },
-      'SUNPHARMA FUT': { securityId: '881', segment: 'NSE_EQ' },
-      'POWERGRID FUT': { securityId: '14977', segment: 'NSE_EQ' },
-      'NTPC FUT': { securityId: '11630', segment: 'NSE_EQ' },
-      'COALINDIA FUT': { securityId: '694', segment: 'NSE_EQ' },
-      'BHARTIARTL FUT': { securityId: '467', segment: 'NSE_EQ' },
-      'TIINDIA FUT': { securityId: '1410', segment: 'NSE_EQ' },
-      'VOLTAS FUT': { securityId: '3718', segment: 'NSE_EQ' },
-      'WIPRO FUT': { securityId: '3787', segment: 'NSE_EQ' },
-      // Index names
+      // Index names (spot — NOT futures)
       'NIFTY': { securityId: '13', segment: 'IDX_I' },
       'NIFTY 50': { securityId: '13', segment: 'IDX_I' },
       'BANKNIFTY': { securityId: '25', segment: 'IDX_I' },
       'FINNIFTY': { securityId: '27', segment: 'IDX_I' },
       'MIDCPNIFTY': { securityId: '442', segment: 'IDX_I' },
       'SENSEX': { securityId: '51', segment: 'IDX_I' },
-      // MCX Commodity names
-      'GOLD': { securityId: '483079', segment: 'MCX_COMM', scripSymbol: 'GOLD' },
-      'SILVER': { securityId: '471725', segment: 'MCX_COMM', scripSymbol: 'SILVER' },
-      'CRUDEOIL': { securityId: '560977', segment: 'MCX_COMM', scripSymbol: 'CRUDEOIL' },
-      'NATURALGAS': { securityId: '431765', segment: 'MCX_COMM', scripSymbol: 'NATURALGAS' },
-      'COPPER': { securityId: '430596', segment: 'MCX_COMM', scripSymbol: 'COPPER' },
-      // CDS Currency names
-      'USDINR': { securityId: '11091', segment: 'NSE_CURRENCY', scripSymbol: 'USDINR' },
-      'EURINR': { securityId: '11363', segment: 'NSE_CURRENCY', scripSymbol: 'EURINR' },
-      'GBPINR': { securityId: '11096', segment: 'NSE_CURRENCY', scripSymbol: 'GBPINR' },
-      'JPYINR': { securityId: '11098', segment: 'NSE_CURRENCY', scripSymbol: 'JPYINR' },
+      // MCX Commodity names — securityId intentionally null; always resolved via getActiveContract
+      'GOLD':        { securityId: null, segment: 'MCX_COMM', scripSymbol: 'GOLD' },
+      'SILVER':      { securityId: null, segment: 'MCX_COMM', scripSymbol: 'SILVER' },
+      'CRUDEOIL':    { securityId: null, segment: 'MCX_COMM', scripSymbol: 'CRUDEOIL' },
+      'NATURALGAS':  { securityId: null, segment: 'MCX_COMM', scripSymbol: 'NATURALGAS' },
+      'COPPER':      { securityId: null, segment: 'MCX_COMM', scripSymbol: 'COPPER' },
+      // CDS Currency names — securityId intentionally null; always resolved via getActiveContract
+      'USDINR':      { securityId: null, segment: 'NSE_CURRENCY', scripSymbol: 'USDINR' },
+      'EURINR':      { securityId: null, segment: 'NSE_CURRENCY', scripSymbol: 'EURINR' },
+      'GBPINR':      { securityId: null, segment: 'NSE_CURRENCY', scripSymbol: 'GBPINR' },
+      'JPYINR':      { securityId: null, segment: 'NSE_CURRENCY', scripSymbol: 'JPYINR' },
       // ETF names
       'NIFTYBEES': { securityId: '2150', segment: 'NSE_EQ' },
       'BANKBEES': { securityId: '15068', segment: 'NSE_EQ' },
@@ -826,18 +819,15 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
     };
 
     // Helper: resolve active contract via scrip master for MCX/CDS
-    const resolveActiveContract = (scripSymbol, segment) => {
+    // Uses resolveActiveContractLive which tries: scrip master → live API → static fallback
+    const resolveActiveContract = async (scripSymbol, segment) => {
       try {
         const dhan = dataProviderSwitch?.getDhanAdapter();
         if (dhan?.historical) {
-          const activeId = dhan.historical.getActiveContract(scripSymbol, segment);
+          // Ensure scrip master is loaded before attempting resolution
+          await dhan.historical._getScripMaster();
+          const activeId = await dhan.historical.resolveActiveContractLive(scripSymbol, segment);
           if (activeId) return activeId;
-          // Also check bySymbol in scrip master
-          if (dhan.historical._scripMaster?.bySymbol) {
-            const entry = dhan.historical._scripMaster.bySymbol.get(`${scripSymbol}:${segment}`) ||
-                         dhan.historical._scripMaster.bySymbol.get(`${scripSymbol}:E`);
-            if (entry?.securityId) return entry.securityId;
-          }
         }
       } catch (e) {
         console.warn(`[History] Active contract resolution failed for ${scripSymbol}/${segment}: ${e.message}`);
@@ -852,21 +842,13 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
         token = mapping.securityId;
         exchange = mapping.segment;
       } else if (mapping.scripSymbol) {
-        const activeId = resolveActiveContract(mapping.scripSymbol, mapping.segment);
+        const activeId = await resolveActiveContract(mapping.scripSymbol, mapping.segment);
         if (activeId) {
           token = activeId;
           exchange = mapping.segment;
         } else {
-          // Fallback: use known static IDs for popular MCX/CDS contracts
-          const STATIC_FALLBACK = {
-            'GOLD': '483079', 'GOLDM': '483079', 'SILVER': '471725', 'SILVERM': '471725',
-            'CRUDEOIL': '560977', 'NATURALGAS': '431765', 'COPPER': '430596',
-            'USDINR': '11091', 'EURINR': '11363', 'GBPINR': '11096', 'JPYINR': '11098',
-          };
-          if (STATIC_FALLBACK[mapping.scripSymbol]) {
-            token = STATIC_FALLBACK[mapping.scripSymbol];
-            exchange = mapping.segment;
-          }
+          console.warn(`[History] Could not resolve active contract for placeholder ${token} (${mapping.scripSymbol}/${mapping.segment})`);
+          exchange = mapping.segment;
         }
       }
     }
@@ -874,12 +856,14 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
     else if (/^\d+$/.test(token) && NUMERIC_TOKEN_MAP[token]) {
       const numMapping = NUMERIC_TOKEN_MAP[token];
       exchange = numMapping.segment;
-      // For MCX/CDS derivatives, try to resolve the active contract
+      // For MCX/CDS derivatives, resolve the active contract dynamically (async — never use stale IDs)
       if ((numMapping.segment === 'MCX_COMM' || numMapping.segment === 'NSE_CURRENCY') && numMapping.scripSymbol) {
-        const activeId = resolveActiveContract(numMapping.scripSymbol, numMapping.segment);
+        const activeId = await resolveActiveContract(numMapping.scripSymbol, numMapping.segment);
         if (activeId) {
           console.log(`[History] Known token ${token} (${numMapping.scripSymbol}) → active contract ${activeId}`);
           token = activeId;
+        } else {
+          console.warn(`[History] Could not resolve active contract for ${numMapping.scripSymbol}/${numMapping.segment} — token stays ${token}`);
         }
       }
       // For ETFs/equities: try scrip master symbol lookup to get the correct Dhan securityId
@@ -902,8 +886,20 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
       const upper = token.toUpperCase().trim();
       const symMapping = SYMBOL_NAME_MAP[upper];
       if (symMapping) {
-        token = symMapping.securityId;
-        exchange = symMapping.segment;
+        if (symMapping.securityId) {
+          token = symMapping.securityId;
+          exchange = symMapping.segment;
+        } else if (symMapping.scripSymbol) {
+          // Always resolve dynamically — never use stale hardcoded IDs for futures
+          const activeId = await resolveActiveContract(symMapping.scripSymbol, symMapping.segment);
+          if (activeId) {
+            token = activeId;
+            exchange = symMapping.segment;
+          } else {
+            console.warn(`[History] Could not resolve active contract for ${symMapping.scripSymbol}/${symMapping.segment}`);
+            exchange = symMapping.segment;
+          }
+        }
       } else {
         // Try to resolve via scrip master as equity/ETF
         try {
@@ -930,22 +926,13 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
       // Check if this is a known numeric token with a symbol we can resolve
       const numMapping = NUMERIC_TOKEN_MAP[token];
       if (numMapping && numMapping.scripSymbol) {
-        const activeId = resolveActiveContract(numMapping.scripSymbol, numMapping.segment);
+        const activeId = await resolveActiveContract(numMapping.scripSymbol, numMapping.segment);
         if (activeId) {
           console.log(`[History] Numeric token ${token} (${numMapping.scripSymbol}) → active contract ${activeId}`);
           token = activeId;
           exchange = numMapping.segment;
         } else {
-          // Use static fallback IDs for known MCX/CDS contracts
-          const STATIC_MCX_CDS = {
-            'GOLD': '483079', 'SILVER': '471725', 'CRUDEOIL': '560977',
-            'NATURALGAS': '431765', 'COPPER': '430596',
-            'USDINR': '11091', 'EURINR': '11363', 'GBPINR': '11096', 'JPYINR': '11098',
-          };
-          if (STATIC_MCX_CDS[numMapping.scripSymbol]) {
-            token = STATIC_MCX_CDS[numMapping.scripSymbol];
-            exchange = numMapping.segment;
-          }
+          console.warn(`[History] Could not resolve active contract for ${numMapping.scripSymbol}/${numMapping.segment} — using token as-is`);
         }
       } else {
         // Not in our known map — try scrip master lookup
@@ -1013,7 +1000,7 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
             const symbolName = quote?.symbol;
             if (symbolName) {
               const baseSymbol = symbolName.replace(/\s*(FUT|FUTURES?)\s*/i, '').trim().toUpperCase();
-              const activeId = dhan.historical.getActiveContract(baseSymbol, resolvedExchange);
+              const activeId = await dhan.historical.resolveActiveContractLive(baseSymbol, resolvedExchange);
               if (activeId && activeId !== token) {
                 console.log(`[History] Retrying with active contract: ${token} → ${activeId} for ${baseSymbol}/${resolvedExchange}`);
                 const retryResult = await dataProviderSwitch.getHistoricalCandles(
@@ -1107,74 +1094,95 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
     let { token, exchange } = req.query;
     if (!token) return res.status(400).json({ message: 'token required' });
 
-    // Native Dhan mapping for Futures, Commodities & Currencies
+    // Native Dhan mapping for Futures, Commodities & Currencies.
+    // NSE/BSE Futures placeholders are resolved via FuturesContractService
+    // to real NSE_FNO/BSE_FNO securityIds. MCX/CDS retain their own path.
+    const NSE_BSE_FUT_PH = new Set([
+      'NF_FUT','NF_FUT_N','NF_FUT_F',
+      'BNF_FUT','BNF_FUT_N','FNF_FUT','MCN_FUT','MNF_FUT',
+      'SEN_FUT','SNX_FUT',
+      'REL_FUT','SBIN_FUT','HDFC_FUT','ICICI_FUT','TCS_FUT','INFY_FUT',
+      'ITC_FUT','LT_FUT','AXIS_FUT','HCL_FUT','BAJF_FUT','KOTAK_FUT',
+      'TATAM_FUT','TATAS_FUT','MARUTI_FUT','TITAN_FUT','ADANIE_FUT',
+      'ADANIP_FUT','BEL_FUT','HAL_FUT','ZOMATO_FUT','DLF_FUT',
+      'SUNP_FUT','PWRGRD_FUT','NTPC_FUT','COAL_FUT','BHARTI_FUT',
+      'TIIN_FUT','VOLTAS_FUT','WIPRO_FUT',
+    ]);
+
+    if (NSE_BSE_FUT_PH.has(token)) {
+      try {
+        const contract = await futuresContractService.resolve(token);
+        if (contract?.securityId) {
+          const dhan = dataProviderSwitch?.getDhanAdapter();
+          // Try marketDataEngine cache first (zero network)
+          const cachedQuote = marketDataEngine.getQuote(contract.securityId);
+          if (cachedQuote?.ltp > 0) {
+            return res.json({ ...cachedQuote, token });
+          }
+          // Fetch live quote from Dhan
+          if (dhan?.isConnected) {
+            try {
+              const result = await Promise.race([
+                dhan.getQuote(contract.securityId, contract.segment),
+                new Promise(resolve => setTimeout(() => resolve(null), 1500)),
+              ]);
+              const ltp = _parseDhanQuote(result, contract.securityId, contract.segment);
+              if (ltp && ltp > 0) {
+                return res.json({ token, ltp, securityId: contract.securityId, segment: contract.segment, exchange: contract.segment, timestamp: Date.now() });
+              }
+            } catch (_) {}
+          }
+          // Dhan not connected or returned nothing — return metadata so UI knows the real token
+          return res.json({ token, ltp: null, securityId: contract.securityId, segment: contract.segment, exchange: contract.segment, expiry: contract.expiry });
+        }
+      } catch (fcsErr) {
+        console.warn(`[Quote] FuturesContractService error for ${token}:`, fcsErr.message);
+      }
+      return res.json(null);
+    }
+
     const PLACEHOLDER_TO_DHAN = {
-      // Index Futures (NSE_FNO)
-      'NF_FUT': { securityId: '13', segment: 'IDX_I', spotToken: '99926000' },
-      'NF_FUT_N': { securityId: '13', segment: 'IDX_I', spotToken: '99926000' },
-      'NF_FUT_F': { securityId: '13', segment: 'IDX_I', spotToken: '99926000' },
-      'BNF_FUT': { securityId: '25', segment: 'IDX_I', spotToken: '99926009' },
-      'BNF_FUT_N': { securityId: '25', segment: 'IDX_I', spotToken: '99926009' },
-      'FNF_FUT': { securityId: '27', segment: 'IDX_I', spotToken: '99926037' },
-      'MCN_FUT': { securityId: '442', segment: 'IDX_I', spotToken: '99926074' },
-      'SEN_FUT': { securityId: '51', segment: 'IDX_I', spotToken: '99919000' },
-      // Stock Futures (NSE_FNO)
-      'REL_FUT': { securityId: '2885', segment: 'NSE_EQ', spotToken: '2885' },
-      'SBIN_FUT': { securityId: '3045', segment: 'NSE_EQ', spotToken: '3045' },
-      'HDFC_FUT': { securityId: '1333', segment: 'NSE_EQ', spotToken: '1333' },
-      'ICICI_FUT': { securityId: '4963', segment: 'NSE_EQ', spotToken: '4963' },
-      'TCS_FUT': { securityId: '11536', segment: 'NSE_EQ', spotToken: '11536' },
-      'INFY_FUT': { securityId: '1594', segment: 'NSE_EQ', spotToken: '1594' },
-      // MCX Commodities (MCX_COMM) — verified active contract IDs
-      'GOLD_F': { securityId: '483079', segment: 'MCX_COMM', spotToken: null, scripSymbol: 'GOLD' },
-      'GOLDM_F': { securityId: '483079', segment: 'MCX_COMM', spotToken: null, scripSymbol: 'GOLDM' },
-      'SILVER_F': { securityId: '471725', segment: 'MCX_COMM', spotToken: null, scripSymbol: 'SILVER' },
-      'SILVERM_F': { securityId: '471725', segment: 'MCX_COMM', spotToken: null, scripSymbol: 'SILVERM' },
-      'CRUDE_F': { securityId: '560977', segment: 'MCX_COMM', spotToken: null, scripSymbol: 'CRUDEOIL' },
-      'NATGAS_F': { securityId: null, segment: 'MCX_COMM', spotToken: null, scripSymbol: 'NATURALGAS' },
-      'COPPER_F': { securityId: null, segment: 'MCX_COMM', spotToken: null, scripSymbol: 'COPPER' },
-      // CDS Currencies (CUR) — verified active contract IDs
-      'USDINR_F': { securityId: '2', segment: 'CUR', spotToken: null, scripSymbol: 'USDINR' },
-      'EURINR_F': { securityId: '3', segment: 'CUR', spotToken: null, scripSymbol: 'EURINR' },
-      'GBPINR_F': { securityId: '4', segment: 'CUR', spotToken: null, scripSymbol: 'GBPINR' },
-      'JPYINR_F': { securityId: '5', segment: 'CUR', spotToken: null, scripSymbol: 'JPYINR' },
+      // MCX Commodities (MCX_COMM) — static securityIds where known; dynamic otherwise
+      'GOLD_F':    { securityId: '483079', segment: 'MCX_COMM', scripSymbol: 'GOLD' },
+      'GOLDM_F':   { securityId: '483079', segment: 'MCX_COMM', scripSymbol: 'GOLDM' },
+      'SILVER_F':  { securityId: '471725', segment: 'MCX_COMM', scripSymbol: 'SILVER' },
+      'SILVERM_F': { securityId: '471725', segment: 'MCX_COMM', scripSymbol: 'SILVERM' },
+      'CRUDE_F':   { securityId: '560977', segment: 'MCX_COMM', scripSymbol: 'CRUDEOIL' },
+      'NATGAS_F':  { securityId: null,     segment: 'MCX_COMM', scripSymbol: 'NATURALGAS' },
+      'COPPER_F':  { securityId: null,     segment: 'MCX_COMM', scripSymbol: 'COPPER' },
+      // CDS Currencies (CUR)
+      'USDINR_F':  { securityId: '2', segment: 'CUR', scripSymbol: 'USDINR' },
+      'EURINR_F':  { securityId: '3', segment: 'CUR', scripSymbol: 'EURINR' },
+      'GBPINR_F':  { securityId: '4', segment: 'CUR', scripSymbol: 'GBPINR' },
+      'JPYINR_F':  { securityId: '5', segment: 'CUR', scripSymbol: 'JPYINR' },
     };
 
     const mapping = PLACEHOLDER_TO_DHAN[token];
     if (mapping) {
-      // FAST PATH: spot token from Angel feed (instant, no network)
-      if (mapping.spotToken) {
-        const spotQuote = marketDataEngine.getQuote(mapping.spotToken);
-        if (spotQuote && spotQuote.ltp > 0) return res.json({ ...spotQuote, token });
-      }
-
-      // SLOW PATH: Dhan API resolution — wrapped in strict 1.5s timeout
-      // If scrip master isn't loaded yet or Dhan is slow, return null immediately
+      // Dhan API resolution for MCX/CDS — wrapped in strict 1.5s timeout
       const resolveViaDhan = async () => {
         const dhan = dataProviderSwitch?.getDhanAdapter();
         if (!dhan?.isConnected) return null;
 
-        // Path A: Static security ID (Index/Stock futures)
+        // Path A: known static securityId
         if (mapping.securityId) {
           const dhanSeg = mapping.segment === 'NSE_CURRENCY' ? 'CUR' : mapping.segment;
           const result = await dhan.getQuote(mapping.securityId, dhanSeg);
           return _parseDhanQuote(result, mapping.securityId, dhanSeg);
         }
 
-        // Path B: Dynamic resolution via getActiveContract (MCX/CDS nearest expiry)
+        // Path B: dynamic resolution via getActiveContract (MCX/CDS nearest expiry)
         if (mapping.scripSymbol && dhan.historical) {
           const dhanSeg = mapping.segment === 'CUR' ? 'CUR' : mapping.segment;
-          // Try getActiveContract first (uses pre-loaded futures entries)
           const activeId = dhan.historical.getActiveContract(mapping.scripSymbol, mapping.segment);
           if (activeId) {
             const result = await dhan.getQuote(activeId, dhanSeg);
             return _parseDhanQuote(result, activeId, dhanSeg);
           }
-          // Fallback: try scrip master bySymbol map
           if (dhan.historical._scripMaster?.bySymbol) {
             const entry = dhan.historical._scripMaster.bySymbol.get(`${mapping.scripSymbol}:${dhanSeg}`) ||
-                         dhan.historical._scripMaster.bySymbol.get(`${mapping.scripSymbol}:${mapping.segment}`) ||
-                         dhan.historical._scripMaster.bySymbol.get(`${mapping.scripSymbol}:E`);
+                          dhan.historical._scripMaster.bySymbol.get(`${mapping.scripSymbol}:${mapping.segment}`) ||
+                          dhan.historical._scripMaster.bySymbol.get(`${mapping.scripSymbol}:E`);
             if (entry?.securityId) {
               const result = await dhan.getQuote(entry.securityId, dhanSeg);
               return _parseDhanQuote(result, entry.securityId, dhanSeg);
@@ -1187,7 +1195,7 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
       try {
         const ltp = await Promise.race([
           resolveViaDhan(),
-          new Promise(resolve => setTimeout(() => resolve(null), 1500)), // 1.5s max
+          new Promise(resolve => setTimeout(() => resolve(null), 1500)),
         ]);
         if (ltp && Number.isFinite(ltp) && ltp > 0) {
           return res.json({ token, ltp, exchange: mapping.segment, timestamp: Date.now(), symbol: mapping.scripSymbol || token });
@@ -1195,7 +1203,6 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
       } catch (e) {
         console.warn(`[Quote] MCX/CDS resolution failed for ${token}: ${e.message}`);
       }
-
       return res.json(null);
     }
 

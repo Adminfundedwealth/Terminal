@@ -13,7 +13,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react';
 import { useAppStore } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
-import { getOptionChain, getExpiries } from '@/services/api';
+import { getOptionChain, getExpiries, getLotSize } from '@/services/api';
 import { cn, formatPrice, formatNumber } from '@/utils/helpers';
 import { useTradingStore } from '@/store/tradingStore';
 import { wsService } from '@/services/websocket';
@@ -354,8 +354,14 @@ export function OptionChainModal() {
   // ── Derived from activeSymbol — recalculated on every render, no stale state
   const underlying = useMemo(() =>
     activeSymbol ? deriveUnderlying(activeSymbol) : '', [activeSymbol]);
-  const lotSize = useMemo(() =>
+  // effectiveLotSize: use the scrip-master value when available; fall back to
+  // the instrument-master value (correct for indices) while the API call is in flight.
+  const baseLotSize = useMemo(() =>
     activeSymbol ? deriveLotSize(activeSymbol) : 1, [activeSymbol]);
+  // Resolved lot size from the Dhan scrip master — overrides the activeSymbol default
+  // (which can be 1 for stock watchlist entries). Updated each time the underlying changes.
+  const [resolvedLotSize, setResolvedLotSize] = useState<number>(0); // 0 = not yet fetched
+  const lotSize = resolvedLotSize > 1 ? resolvedLotSize : baseLotSize;
   const optExchange = useMemo(() =>
     activeSymbol ? deriveOptionExchange(activeSymbol) : 'NSE', [activeSymbol]);
 
@@ -631,6 +637,18 @@ export function OptionChainModal() {
 
     setExpiries(expiryList);
     const firstExpiry = expiryList[0];
+
+    // ── Lot size from scrip master (fire-and-forget, non-blocking) ────────
+    // Fetched after expiries so we don't delay the chain load. The resolved
+    // lot size will be available by the time the trader clicks a strike.
+    // Falls back silently to the instrument-master value if the API fails.
+    getLotSize(sym).then((res) => {
+      if (!isMountedRef.current) return;
+      if (session !== sessionRef.current) return;
+      if (res?.lotSize && res.lotSize > 1) {
+        setResolvedLotSize(res.lotSize);
+      }
+    }).catch(() => { /* non-blocking — instrument master value is the fallback */ });
     setSelectedExpiry(firstExpiry);
 
     // Load chain — passes sym + expiry explicitly, no closure-captured stale values
@@ -648,6 +666,7 @@ export function OptionChainModal() {
     setSelectedExpiry('');
     setWorkerIv(new Map());
     setMaxPainStrike(0);
+    setResolvedLotSize(0); // will be refetched below
 
     // Unsubscribe previous option token when underlying changes
     if (activeOptionTokenRef.current) {
