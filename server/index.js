@@ -62,6 +62,7 @@ import { eventBus, EventBridge } from './events/index.js';
 import { eventDispatcher } from './services/eventDispatcher.js';
 import { DataProviderSwitch } from './services/dataProviderSwitch.js';
 import { DhanOrderPoller } from './services/dhanOrderPoller.js';
+import { futuresContractService } from './services/futuresContractService.js';
 
 const PORT = process.env.PORT || 4000;
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
@@ -469,8 +470,31 @@ async function startup() {
   // Pre-load Dhan scrip master in background (prevents 502 timeout on first MCX/CDS quote)
   if (dhanAdapter?.historical?._getScripMaster) {
     dhanAdapter.historical._getScripMaster()
-      .then(m => console.log(`[Startup] ✓ Dhan scrip master pre-loaded: ${m?.byId?.size || 0} instruments`))
-      .catch(e => console.warn(`[Startup] Scrip master pre-load failed (will retry on demand): ${e.message}`));
+      .then(m => {
+        console.log(`[Startup] ✓ Dhan scrip master pre-loaded: ${m?.byId?.size || 0} instruments`);
+        // Init FuturesContractService and warm cache immediately after scrip master loads
+        futuresContractService.init(dhanAdapter.historical);
+        return futuresContractService.warmCache();
+      })
+      .then(() => {
+        const contracts = futuresContractService.getCachedContracts();
+        console.log(`[Startup] ✓ FuturesContractService warm: ${contracts.length} contracts resolved`);
+        // Patch InstrumentService placeholders with real securityIds
+        instrumentService.patchFuturesTokens(futuresContractService);
+        contracts.filter(c => c.securityId).forEach(c => {
+          // Seed each resolved futures contract into MarketDataEngine so quote
+          // lookups by securityId work before the first WS tick arrives.
+          marketDataEngine.pushQuote(c.securityId, {
+            symbol: c.underlying,
+            exchange: c.exchange,
+            segment: c.segment,
+          });
+          candleService.registerTokenExchange(c.securityId, c.exchange);
+        });
+      })
+      .catch(e => console.warn(`[Startup] Scrip master / FuturesContractService pre-load failed (will retry on demand): ${e.message}`));
+  } else {
+    console.warn('[Startup] Dhan adapter not available — FuturesContractService will warm lazily on first request');
   }
 
   // Wire LTP fallback into order execution engine
@@ -723,6 +747,22 @@ async function connectDhanFeed() {
     // Subscribe all in Quote mode (17) for OHLC + volume
     dhanFeed.subscribe(allTokens.map(t => ({ securityId: t.securityId, segment: t.segment })), 17);
     console.log('[DhanFeed] Subscribed ' + allTokens.length + ' instruments (mode 17 Quote)');
+
+    // ── Subscribe resolved NSE/BSE FNO futures contracts ──────────────────
+    // FuturesContractService may already be warm (scrip master loaded before
+    // DhanFeed connected), or the cache may still be empty (DhanFeed connected
+    // before scrip master finished loading). Either way we subscribe what we
+    // have now and the WS server will subscribe additional tokens on-demand
+    // as the frontend selects instruments.
+    const futuresTokens = futuresContractService.getCachedContracts()
+      .filter(c => c.securityId && /^\d+$/.test(c.securityId))
+      .map(c => ({ securityId: c.securityId, segment: c.segment }));
+    if (futuresTokens.length > 0) {
+      dhanFeed.subscribe(futuresTokens, 17);
+      console.log(`[DhanFeed] Subscribed ${futuresTokens.length} NSE/BSE FNO futures contracts (mode 17 Quote)`);
+    } else {
+      console.log('[DhanFeed] FuturesContractService cache not yet warm — NSE/BSE FNO contracts will subscribe on first chart/quote request');
+    }
 
     // Hook live ticks into candle aggregation
     dhanFeed.on('tick', (tick) => {

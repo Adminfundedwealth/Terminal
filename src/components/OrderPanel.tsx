@@ -44,7 +44,7 @@ export function OrderPanel() {
       const sym = orderForm.symbol || activeSymbol?.symbol || '';
       // Only show if this order is for the currently displayed symbol
       if (!ev.detail?.symbol || ev.detail.symbol === sym) {
-        showToast(`Order rejected: ${ev.detail?.reason || 'Risk rule or broker rejection'}`);
+        showToast(`ORDER REJECTED: ${ev.detail?.reason || 'Risk rule or broker rejection'}`, 6000);
       }
     };
     const onFilled = (e: Event) => {
@@ -70,7 +70,7 @@ export function OrderPanel() {
     (p) => p.symbol === symbol && p.qty !== 0
   );
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 2500); };
+  const showToast = (msg: string, duration = 4000) => { setToast(msg); setTimeout(() => setToast(null), duration); };
 
   // Client-side validation before order submission
   function validateOrder(side: OrderSide): string | null {
@@ -82,7 +82,7 @@ export function OrderPanel() {
       return `Quantity must be a multiple of lot size (${effectiveLotSize}). Enter ${Math.round(orderForm.qty / effectiveLotSize)} lot${Math.round(orderForm.qty / effectiveLotSize) !== 1 ? 's' : ''} = ${Math.round(orderForm.qty / effectiveLotSize) * effectiveLotSize} qty`;
     }
     if ((orderForm.orderType === 'LIMIT' || orderForm.orderType === 'SL') && (!orderForm.price || orderForm.price <= 0)) {
-      return 'Price must be greater than 0 for Limit orders';
+      return 'Price must be greater than 0 for LIMIT orders — enter a price or switch to MARKET';
     }
     if ((orderForm.orderType === 'SL' || orderForm.orderType === 'SL-M') && (!orderForm.triggerPrice || orderForm.triggerPrice <= 0)) {
       return 'Trigger price must be greater than 0 for Stop Loss orders';
@@ -125,7 +125,7 @@ export function OrderPanel() {
       const brokerStatus = (result as any)?.status || 'PENDING';
       if (brokerStatus === 'REJECTED') {
         const rejectReason = (result as any)?.message || 'Order rejected — check risk rules';
-        showToast(`Rejected: ${rejectReason}`);
+        showToast(`ORDER REJECTED: ${rejectReason}`, 6000);
       } else if (brokerStatus === 'FILLED') {
         // Paper mode MARKET fill — immediate
         showToast(orderSuccessMessage({ side, qty: orderForm.qty, symbol }));
@@ -134,7 +134,7 @@ export function OrderPanel() {
       } else {
         // PENDING / OPEN — accepted by engine, final status via WS
         const typeLabel = orderForm.orderType === 'MARKET' ? 'Market' : orderForm.orderType;
-        showToast(`${typeLabel} order submitted — awaiting confirmation`);
+        showToast(`${typeLabel} order placed — awaiting fill`);
         setSlPrice(0);
         setTpPrice(0);
       }

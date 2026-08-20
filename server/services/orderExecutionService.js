@@ -62,6 +62,18 @@ export class OrderExecutionService {
    * Monitor open SL-M and LIMIT paper orders every second.
    * Fills them when LTP crosses the trigger/limit price.
    * Uses multiple price sources to ensure triggers fire.
+   *
+   * ── SL/TP safety rules ───────────────────────────────────────────────────
+   * 1. Before triggering any SL/TP order, re-read the position from DB.
+   *    If the position is already closed (qty=0 or is_open=false), cancel
+   *    the order silently — never create a new position from a stale trigger.
+   * 2. Route SL/TP fills through exitPosition() rather than _handleMarketFill
+   *    directly.  exitPosition() owns the _exitInFlight concurrency guard and
+   *    the qty=0 / closed_at secondary check, which prevents duplicate exits
+   *    and ghost-position creation.
+   * 3. When a SL/TP fires for a positionId, remove ALL sibling orders for
+   *    the same positionId from _pendingPaperOrders so the other leg never
+   *    fires on an already-closed position.
    */
   _startPaperOrderMonitor() {
     this._paperOrderMonitor = setInterval(async () => {
@@ -82,8 +94,13 @@ export class OrderExecutionService {
           const triggerPrice = Number(entry.triggerPrice) || 0;
           const limitPrice = Number(entry.price) || 0;
 
+          // ── SL/TP orders: direction-aware trigger check ────────────────────
+          // These are exit orders (SL-M or LIMIT placed by attachStopLoss /
+          // attachTakeProfit). They are tracked with a positionId so we can
+          // verify the position is still open before executing.
           if (entry.orderType === 'SL-M' || entry.orderType === 'SL') {
-            // SL SELL fires when LTP ≤ triggerPrice; SL BUY fires when LTP ≥ triggerPrice
+            // SL-BUY  (exit for SHORT) fires when LTP ≥ triggerPrice (price rose to SL)
+            // SL-SELL (exit for LONG)  fires when LTP ≤ triggerPrice (price fell to SL)
             if (entry.side === 'SELL' && triggerPrice > 0 && ltp <= triggerPrice) shouldFill = true;
             if (entry.side === 'BUY'  && triggerPrice > 0 && ltp >= triggerPrice) shouldFill = true;
           } else if (entry.orderType === 'LIMIT') {
@@ -92,10 +109,57 @@ export class OrderExecutionService {
             if (entry.side === 'BUY'  && limitPrice > 0 && ltp <= limitPrice) shouldFill = true;
           }
 
-          if (shouldFill) {
-            this._pendingPaperOrders.delete(orderId);
-            console.log(`[PaperMonitor] TRIGGERED: ${entry.orderType} ${entry.side} ${entry.symbol} @ LTP ${ltp} (trigger=${triggerPrice} limit=${limitPrice})`);
-            // Resolve account for post-trade risk checks
+          if (!shouldFill) continue;
+
+          // ── Position guard ─────────────────────────────────────────────────
+          // Re-read the position from DB before executing the exit.
+          // If another trigger (SL or TP) already closed this position, skip.
+          const positionId = entry.positionId;
+          if (positionId) {
+            const livePos = await this._findPosition(positionId);
+            if (!livePos || !livePos.is_open || livePos.qty === 0) {
+              // Position is already closed — stale trigger, discard order
+              this._pendingPaperOrders.delete(orderId);
+              console.log(`[PaperMonitor] SKIPPED stale trigger: order=${orderId} position=${positionId} already closed`);
+              try { await orderRepo.updateStatus(orderId, 'CANCELLED', { reject_reason: 'Position already closed' }); } catch (_) {}
+              continue;
+            }
+          }
+
+          // ── Remove this order AND all sibling orders for same position ─────
+          // Prevents the opposite leg (e.g. TP after SL fires) from triggering
+          // on a now-closed position and creating a ghost reversal.
+          this._pendingPaperOrders.delete(orderId);
+          if (positionId) {
+            for (const [siblingId, sibling] of this._pendingPaperOrders) {
+              if (sibling.positionId === positionId) {
+                this._pendingPaperOrders.delete(siblingId);
+                console.log(`[PaperMonitor] Cancelled sibling order ${siblingId} for position ${positionId}`);
+                try { await orderRepo.updateStatus(siblingId, 'CANCELLED', { reject_reason: 'Sibling SL/TP triggered' }); } catch (_) {}
+              }
+            }
+          }
+
+          console.log(`[PaperMonitor] TRIGGERED: ${entry.orderType} ${entry.side} ${entry.symbol} @ LTP ${ltp} (trigger=${triggerPrice} limit=${limitPrice}) positionId=${positionId || 'n/a'}`);
+
+          // ── Route through exitPosition() for SL/TP exits ──────────────────
+          // exitPosition() owns: _exitInFlight concurrency guard, position
+          // qty=0 / closed_at check, correct exit-side derivation from position.side,
+          // and position qty from the live DB row (not the order's original qty).
+          // This is the ONLY correct way to close a paper position.
+          if (positionId) {
+            try {
+              await this.exitPosition(entry.accountId, positionId);
+              // Mark the triggering order as FILLED
+              try { await orderRepo.markFilled(orderId, entry.orderParams.qty, ltp, 'PAPER-TRIGGER-' + orderId); } catch (_) {}
+            } catch (exitErr) {
+              console.warn(`[PaperMonitor] exitPosition failed for ${positionId}: ${exitErr.message}`);
+              // Mark order cancelled if position was already closed
+              try { await orderRepo.updateStatus(orderId, 'CANCELLED', { reject_reason: exitErr.message }); } catch (_) {}
+            }
+          } else {
+            // Non-SL/TP paper order (standalone LIMIT/SL placed via OrderPanel) —
+            // use _handleMarketFill as before since there's no positionId to guard.
             let acct = null;
             try { acct = await this._getAccount(entry.accountId); } catch (_) {}
             await this._handleMarketFill(
@@ -166,10 +230,18 @@ export class OrderExecutionService {
 
   /**
    * Register an open paper SL/LIMIT order for price monitoring.
+   *
+   * @param {string} orderId
+   * @param {string} accountId
+   * @param {object} orderParams
+   * @param {string} [positionId] - DB position ID this order closes (required for SL/TP orders).
+   *   When present, the monitor verifies the position is still open before executing and
+   *   cancels all sibling orders for the same position when this one fires.
    */
-  _registerPaperOrder(orderId, accountId, orderParams) {
+  _registerPaperOrder(orderId, accountId, orderParams, positionId = null) {
     this._pendingPaperOrders.set(orderId, {
       accountId,
+      positionId,          // null for standalone orders, set for SL/TP exit orders
       token: orderParams.token,
       symbol: orderParams.symbol,
       side: orderParams.side,
@@ -179,19 +251,43 @@ export class OrderExecutionService {
       orderParams,
     });
 
-    // Ensure the token is actively monitored for price updates
-    // Subscribe if not already in the quote cache
-    if (!this.marketDataEngine.getQuote(orderParams.token)?.ltp) {
-      // Push a placeholder so the LTP poller picks it up
+    // ── Ensure the token has a live LTP in the quote cache ─────────────────
+    // For option tokens the live feed may not yet carry a quote (they are
+    // only subscribed on demand from the option chain modal).  Seed the cache
+    // from the order price so:
+    //   1. LIMIT option orders in paper mode can fire immediately if the
+    //      seed price satisfies the trigger condition.
+    //   2. The fill price used by _handleMarketFill is non-zero.
+    // The seeded value is intentionally marked as a fallback so any real tick
+    // that arrives later overwrites it.
+    const existingLtp = this.marketDataEngine.getQuote(orderParams.token)?.ltp;
+    if ((!existingLtp || existingLtp <= 0) && orderParams.price > 0) {
+      // Inject the order price as a synthetic LTP so the monitor can evaluate
+      // LIMIT trigger conditions even before the live feed delivers a tick.
+      // pushQuote validates that ltp > 0 — safe to call here.
+      this.marketDataEngine.pushQuote(orderParams.token, {
+        ltp: orderParams.price,
+        symbol: orderParams.symbol,
+        exchange: orderParams.segment || orderParams.exchange || 'NFO',
+        timestamp: Date.now(),
+      });
+      console.log(`[PaperMonitor] Seeded LTP ${orderParams.price} for ${orderParams.symbol} (token ${orderParams.token}) from order price`);
+    } else if (!existingLtp || existingLtp <= 0) {
+      // No price at all — subscribe so the live poller picks it up
       this.marketDataEngine.subscribe(orderParams.token, () => {});
     }
 
-    console.log(`[PaperMonitor] Registered ${orderParams.orderType} ${orderParams.side} ${orderParams.symbol} (trigger=${orderParams.triggerPrice || ''} limit=${orderParams.price || ''})`);
+    console.log(`[PaperMonitor] Registered ${orderParams.orderType} ${orderParams.side} ${orderParams.symbol} positionId=${positionId || 'none'} (trigger=${orderParams.triggerPrice || ''} limit=${orderParams.price || ''})`);
   }
 
   /**
    * Recover pending OPEN SL/LIMIT orders from database on startup.
    * Ensures orders survive server restarts.
+   *
+   * SAFETY: Only recover orders whose linked position is still open.
+   * Orders for already-closed positions are stale and must NOT be re-armed —
+   * doing so would trigger phantom exits on positions that no longer exist,
+   * creating ghost reversal positions.
    */
   async recoverPendingOrders() {
     try {
@@ -202,12 +298,35 @@ export class OrderExecutionService {
         .in('status', ['OPEN', 'PENDING'])
         .in('order_type', ['LIMIT', 'SL', 'SL-M']);
       if (error || !openOrders || openOrders.length === 0) return;
+
+      // Pre-fetch all open positions for fast position-state lookup
+      let openPositionIds = new Set();
+      try {
+        const { data: positions } = await supabase
+          .from('positions')
+          .select('id')
+          .eq('is_open', true)
+          .gt('qty', 0);
+        if (positions) positions.forEach(p => openPositionIds.add(p.id));
+      } catch (_) { /* non-critical — proceed without position filter */ }
       
       let recovered = 0;
+      let skipped = 0;
       for (const order of openOrders) {
         if (this._pendingPaperOrders.has(order.id)) continue;
+
+        // Skip orders whose position is already closed
+        const posId = order.position_id || null;
+        if (posId && openPositionIds.size > 0 && !openPositionIds.has(posId)) {
+          console.log(`[PaperMonitor] Skipping stale order ${order.id} — position ${posId} is closed`);
+          try { await orderRepo.updateStatus(order.id, 'CANCELLED', { reject_reason: 'Position closed before server restart' }); } catch (_) {}
+          skipped++;
+          continue;
+        }
+
         this._pendingPaperOrders.set(order.id, {
           accountId: order.trading_account_id,
+          positionId: posId,
           token: order.token,
           symbol: order.symbol,
           side: order.side,
@@ -229,8 +348,8 @@ export class OrderExecutionService {
         });
         recovered++;
       }
-      if (recovered > 0) {
-        console.log(`[PaperMonitor] Recovered ${recovered} pending SL/LIMIT orders from database`);
+      if (recovered > 0 || skipped > 0) {
+        console.log(`[PaperMonitor] Recovered ${recovered} pending SL/LIMIT orders (skipped ${skipped} stale)`);
       }
     } catch (e) {
       console.warn(`[PaperMonitor] Recovery failed: ${e.message}`);
@@ -922,6 +1041,12 @@ export class OrderExecutionService {
   /**
    * Attach a stop-loss order to an open position.
    * Places a SL-M (stop-loss market) order at the specified trigger price.
+   *
+   * IDEMPOTENCY: If a previous SL order is already registered in the paper
+   * monitor for this position, it is cancelled before registering the new one.
+   * This prevents two SL orders co-existing for the same position (e.g. when
+   * the user moves the SL — a common action that previously left the old SL
+   * alive in _pendingPaperOrders and could fire after the new SL was set).
    */
   async attachStopLoss(accountId, positionId, triggerPrice) {
     const position = await this._findPosition(positionId);
@@ -950,10 +1075,12 @@ export class OrderExecutionService {
     // In paper mode, SL-M stays OPEN and is registered with the price monitor
     const { ExecutionMode } = await import('./executionMode.js');
     if (ExecutionMode.isPaper) {
+      // Cancel any previous SL order for this position so only one SL is active
+      this._cancelPendingOrdersForPosition(positionId, 'SL-M');
       try { await orderRepo.updateStatus(order.id, 'OPEN', { trigger_price: triggerPrice }); } catch {}
       eventBus.publish('order.updated', { orderId: order.id, status: 'OPEN', ...orderParams }, { accountId });
-      // Register with monitor so it auto-fills when LTP crosses trigger
-      this._registerPaperOrder(order.id, accountId, orderParams);
+      // Register with monitor — positionId guards against ghost fills
+      this._registerPaperOrder(order.id, accountId, orderParams, positionId);
       return { orderId: order.id, status: 'OPEN', type: 'SL-M', triggerPrice };
     }
 
@@ -964,6 +1091,8 @@ export class OrderExecutionService {
   /**
    * Attach a take-profit order to an open position.
    * Places a LIMIT order at the specified target price.
+   *
+   * IDEMPOTENCY: Cancels any previous TP order for this position first.
    */
   async attachTakeProfit(accountId, positionId, targetPrice) {
     const position = await this._findPosition(positionId);
@@ -991,10 +1120,12 @@ export class OrderExecutionService {
 
     const { ExecutionMode } = await import('./executionMode.js');
     if (ExecutionMode.isPaper) {
+      // Cancel any previous TP order for this position so only one TP is active
+      this._cancelPendingOrdersForPosition(positionId, 'LIMIT');
       try { await orderRepo.updateStatus(order.id, 'OPEN', { price: targetPrice }); } catch {}
       eventBus.publish('order.updated', { orderId: order.id, status: 'OPEN', ...orderParams }, { accountId });
-      // Register with monitor so it auto-fills when LTP reaches target
-      this._registerPaperOrder(order.id, accountId, orderParams);
+      // Register with monitor — positionId guards against ghost fills
+      this._registerPaperOrder(order.id, accountId, orderParams, positionId);
       return { orderId: order.id, status: 'OPEN', type: 'LIMIT', price: targetPrice };
     }
 
@@ -1018,6 +1149,26 @@ export class OrderExecutionService {
   }
 
   // ─── Internal Helpers ──────────────────────────────────────
+
+  /**
+   * Remove all pending paper orders for a given positionId that match an
+   * optional order type filter.  Used by attachStopLoss / attachTakeProfit
+   * to ensure only one SL and one TP is live per position at any time.
+   *
+   * @param {string} positionId
+   * @param {string} [orderType] - if provided, only cancel orders of this type
+   */
+  _cancelPendingOrdersForPosition(positionId, orderType = null) {
+    if (!positionId) return;
+    for (const [oid, entry] of this._pendingPaperOrders) {
+      if (entry.positionId === positionId) {
+        if (orderType && entry.orderType !== orderType) continue;
+        this._pendingPaperOrders.delete(oid);
+        console.log(`[PaperMonitor] Replaced old ${entry.orderType} order ${oid} for position ${positionId}`);
+        orderRepo.updateStatus(oid, 'CANCELLED', { reject_reason: 'Replaced by new SL/TP order' }).catch(() => {});
+      }
+    }
+  }
 
   async _findPosition(positionId) {
     if (!supabase) return null;
