@@ -753,12 +753,27 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
           exchange = contract.segment;
           console.log(`[History] ${req.query.token} → FuturesContractSvc → ${token}/${exchange}`);
         } else {
-          console.warn(`[History] FuturesContractService could not resolve ${req.query.token} — scrip master may not be loaded yet`);
-          return res.status(503).json({ message: `Futures contract not yet resolved for ${req.query.token}. Please retry in a few seconds.` });
+          // FuturesContractService not warm yet — fall back to the legacy IDX_I mapping
+          // so the chart still loads during the first few seconds after cold start.
+          console.warn(`[History] FuturesContractService not yet warm for ${req.query.token} — using IDX_I fallback`);
+          const LEGACY_IDX_FALLBACK = {
+            'NF_FUT': '13', 'NF_FUT_N': '13', 'NF_FUT_F': '13',
+            'BNF_FUT': '25', 'BNF_FUT_N': '25',
+            'FNF_FUT': '27',
+            'MCN_FUT': '442', 'MNF_FUT': '442',
+            'SEN_FUT': '51', 'SNX_FUT': '51',
+          };
+          const legacyId = LEGACY_IDX_FALLBACK[req.query.token];
+          if (legacyId) {
+            token    = legacyId;
+            exchange = 'IDX_I';
+          }
+          // Stock futures without a legacy fallback: just let it proceed as-is —
+          // the Dhan adapter will attempt resolution internally.
         }
       } catch (fcsErr) {
         console.error(`[History] FuturesContractService error for ${req.query.token}:`, fcsErr.message);
-        return res.status(503).json({ message: 'Futures contract resolution error' });
+        // Don't 503 — fall through and let Dhan adapter try with the raw token
       }
     }
 

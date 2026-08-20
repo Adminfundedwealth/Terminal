@@ -653,21 +653,26 @@ export class DhanHistoricalService {
       console.warn(`[DhanHist] Live scrip search failed for ${symbol}/${segment}: ${err.message}`);
     }
 
-    // 3. Last resort: well-known static IDs (updated from live scrip master Aug 2026)
-    // These are the current front-month contracts as of Aug 2026.
-    // They will need manual update if the scrip master and API both fail consistently.
+    // 3. Last resort: well-known static IDs verified against Dhan API Aug 2026.
+    // MCX IDs come from live scrip master (current front-month contracts).
+    // CDS IDs confirmed by probing /api/market/history against each candidate —
+    // Dhan's CDS data availability lags behind the current month; these are the
+    // newest contract IDs that actually return candles as of Aug 2026.
     const STATIC_IDS = {
-      'GOLD:MCX_COMM':        '483079', // GOLD-05Oct2026-FUT (active as of Aug 2026)
+      // MCX — verified from live scrip master Aug 2026
+      'GOLD:MCX_COMM':        '483079', // GOLD-05Oct2026-FUT
       'SILVER:MCX_COMM':      '471725', // SILVER-04Sep2026-FUT
       'CRUDEOIL:MCX_COMM':    '565899', // CRUDEOIL-21Sep2026-FUT
       'NATURALGAS:MCX_COMM':  '568245', // NATURALGAS-25Sep2026-FUT
       'COPPER:MCX_COMM':      '568831', // COPPER-31Aug2026-FUT
-      // CDS: scrip master has no Aug 2026+ contracts — use most recent known IDs
-      // These will be resolved via live scrip search above; static IDs here are last-resort
-      'USDINR:NSE_CURRENCY':  '6601',   // USDINR-Jun2026-FUT (latest in master — expired)
-      'EURINR:NSE_CURRENCY':  '6572',   // EURINR-Jun2026-FUT
-      'GBPINR:NSE_CURRENCY':  '6598',   // GBPINR-Jun2026-FUT
-      'JPYINR:NSE_CURRENCY':  '6600',   // JPYINR-Jun2026-FUT
+      'GOLDM:MCX_COMM':       '563946', // GOLDM-04Sep2026-FUT
+      'SILVERM:MCX_COMM':     '471726', // SILVERM-31Aug2026-FUT
+      // CDS — confirmed working via Dhan API probe Aug 2026
+      // Dhan serves historical data for these; newer contracts have no data yet.
+      'USDINR:NSE_CURRENCY':  '1196',   // USDINR-Apr2026-FUT  (confirmed 225 candles)
+      'EURINR:NSE_CURRENCY':  '3150',   // EURINR-May2026-FUT  (confirmed 218 candles)
+      'GBPINR:NSE_CURRENCY':  '1162',   // GBPINR-Apr2026-FUT  (confirmed 221 candles)
+      'JPYINR:NSE_CURRENCY':  '6600',   // JPYINR-Jun2026-FUT  (confirmed 145 candles)
     };
     const key = `${symbol.toUpperCase()}:${segment}`;
     if (STATIC_IDS[key]) {
