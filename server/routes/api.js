@@ -1620,6 +1620,181 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
   });
 
   // ═══════════════════════════════════════════════════════════
+  // MARKET MOVERS — Top Gainers / Top Losers / Most Traded
+  // Fetches directly from Dhan quote API so data is always
+  // available regardless of MDE cache state (market open or closed).
+  // ═══════════════════════════════════════════════════════════
+  router.get('/market/movers', requireAuth, async (req, res) => {
+    const LIMIT = Math.min(parseInt(req.query.limit) || 10, 20);
+
+    // NIFTY 50 equity universe — canonical Dhan security IDs (NSE_EQ)
+    // These are the tokens that have real, reliable LTP from Dhan REST.
+    const NIFTY50_UNIVERSE = [
+      { token: '2885',  symbol: 'RELIANCE'   },
+      { token: '1333',  symbol: 'HDFCBANK'   },
+      { token: '4963',  symbol: 'ICICIBANK'  },
+      { token: '3045',  symbol: 'SBIN'       },
+      { token: '11536', symbol: 'TCS'        },
+      { token: '1594',  symbol: 'INFY'       },
+      { token: '1660',  symbol: 'ITC'        },
+      { token: '11483', symbol: 'LT'         },
+      { token: '5900',  symbol: 'AXISBANK'   },
+      { token: '7229',  symbol: 'HCLTECH'    },
+      { token: '317',   symbol: 'BAJFINANCE' },
+      { token: '1922',  symbol: 'KOTAKBANK'  },
+      { token: '3456',  symbol: 'TATAMOTORS' },
+      { token: '3499',  symbol: 'TATASTEEL'  },
+      { token: '10999', symbol: 'MARUTI'     },
+      { token: '3506',  symbol: 'TITAN'      },
+      { token: '25215', symbol: 'ADANIENT'   },
+      { token: '15083', symbol: 'ADANIPORTS' },
+      { token: '383',   symbol: 'BEL'        },
+      { token: '2303',  symbol: 'HAL'        },
+      { token: '5097',  symbol: 'ZOMATO'     },
+      { token: '14732', symbol: 'DLF'        },
+      { token: '881',   symbol: 'SUNPHARMA'  },
+      { token: '14977', symbol: 'POWERGRID'  },
+      { token: '11630', symbol: 'NTPC'       },
+      { token: '694',   symbol: 'COALINDIA'  },
+      { token: '467',   symbol: 'BHARTIARTL' },
+      { token: '1410',  symbol: 'TIINDIA'    },
+      { token: '3718',  symbol: 'VOLTAS'     },
+      { token: '3787',  symbol: 'WIPRO'      },
+    ];
+
+    try {
+      // ── Strategy 1: try Dhan REST quote API directly ─────────────────────
+      // This returns last_price + close_price (prev session close) even when
+      // market is closed — giving valid changePercent in all cases.
+      const dhanAdapter = dataProviderSwitch?.getDhanAdapter?.();
+
+      if (dhanAdapter && dhanAdapter.auth?.isTokenValid) {
+        const instrumentList = NIFTY50_UNIVERSE.map(s => ({ token: s.token, segment: 'NSE_EQ' }));
+        const rawQuotes = await dhanAdapter.getQuotes(instrumentList);
+
+        if (rawQuotes && rawQuotes.length > 0) {
+          // Build symbol map for O(1) lookup
+          const symbolMap = new Map(NIFTY50_UNIVERSE.map(s => [s.token, s.symbol]));
+
+          // Enrich: use close from MDE cache to compute changePercent when REST
+          // only returns ltp (e.g. during off-hours the Dhan LTP endpoint may
+          // not always include the open/close fields).
+          const enriched = rawQuotes
+            .filter(q => q.ltp && q.ltp > 0)
+            .map(q => {
+              const cached = marketDataEngine.getQuote(q.token);
+              const close  = q.close  || cached?.close  || 0;
+              const open   = q.open   || cached?.open   || 0;
+              const high   = q.high   || cached?.high   || 0;
+              const low    = q.low    || cached?.low    || 0;
+              const volume = q.volume || cached?.volume || 0;
+
+              // changePercent = (ltp - prevClose) / prevClose * 100
+              const changePct = close > 0
+                ? parseFloat(((q.ltp - close) / close * 100).toFixed(2))
+                : (cached?.changePercent || 0);
+              const change = close > 0
+                ? parseFloat((q.ltp - close).toFixed(2))
+                : (cached?.change || 0);
+
+              return {
+                token: q.token,
+                symbol: symbolMap.get(q.token) || cached?.symbol || q.token,
+                ltp: q.ltp,
+                change,
+                changePct,
+                volume,
+                open, high, low, close,
+              };
+            });
+
+          // Derive the three lists
+          const withChangePct = enriched.filter(r => r.changePct !== 0 || r.ltp > 0);
+          const gainers = [...withChangePct]
+            .filter(r => r.changePct > 0)
+            .sort((a, b) => b.changePct - a.changePct)
+            .slice(0, LIMIT);
+          const losers = [...withChangePct]
+            .filter(r => r.changePct < 0)
+            .sort((a, b) => a.changePct - b.changePct)
+            .slice(0, LIMIT);
+          const mostTraded = [...enriched]
+            .filter(r => r.volume > 0)
+            .sort((a, b) => b.volume - a.volume)
+            .slice(0, LIMIT);
+
+          // Push fresh quotes back into MDE so WS clients benefit too
+          for (const q of enriched) {
+            if (q.ltp > 0) {
+              marketDataEngine.pushQuote(q.token, {
+                ltp: q.ltp,
+                change: q.change,
+                changePercent: q.changePct,
+                volume: q.volume,
+                open: q.open,
+                high: q.high,
+                low: q.low,
+                close: q.close,
+                symbol: q.symbol,
+                exchange: 'NSE',
+                timestamp: Date.now(),
+              });
+            }
+          }
+
+          return res.json({
+            source: 'dhan_rest',
+            asOf: new Date().toISOString(),
+            gainers,
+            losers,
+            mostTraded,
+          });
+        }
+      }
+
+      // ── Strategy 2: fall back to MDE cache (works when market is open) ───
+      const allQuotes = marketDataEngine.getAllQuotes();
+      const mdeResults = [];
+      for (const [token, quote] of allQuotes) {
+        if (quote.exchange !== 'NSE' && quote.segment !== 'NSE_EQ') continue;
+        if (!quote.ltp || quote.ltp <= 0) continue;
+        const sym = NIFTY50_UNIVERSE.find(s => s.token === token);
+        if (!sym) continue;
+        mdeResults.push({
+          token,
+          symbol: quote.symbol || sym.symbol,
+          ltp: quote.ltp,
+          change: quote.change || 0,
+          changePct: quote.changePercent || 0,
+          volume: quote.volume || 0,
+        });
+      }
+
+      if (mdeResults.length > 0) {
+        return res.json({
+          source: 'mde_cache',
+          asOf: new Date().toISOString(),
+          gainers: [...mdeResults].filter(r => r.changePct > 0).sort((a, b) => b.changePct - a.changePct).slice(0, LIMIT),
+          losers:  [...mdeResults].filter(r => r.changePct < 0).sort((a, b) => a.changePct - b.changePct).slice(0, LIMIT),
+          mostTraded: [...mdeResults].filter(r => r.volume > 0).sort((a, b) => b.volume - a.volume).slice(0, LIMIT),
+        });
+      }
+
+      // ── No data available ─────────────────────────────────────────────────
+      return res.json({
+        source: 'unavailable',
+        asOf: new Date().toISOString(),
+        gainers: [],
+        losers: [],
+        mostTraded: [],
+      });
+    } catch (err) {
+      console.error('[/market/movers] Error:', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════
   // SCANNER
   // ═══════════════════════════════════════════════════════════
   router.get('/market/scanner', async (req, res) => {

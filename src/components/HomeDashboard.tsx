@@ -3,17 +3,75 @@
  * Structural dashboard: Account Overview + Market/Trade + Market Movers + Trending/Insights
  * Uses ONLY existing store data/components — no new APIs, no new DB tables.
  */
-import { useMemo } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import {
   TrendingUp, TrendingDown, Activity, Target, AlertTriangle,
-  BarChart3, DollarSign, Layers, Zap,
+  BarChart3, DollarSign, Layers,
 } from 'lucide-react';
 import { useAppStore, type Workspace } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
 import { useTradingStore } from '@/store/tradingStore';
 import { cn, formatPrice } from '@/utils/helpers';
 
-// ── helpers ──────────────────────────────────────────────────────────────────
+// ── Market Movers types ───────────────────────────────────────────────────────
+interface MoverItem {
+  token: string;
+  symbol: string;
+  ltp: number;
+  change: number;
+  changePct: number;
+  volume: number;
+}
+
+interface MoversData {
+  gainers: MoverItem[];
+  losers: MoverItem[];
+  mostTraded: MoverItem[];
+  source: string;
+  asOf: string;
+}
+
+// ── useMarketMovers ───────────────────────────────────────────────────────────
+// Polls /api/market/movers every 60 seconds. Works during market hours AND
+// when market is closed (returns previous session close prices).
+// Does NOT depend on WebSocket or MDE cache being populated.
+function useMarketMovers() {
+  const [data, setData] = useState<MoversData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(true);
+
+  const fetch = async () => {
+    try {
+      const res = await window.fetch('/api/market/movers?limit=10', { credentials: 'include' });
+      if (!res.ok) return;
+      const json: MoversData = await res.json();
+      if (mountedRef.current) {
+        setData(json);
+        setLoading(false);
+      }
+    } catch {
+      // silent — keep showing previous data if available
+      if (mountedRef.current) setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    mountedRef.current = true;
+    fetch();
+    // Refresh every 60 s during market hours; no need for faster polling here
+    // since the dashboard is a summary view.
+    timerRef.current = setInterval(fetch, 60_000);
+    return () => {
+      mountedRef.current = false;
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
+
+  return { data, loading };
+}
+
+// ── helpers ───────────────────────────────────────────────────────────────────
 function fmt(val: number): string {
   const abs = Math.abs(val);
   if (abs >= 10_000_000) return `${(val / 10_000_000).toFixed(2)}Cr`;
@@ -228,7 +286,7 @@ function EtfIcon() {
   );
 }
 
-// ── Watchlist mover row ───────────────────────────────────────────────────────
+// ── Watchlist mover row — reads live quote from store ─────────────────────────
 function MoverRow({ token, symbol, rank }: { token: string; symbol: string; rank: number }) {
   const q = useMarketStore((s) => s.quotes[token]);
   const setActiveSymbol = useAppStore((s) => s.setActiveSymbol);
@@ -262,46 +320,53 @@ function MoverRow({ token, symbol, rank }: { token: string; symbol: string; rank
   );
 }
 
+// ── API mover row — renders from the /api/market/movers response ──────────────
+function MoverApiRow({ item, rank }: { item: MoverItem; rank: number }) {
+  const setActiveSymbol = useAppStore((s) => s.setActiveSymbol);
+  const setActiveWorkspace = useAppStore((s) => s.setActiveWorkspace);
+  const up = item.changePct >= 0;
+
+  const handleClick = () => {
+    setActiveSymbol({ token: item.token, symbol: item.symbol, name: item.symbol, segment: 'NSE', instrumentType: 'EQ', exchange: 'NSE', lotSize: 1, tickSize: 0.05 });
+    setActiveWorkspace('stocks');
+  };
+
+  return (
+    <button
+      onClick={handleClick}
+      className="flex items-center gap-2 w-full px-2 py-1.5 rounded hover:bg-fw-hover/30 transition-colors text-left"
+    >
+      <span className="text-[11px] text-fw-text-muted/50 w-4 tabular-nums">{rank}</span>
+      <span className="flex-1 text-[14px] font-medium text-fw-text truncate">{item.symbol}</span>
+      <span className="text-[12px] tabular-nums text-fw-text font-mono">{formatPrice(item.ltp)}</span>
+      <span className={cn('text-[11px] tabular-nums font-medium w-14 text-right', up ? 'text-emerald-400' : 'text-red-400')}>
+        {up ? '+' : ''}{item.changePct.toFixed(2)}%
+      </span>
+      {up
+        ? <TrendingUp size={10} className="text-emerald-400 flex-shrink-0" />
+        : <TrendingDown size={10} className="text-red-400 flex-shrink-0" />
+      }
+    </button>
+  );
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 export function HomeDashboard() {
   const account    = useTradingStore((s) => s.account);
   const positions  = useTradingStore((s) => s.positions);
-  const watchlists = useAppStore((s) => s.watchlists);
-  const quotes     = useMarketStore((s) => s.quotes);
   const setActiveWorkspace = useAppStore((s) => s.setActiveWorkspace);
   const setActiveSymbol    = useAppStore((s) => s.setActiveSymbol);
+
+  // Market movers — fetched directly from Dhan REST via /api/market/movers.
+  // Does NOT depend on WebSocket or MDE cache being populated.
+  // Works market open AND closed (uses previous session close for changePercent).
+  const { data: moversData, loading: moversLoading } = useMarketMovers();
 
   // Account figures
   const balance    = account?.balance ?? 0;
   const totalMTM   = positions.reduce((sum, p) => sum + (p.pnl || p.mtm || 0), 0);
   const equity     = balance + totalMTM;
   const openCount  = positions.filter((p) => p.qty !== 0).length;
-
-  // Gainers / losers derived from ALL watchlist items that have a live quote
-  const allItems = useMemo(() => {
-    const seen = new Set<string>();
-    const out: { token: string; symbol: string }[] = [];
-    watchlists.forEach((wl) => {
-      wl.items.forEach((item) => {
-        if (!seen.has(item.token)) { seen.add(item.token); out.push(item); }
-      });
-    });
-    return out;
-  }, [watchlists]);
-
-  const quoted = useMemo(
-    () => allItems.filter((i) => quotes[i.token]),
-    [allItems, quotes]
-  );
-
-  const gainers = useMemo(
-    () => [...quoted].sort((a, b) => (quotes[b.token]?.changePercent ?? 0) - (quotes[a.token]?.changePercent ?? 0)).slice(0, 10),
-    [quoted, quotes]
-  );
-  const losers = useMemo(
-    () => [...quoted].sort((a, b) => (quotes[a.token]?.changePercent ?? 0) - (quotes[b.token]?.changePercent ?? 0)).slice(0, 10),
-    [quoted, quotes]
-  );
 
   return (
     <div className="h-full w-full overflow-y-auto bg-fw-bg px-4 py-3 flex flex-col gap-3">
@@ -391,11 +456,13 @@ export function HomeDashboard() {
               <TrendingUp size={11} className="text-emerald-400" />
               <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">Top Gainers</span>
             </div>
-            {gainers.length === 0 ? (
-              <p className="px-3 py-4 text-[12px] text-fw-text-muted/50">Waiting for live data…</p>
+            {moversLoading ? (
+              <p className="px-3 py-4 text-[12px] text-fw-text-muted/50">Loading…</p>
+            ) : !moversData || moversData.gainers.length === 0 ? (
+              <p className="px-3 py-4 text-[12px] text-fw-text-muted/50">No data available</p>
             ) : (
-              gainers.map((item, i) => (
-                <MoverRow key={item.token} token={item.token} symbol={item.symbol} rank={i + 1} />
+              moversData.gainers.map((item, i) => (
+                <MoverApiRow key={item.token} item={item} rank={i + 1} />
               ))
             )}
           </div>
@@ -406,11 +473,13 @@ export function HomeDashboard() {
               <TrendingDown size={11} className="text-red-400" />
               <span className="text-[11px] font-bold uppercase tracking-wider text-red-400">Top Losers</span>
             </div>
-            {losers.length === 0 ? (
-              <p className="px-3 py-4 text-[12px] text-fw-text-muted/50">Waiting for live data…</p>
+            {moversLoading ? (
+              <p className="px-3 py-4 text-[12px] text-fw-text-muted/50">Loading…</p>
+            ) : !moversData || moversData.losers.length === 0 ? (
+              <p className="px-3 py-4 text-[12px] text-fw-text-muted/50">No data available</p>
             ) : (
-              losers.map((item, i) => (
-                <MoverRow key={item.token} token={item.token} symbol={item.symbol} rank={i + 1} />
+              moversData.losers.map((item, i) => (
+                <MoverApiRow key={item.token} item={item} rank={i + 1} />
               ))
             )}
           </div>
@@ -421,11 +490,13 @@ export function HomeDashboard() {
               <BarChart3 size={11} className="text-fw-accent" />
               <span className="text-[11px] font-bold uppercase tracking-wider text-fw-accent/80">Most Traded</span>
             </div>
-            {quoted.length === 0 ? (
-              <p className="px-3 py-4 text-[12px] text-fw-text-muted/50">Waiting for live data…</p>
+            {moversLoading ? (
+              <p className="px-3 py-4 text-[12px] text-fw-text-muted/50">Loading…</p>
+            ) : !moversData || moversData.mostTraded.length === 0 ? (
+              <p className="px-3 py-4 text-[12px] text-fw-text-muted/50">No data available</p>
             ) : (
-              quoted.slice(0, 10).map((item, i) => (
-                <MoverRow key={item.token} token={item.token} symbol={item.symbol} rank={i + 1} />
+              moversData.mostTraded.map((item, i) => (
+                <MoverApiRow key={item.token} item={item} rank={i + 1} />
               ))
             )}
           </div>
