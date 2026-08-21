@@ -438,10 +438,15 @@ export class OrderExecutionService {
       const brokerProvider = account.broker_provider || account.brokerProvider || 'dhan';
       let brokerResponse;
 
-      // Check execution mode — paper mode simulates fill without real broker call
+      // Check execution mode — paper mode simulates fill without real broker call.
+      // Account-level paper: if this account's broker_provider is 'paper', always
+      // simulate regardless of the global EXECUTION_MODE env var. This prevents
+      // BrokerFactory from receiving 'paper' as a provider key, which hits the
+      // default case and throws "[BrokerFactory] Unknown broker provider: paper".
       const { ExecutionMode } = await import('./executionMode.js');
+      const isAccountPaper = brokerProvider === 'paper';
 
-      if (ExecutionMode.isPaper) {
+      if (ExecutionMode.isPaper || isAccountPaper) {
         // PAPER MODE: simulate successful broker response
         const ltp = this.marketDataEngine.getQuote(orderParams.token)?.ltp || orderParams.price || 0;
         brokerResponse = {
