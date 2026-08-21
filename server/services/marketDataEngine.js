@@ -92,6 +92,7 @@ export class MarketDataEngine {
         bid: merged.bid,
         ask: merged.ask,
         oi: merged.oi,
+        prevOi: merged.prevOi,
         timestamp: merged.timestamp || Date.now(),
       });
     }

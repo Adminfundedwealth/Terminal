@@ -296,7 +296,26 @@ export function MarketDepthPanel() {
     setBids([]); setAsks([]); setTape([]);
     lastLtp.current = 0;
 
-    wsService.send({ type: 'subscribe_depth', tokens: [activeSymbol.token] });
+    // Derive the exchange hint for this instrument so the server routes the
+    // depth subscription to the correct Dhan segment (NSE_FNO, MCX_COMM, etc.).
+    // Without this hint the server falls back to the cached quote exchange field
+    // which may not yet be set when the component first mounts, causing the depth
+    // subscription to use the wrong segment (NSE_EQ) for futures instruments.
+    const exchangeHint = activeSymbol.segment === 'MCX' ? 'MCX'
+      : activeSymbol.segment === 'CDS'   ? 'CDS'
+      : activeSymbol.segment === 'NFO'   ? 'NFO'
+      : activeSymbol.segment === 'BFO'   ? 'BFO'
+      : activeSymbol.exchange === 'NFO'  ? 'NFO'
+      : activeSymbol.exchange === 'BFO'  ? 'BFO'
+      : activeSymbol.exchange === 'MCX'  ? 'MCX'
+      : activeSymbol.exchange === 'CDS'  ? 'CDS'
+      : 'NSE';
+
+    wsService.send({
+      type: 'subscribe_depth',
+      tokens: [activeSymbol.token],
+      exchangeHints: { [activeSymbol.token]: exchangeHint },
+    });
 
     let active = true;
     const fetchDepth = async () => {

@@ -236,6 +236,9 @@ function handleMessage(ws, data, subscriptions, depthSubscriptions, marketDataEn
 
     case 'subscribe_depth': {
       const tokens = data.tokens || [];
+      // Support optional exchange hints so the server resolves the correct Dhan
+      // segment for futures/MCX/CDS tokens when the quote cache isn't seeded yet.
+      const depthExchangeHints = data.exchangeHints || {};
       if (depthSubscriptions.size + tokens.length > WS_MAX_SUBSCRIPTIONS) {
         ws.send(JSON.stringify({ type: 'error', message: `Max ${WS_MAX_SUBSCRIPTIONS} depth subscriptions.` }));
         return;
@@ -244,6 +247,16 @@ function handleMessage(ws, data, subscriptions, depthSubscriptions, marketDataEn
       tokens.forEach((token) => {
         if (depthSubscriptions.has(token)) return;
         if (!token || typeof token !== 'string' || token.length > 30 || !/^[A-Za-z0-9_]{1,30}$/.test(token)) return;
+
+        // Seed exchange metadata into the quote cache so the segment map below
+        // resolves NSE_FNO/MCX_COMM/CUR correctly even before the first quote tick.
+        if (depthExchangeHints[token] && /^\d+$/.test(token)) {
+          const hint = depthExchangeHints[token];
+          const current = marketDataEngine.getQuote(token) || {};
+          if (!current.exchange && !current.segment) {
+            marketDataEngine.quotes.set(token, { ...current, exchange: hint, segment: hint });
+          }
+        }
 
         const callback = (depthData) => {
           if (ws.readyState === 1) {

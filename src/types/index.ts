@@ -36,6 +36,7 @@ export interface MarketQuote {
   ask: number;
   oi?: number;
   oiChange?: number;
+  prevOi?: number;
   timestamp: number;
   lastTradeQty?: number;
   exchange?: string;

@@ -307,6 +307,14 @@ export class InstrumentService {
       inst.expiry      = contract.expiry      || inst.expiry;
       inst.lotSize     = contract.lotSize > 1 ? contract.lotSize : inst.lotSize;
       inst.tickSize    = contract.tickSize    || inst.tickSize;
+      // Set exchange to the correct derivative exchange so ChartPanel and
+      // MarketDepthPanel send the right segment hint to the WS server.
+      // NSE_FNO instruments → exchange = 'NFO'
+      // BSE_FNO instruments → exchange = 'BFO'
+      // This is critical: without it wsService sends hint='NSE' → NSE_EQ,
+      // and the Dhan WS subscribes the wrong segment for this token.
+      if (contract.segment === 'NSE_FNO') inst.exchange = 'NFO';
+      else if (contract.segment === 'BSE_FNO') inst.exchange = 'BFO';
       inst.isPlaceholder = false;  // now a real token
       inst._resolvedFrom = 'scrip-master';
       patched++;

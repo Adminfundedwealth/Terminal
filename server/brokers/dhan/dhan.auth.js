@@ -99,28 +99,61 @@ export class DhanAuthService extends EventEmitter {
    * Check if current token is still valid.
    * Always re-reads from process.env so a Railway env var update takes effect
    * without a full restart. We trust the token is valid until Dhan returns 401.
+   *
+   * Token rotation recovery: when a NEW token appears in process.env while the
+   * current one is rejected, we immediately clear the rejection flag AND schedule
+   * a background re-validation so the poller/WS can reconnect within one cycle.
    */
   get isTokenValid() {
     // Re-read from env on every check — catches Railway token rotation
     const liveToken = (process.env.DHAN_ACCESS_TOKEN || '').trim();
     const liveClient = (process.env.DHAN_CLIENT_ID || '').trim();
+
     if (liveToken && liveToken !== this.accessToken) {
-      // Env var was updated (or token was rotated) — restore in-memory and clear rejection flag
+      // Env var was updated — token has been rotated
+      console.log('[DhanAuth] DHAN_ACCESS_TOKEN env var changed — applying new token, clearing rejection flag');
       this.accessToken = liveToken;
       this._tokenRejected = false;
+      this._lastValidatedAt = null;
+      // Re-validate the new token in background (don't block the getter)
+      setImmediate(() => this._revalidateAfterRotation());
     }
     if (liveClient && liveClient !== this.clientId) {
       this.clientId = liveClient;
     }
+
     if (this._tokenRejected) {
       // If a successful validation happened recently (via dhan-auth-check), trust it.
-      // This allows the running instance to recover without a restart.
       if (this._lastValidatedAt && (Date.now() - this._lastValidatedAt) < 10 * 60 * 1000) {
         return !!(this.accessToken && this.clientId);
       }
       return false;
     }
     return !!(this.accessToken && this.clientId);
+  }
+
+  /**
+   * Re-validate token after an env-var rotation.
+   * Called once (via setImmediate) when a new token is detected in process.env.
+   * On success: emits token:refreshed so DhanFeed/LTP poller reconnect.
+   * On failure: re-sets rejection flag so callers keep getting false.
+   */
+  async _revalidateAfterRotation() {
+    try {
+      console.log('[DhanAuth] Re-validating rotated token against Dhan /v2/profile...');
+      const valid = await this._validateToken();
+      if (valid) {
+        this._tokenRejected = false;
+        this._lastValidatedAt = Date.now();
+        console.log('[DhanAuth] ✓ Rotated token confirmed VALID — emitting token:refreshed for reconnect');
+        this.emit('token:refreshed', { token: this.accessToken, expiresAt: this._tokenExpiresAt });
+      } else {
+        this._tokenRejected = true;
+        console.error('[DhanAuth] ✗ Rotated token still rejected by Dhan — update DHAN_ACCESS_TOKEN again');
+      }
+    } catch(e) {
+      console.warn('[DhanAuth] Re-validation error:', e.message);
+    }
   }
 
   /**
@@ -169,7 +202,14 @@ export class DhanAuthService extends EventEmitter {
   }
 
   /**
-   * Initialize auth service — validate token, schedule cron + timer renewal.
+   * Initialize auth service — validate token live against Dhan /v2/profile,
+   * attempt RenewToken if the stored token is rejected, schedule renewal timers.
+   *
+   * Returns true if token is confirmed valid (or renewal succeeded).
+   * Returns false only if credentials are missing.
+   * A 401 is logged loudly but does NOT return false — the server still starts
+   * so operators can update DHAN_ACCESS_TOKEN via Railway env vars and the
+   * running instance will auto-recover on the next env-var check cycle.
    */
   async initialize() {
     if (!this.isConfigured) {
@@ -177,19 +217,60 @@ export class DhanAuthService extends EventEmitter {
       return false;
     }
 
-    // Never reject a token purely based on local clock / JWT exp claim.
-    // The JWT exp in Dhan dev-portal tokens doesn't reliably reflect server-side
-    // validity — only a 401 from the API proves the token is revoked.
-    // We always proceed and let the first real API call surface any auth error.
-    console.log(`[DhanAuth] Token loaded for client ${this.clientId} (valid until ${new Date(this._tokenExpiresAt).toISOString()} or next 401)`);
-    this.emit('token:valid', { clientId: this.clientId });
+    console.log(`[DhanAuth] Token loaded for client ${this.clientId} (exp: ${new Date(this._tokenExpiresAt).toISOString()})`);
+    console.log('[DhanAuth] Validating token against Dhan /v2/profile...');
+
+    // ── Live token validation ──────────────────────────────────────────────
+    // We MUST check against the real Dhan API — local JWT exp is not reliable.
+    // Dhan frequently invalidates tokens before JWT exp (new login, re-issue, etc.)
+    const valid = await this._validateToken();
+
+    if (valid) {
+      console.log(`[DhanAuth] ✓ Token confirmed VALID by Dhan server (client ${this.clientId})`);
+      this._tokenRejected = false;
+      this._lastValidatedAt = Date.now();
+      this.emit('token:valid', { clientId: this.clientId });
+    } else {
+      // Token rejected by Dhan — attempt RenewToken once before giving up
+      console.error('[DhanAuth] ✗ Token REJECTED by Dhan server (401/DH-906)');
+      console.error('[DhanAuth]   Attempting automatic token renewal via /v2/RenewToken...');
+
+      const renewed = await this.renewToken();
+      if (renewed) {
+        console.log('[DhanAuth] ✓ Token auto-renewed successfully — Dhan is live');
+        this._tokenRejected = false;
+        this._lastValidatedAt = Date.now();
+        this.emit('token:valid', { clientId: this.clientId });
+      } else {
+        // Mark token as rejected — isTokenValid will return false until env var is updated
+        this._tokenRejected = true;
+        console.error('');
+        console.error('╔════════════════════════════════════════════════════════════╗');
+        console.error('║  DHAN TOKEN INVALID — MARKET DATA WILL NOT WORK           ║');
+        console.error('╠════════════════════════════════════════════════════════════╣');
+        console.error('║  ACTION REQUIRED:                                          ║');
+        console.error('║  1. Open Dhan app → My Profile → Access Token              ║');
+        console.error('║  2. Generate a new access token                            ║');
+        console.error('║  3. Update DHAN_ACCESS_TOKEN in Railway environment vars   ║');
+        console.error('║  4. Railway will auto-restart — no code change needed      ║');
+        console.error('║                                                            ║');
+        console.error('║  SYMPTOMS WHILE TOKEN IS INVALID:                         ║');
+        console.error('║  • Orders rejected: "Market data unavailable - LTP is 0"  ║');
+        console.error('║  • Chart: "Market feed reconnecting..."                    ║');
+        console.error('║  • Terminal: Feed Offline / Broker Offline                 ║');
+        console.error('╚════════════════════════════════════════════════════════════╝');
+        console.error('');
+        this.emit('token:invalid');
+        // Still return true — server starts, poller will retry when env var updates
+      }
+    }
 
     // Schedule daily cron at 8:00 AM IST
     // DISABLED: Dhan RenewToken revokes old tokens. Only enable when
     // the renewal response is properly captured and saved.
     // this._scheduleDailyCron();
 
-    // Timer-based renewal backup — also disabled for safety
+    // Timer-based renewal backup — disabled for safety (RenewToken invalidates old token)
     // this._scheduleTimerRenewal();
 
     return true;

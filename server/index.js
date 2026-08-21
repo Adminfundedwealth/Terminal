@@ -590,6 +590,29 @@ async function startup() {
   // handleBrokerFill() path so positions and trades are created correctly.
   // In paper mode this poller has no effect (no orders have real Dhan IDs).
   startDhanOrderPoller();
+
+  // 9d. Auto-reconnect Dhan WebSocket when token is rotated via Railway env vars.
+  // dhan.auth.js emits 'token:refreshed' after a successful _revalidateAfterRotation().
+  // This listener reconnects the WS feed and clears the stale feed state —
+  // restoring live ticks without a server restart.
+  const dhanAdapterForReconnect = dataProviderSwitch.getDhanAdapter();
+  if (dhanAdapterForReconnect?.auth) {
+    dhanAdapterForReconnect.auth.on('token:refreshed', async () => {
+      console.log('[DhanFeed] token:refreshed — reconnecting WebSocket feed...');
+      try {
+        if (dhanFeed) {
+          dhanFeed.disconnect();
+          dhanFeed = null;
+        }
+        marketDataEngine.setFeedStale(false);
+        await connectDhanFeed();
+        console.log('[DhanFeed] ✓ WebSocket feed reconnected after token rotation');
+      } catch (e) {
+        console.warn('[DhanFeed] Reconnect after token rotation failed:', e.message);
+      }
+    });
+    console.log('[Startup] ✓ Dhan token rotation auto-reconnect listener active');
+  }
 }
 
 
@@ -632,6 +655,11 @@ async function connectDhanFeed() {
           low: tick.low || existing?.low,
           close: tick.close || existing?.close,
           volume: tick.volume || existing?.volume,
+          // OI and previous OI — present in mode-17 quote packets (offset 44/48).
+          // Pass them through so MarketDataEngine stores them and EventBridge
+          // forwards them to the frontend for futures OI display.
+          oi:     tick.oi     != null ? tick.oi     : existing?.oi,
+          prevOi: tick.prevOi != null ? tick.prevOi : existing?.prevOi,
           timestamp: Date.now(),
           symbol: existing?.symbol,
           exchange: existing?.exchange,

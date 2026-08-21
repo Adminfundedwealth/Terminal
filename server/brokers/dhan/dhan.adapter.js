@@ -218,7 +218,13 @@ export class DhanAdapter {
             }
           }
         } catch (err) {
-          // Silent — don't break the poller
+          // On 401 — mark token as invalid so isTokenValid returns false
+          // and the operator is alerted to regenerate the token.
+          if (err.response?.status === 401 || err.response?.data?.errorCode === 'DH-906') {
+            this.auth.markTokenInvalid();
+            return []; // Short-circuit — all segments will fail equally
+          }
+          // Other errors (network, 429 rate limit) — silent, don't break the poller
         }
 
         if (i + batchSize < entries.length) {
