@@ -269,6 +269,7 @@ export const useAppStore = create<AppState>()(
         // Restore remembered instrument, or fall back to workspace default
         const remembered = state.lastInstrumentPerWorkspace[ws];
         const defaultSymbol = remembered || workspaceDefaults[ws];
+        const clearActiveSymbol = ['futures', 'mcx', 'cds'].includes(ws) && !workspaceDefaults[ws];
 
         // Map workspace to watchlist tab id
         const wsToWlTab: Partial<Record<Workspace, string>> = {
@@ -277,7 +278,7 @@ export const useAppStore = create<AppState>()(
 
         return {
           activeWorkspace: ws,
-          ...(defaultSymbol ? { activeSymbol: defaultSymbol } : {}),
+          activeSymbol: clearActiveSymbol ? null : defaultSymbol,
           showOptionChain: showOC,
           terminalLayout: layout,
           activeWatchlistTab: wsToWlTab[ws] || state.activeWatchlistTab,
