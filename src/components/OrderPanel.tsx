@@ -321,8 +321,12 @@ export function OrderPanel() {
                 return;
               }
               const parsed = Number.parseInt(rawValue, 10);
-              if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 0) {
+              if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) {
                 setOrderForm({ qty: 0 });
+                return;
+              }
+              if (parsed <= 0) {
+                setOrderForm({ qty: parsed });
                 return;
               }
               const ls = activeSymbol?.lotSize || 1;
