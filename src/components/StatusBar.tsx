@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useMarketStore } from '@/store/marketStore';
 import { useAppStore } from '@/store/appStore';
 import SymbolLogo from '@/components/SymbolLogo';
@@ -13,6 +13,7 @@ export function StatusBar() {
   const { activeSymbol } = useAppStore();
   const [wsState, setWsState] = useState<WsState>('disconnected');
   const [latency, setLatency] = useState<number | null>(null);
+  const lastPingAt = useRef<number | null>(null);
 
   useEffect(() => {
     const updateState = (data: any) => {
@@ -29,14 +30,16 @@ export function StatusBar() {
     if (wsState !== 'connected') return;
 
     const measure = () => {
-      wsService.send({ type: 'ping', ts: Date.now() });
+      lastPingAt.current = performance.now();
+      wsService.send({ type: 'ping', ts: lastPingAt.current });
     };
 
     const handler = (data: any) => {
-      const sentAt = data.type === 'pong' ? (data.ts || data.timestamp) : null;
-      if (sentAt) {
-        setLatency(Date.now() - sentAt);
-      }
+      if (data.type !== 'pong') return;
+      const sentAt = data.ts ?? lastPingAt.current;
+      if (sentAt == null) return;
+      const nextLatency = Math.max(0, performance.now() - sentAt);
+      setLatency(nextLatency);
     };
 
     wsService.on('pong', handler);

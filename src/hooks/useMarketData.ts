@@ -2,6 +2,8 @@ import { useEffect } from 'react';
 import { useMarketStore } from '@/store/marketStore';
 import { wsService } from '@/services/websocket';
 
+const depthFetches = new Map<string, Promise<void>>();
+
 export function useMarketData(tokens: string[]) {
   const quotes = useMarketStore((s) => s.quotes);
 
@@ -37,25 +39,39 @@ export function useDepth(token: string | undefined) {
     if (!token) return;
     wsService.send({ type: 'subscribe_depth', tokens: [token] });
 
-    // Also fetch depth via REST API as initial load / fallback
-    // This ensures data shows even if WebSocket depth stream isn't active
+    let cancelled = false;
+    const controller = new AbortController();
+
     const fetchDepthRest = async () => {
-      try {
-        const resp = await fetch(`/api/market/depth?token=${token}`);
-        if (resp.ok) {
+      const key = `depth:${token}`;
+      if (depthFetches.has(key)) return;
+
+      const task = (async () => {
+        try {
+          const resp = await fetch(`/api/market/depth?token=${token}`, { signal: controller.signal, credentials: 'include' });
+          if (!resp.ok || cancelled) return;
           const data = await resp.json();
           if (data && (data.bids?.length > 0 || data.asks?.length > 0)) {
             useMarketStore.getState().updateDepth(token, data);
           }
+        } catch {
+          // silent — WebSocket stream is the primary source
         }
-      } catch { /* silent — WebSocket stream is the primary source */ }
+      })();
+
+      depthFetches.set(key, task.finally(() => depthFetches.delete(key)));
+      await task;
     };
+
     fetchDepthRest();
 
-    // Poll depth every 3 seconds as a fallback for instruments not on mode 3
-    const interval = setInterval(fetchDepthRest, 3000);
+    const interval = setInterval(() => {
+      if (!cancelled) fetchDepthRest();
+    }, 3000);
 
     return () => {
+      cancelled = true;
+      controller.abort();
       clearInterval(interval);
       wsService.send({ type: 'unsubscribe_depth', tokens: [token] });
     };

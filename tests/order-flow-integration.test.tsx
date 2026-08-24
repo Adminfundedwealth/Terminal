@@ -17,6 +17,7 @@ import { useTradingStore } from '@/store/tradingStore';
 import { useAppStore } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
 import type { Order, Position, AccountInfo } from '@/types';
+import { validateOrderQty } from '@/components/OrderPanel';
 
 // Mock the API module
 vi.mock('@/services/api', () => ({
@@ -173,6 +174,17 @@ afterEach(() => {
 // TEST SUITE 1: Order Entry Configuration Triggers Risk Preview
 // Requirement 3 AC 1: Risk metrics within 100ms of input change
 // ============================================================
+
+describe('0. Quantity validation guards invalid order entry', () => {
+  it('rejects zero, negative, NaN, empty, and decimal quantities for integer-only orders', () => {
+    expect(validateOrderQty(0)).toBe('Invalid quantity');
+    expect(validateOrderQty(-1)).toBe('Invalid quantity');
+    expect(validateOrderQty(Number.NaN)).toBe('Invalid quantity');
+    expect(validateOrderQty(Number(''))).toBe('Invalid quantity');
+    expect(validateOrderQty(1.5)).toBe('Invalid quantity');
+    expect(validateOrderQty(2)).toBeNull();
+  });
+});
 
 describe('1. Order entry configuration triggers risk preview', () => {
   it('changing order form updates store state synchronously', () => {

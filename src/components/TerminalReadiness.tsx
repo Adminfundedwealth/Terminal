@@ -11,6 +11,7 @@ import { Shield, Wifi, WifiOff, Zap, AlertTriangle, CheckCircle, XCircle } from 
  */
 export function TerminalReadiness() {
   const [status, setStatus] = useState<TerminalStatus | null>(null);
+  const [lastKnownStatus, setLastKnownStatus] = useState<TerminalStatus | null>(null);
   const account = useTradingStore((s) => s.account);
 
   useEffect(() => {
@@ -20,20 +21,32 @@ export function TerminalReadiness() {
   }, []);
 
   async function fetchStatus() {
-    try { setStatus(await getTerminalStatus()); } catch {}
+    try {
+      const next = await getTerminalStatus();
+      setStatus(next);
+      setLastKnownStatus(next);
+    } catch {
+      if (lastKnownStatus) {
+        setStatus(lastKnownStatus);
+      } else {
+        setStatus(null);
+      }
+    }
   }
 
-  const brokerOk = status?.broker?.connected ?? false;
-  const feedOk = status?.feed?.isLive ?? false;
+  const effectiveStatus = status ?? lastKnownStatus;
+  const statusKnown = effectiveStatus !== null;
+  const brokerOk = effectiveStatus?.broker?.connected === true;
+  const feedOk = effectiveStatus?.feed?.isLive === true;
   const accountStatus = account?.status || 'active';
   const isLocked = accountStatus === 'locked' || accountStatus === 'breached';
-  const tradingAllowed = !isLocked && (status?.tradingAllowed ?? true);
+  const tradingAllowed = !isLocked && (effectiveStatus?.tradingAllowed ?? true);
 
   // Overall readiness
-  const isReady = brokerOk && feedOk && tradingAllowed && !isLocked;
-  const readinessLabel = isLocked ? 'BLOCKED' : !brokerOk ? 'BROKER OFFLINE' : !tradingAllowed ? 'RESTRICTED' : isReady ? 'READY' : 'DEGRADED';
-  const readinessColor = isLocked ? 'text-red' : !brokerOk ? 'text-orange-400' : isReady ? 'text-emerald-400' : 'text-yellow-400';
-  const readinessBadge = isLocked ? 'fw-badge-red' : !brokerOk ? 'fw-badge-orange' : isReady ? 'fw-badge-green' : 'fw-badge-yellow';
+  const isReady = statusKnown && brokerOk && feedOk && tradingAllowed && !isLocked;
+  const readinessLabel = !statusKnown ? 'CHECKING' : isLocked ? 'BLOCKED' : !brokerOk ? 'BROKER OFFLINE' : !tradingAllowed ? 'RESTRICTED' : isReady ? 'READY' : 'DEGRADED';
+  const readinessColor = !statusKnown ? 'text-yellow-400' : isLocked ? 'text-red' : !brokerOk ? 'text-orange-400' : isReady ? 'text-emerald-400' : 'text-yellow-400';
+  const readinessBadge = !statusKnown ? 'fw-badge-yellow' : isLocked ? 'fw-badge-red' : !brokerOk ? 'fw-badge-orange' : isReady ? 'fw-badge-green' : 'fw-badge-yellow';
 
   return (
     <div className="px-3 py-2 border-b border-fw-border bg-fw-surface">
@@ -47,10 +60,10 @@ export function TerminalReadiness() {
         </div>
         <div className="flex items-center gap-1.5">
           {/* Broker */}
-          <div className="flex items-center gap-1" title={brokerOk ? 'Broker data feed connected' : 'Broker data feed offline — market data unavailable'}>
-            {brokerOk ? <Wifi size={9} className="text-emerald-400" /> : <WifiOff size={9} className="text-red-400" />}
-            <span className={cn('text-[13px] font-medium', brokerOk ? 'text-emerald-400' : 'text-red-400')}>
-              {brokerOk ? 'Feed Live' : 'Feed Offline'}
+          <div className="flex items-center gap-1" title={!statusKnown ? 'Checking broker and feed status' : brokerOk ? 'Broker data feed connected' : 'Broker data feed offline — market data unavailable'}>
+            {!statusKnown ? <Wifi size={9} className="text-yellow-400" /> : brokerOk ? <Wifi size={9} className="text-emerald-400" /> : <WifiOff size={9} className="text-red-400" />}
+            <span className={cn('text-[13px] font-medium', !statusKnown ? 'text-yellow-400' : brokerOk ? 'text-emerald-400' : 'text-red-400')}>
+              {!statusKnown ? 'Checking...' : brokerOk ? 'Feed Live' : 'Feed Offline'}
             </span>
           </div>
           {/* Quotes */}

@@ -22,6 +22,11 @@ const PRODUCT_TYPES: { value: ProductType; label: string }[] = [
   { value: 'CNC', label: 'CNC' },
 ];
 
+export function validateOrderQty(value: number): string | null {
+  if (!Number.isFinite(value) || !Number.isInteger(value) || value <= 0) return 'Invalid quantity';
+  return null;
+}
+
 export function OrderPanel() {
   const { orderForm, setOrderForm } = useTradingStore();
   const account = useTradingStore((s) => s.account);
@@ -75,7 +80,8 @@ export function OrderPanel() {
   // Client-side validation before order submission
   function validateOrder(side: OrderSide): string | null {
     if (!symbol || !token) return 'No symbol selected';
-    if (!orderForm.qty || orderForm.qty <= 0) return 'Quantity must be greater than 0';
+    const qtyError = validateOrderQty(orderForm.qty);
+    if (qtyError) return qtyError;
     // Lot-size multiple validation for derivative instruments
     const effectiveLotSize = activeSymbol?.lotSize || 1;
     if (effectiveLotSize > 1 && orderForm.qty % effectiveLotSize !== 0) {
@@ -309,10 +315,18 @@ export function OrderPanel() {
             type="number"
             value={orderForm.qty}
             onChange={(e) => {
-              const raw = parseInt(e.target.value) || 1;
-              // Snap to nearest lot multiple when lotSize > 1
+              const rawValue = e.target.value;
+              if (rawValue === '') {
+                setOrderForm({ qty: 0 });
+                return;
+              }
+              const parsed = Number.parseInt(rawValue, 10);
+              if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 0) {
+                setOrderForm({ qty: 0 });
+                return;
+              }
               const ls = activeSymbol?.lotSize || 1;
-              const snapped = ls > 1 ? Math.max(ls, Math.round(raw / ls) * ls) : Math.max(1, raw);
+              const snapped = ls > 1 ? Math.max(ls, Math.round(parsed / ls) * ls) : Math.max(1, parsed);
               setOrderForm({ qty: snapped });
             }}
             className="flex-1 h-10 bg-fw-surface-2 border border-fw-border rounded-md text-center op-qty text-fw-text outline-none focus:border-fw-accent"

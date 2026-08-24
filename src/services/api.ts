@@ -12,35 +12,60 @@ import type {
 } from '@/types';
 
 const BASE_URL = '/api';
+const inFlightRequests = new Map<string, Promise<any>>();
 
 async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
-  let response: Response;
-  try {
-    response = await fetch(`${BASE_URL}${endpoint}`, {
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include',
-      ...options,
-    });
-  } catch (fetchErr: any) {
-    // AbortError (timeout) or network failure
-    if (fetchErr?.name === 'AbortError') {
-      throw new Error('Request timed out — please try again');
+  const method = (options?.method || 'GET').toUpperCase();
+  const bodyKey = options?.body ? JSON.stringify(options.body) : '';
+  const dedupeKey = `${method}:${endpoint}:${bodyKey}`;
+
+  if (method === 'GET' && !options?.signal && inFlightRequests.has(dedupeKey)) {
+    return inFlightRequests.get(dedupeKey) as Promise<T>;
+  }
+
+  const fetchOnce = async (attempt = 0): Promise<T> => {
+    let response: Response;
+    try {
+      response = await fetch(`${BASE_URL}${endpoint}`, {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        ...options,
+      });
+    } catch (fetchErr: any) {
+      if (fetchErr?.name === 'AbortError') {
+        throw new Error('Request timed out — please try again');
+      }
+      throw new Error('Network error — check your connection');
     }
-    throw new Error('Network error — check your connection');
+
+    if (!response.ok) {
+      const retryable = response.status === 429 || response.status === 503 || response.status >= 500;
+      if (retryable && attempt < 2) {
+        const delayMs = 500 * Math.pow(2, attempt);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        return fetchOnce(attempt + 1);
+      }
+
+      const error = await response.json().catch(() => ({ message: 'Request failed' }));
+      const err = new Error(error.message || error.error || `HTTP ${response.status}`);
+      (err as any).status = response.status;
+      (err as any).code = error.error;
+      (err as any).retryable = retryable;
+      throw err;
+    }
+
+    return response.json();
+  };
+
+  const task = fetchOnce();
+  if (method === 'GET' && !options?.signal) {
+    inFlightRequests.set(dedupeKey, task);
+    task.finally(() => inFlightRequests.delete(dedupeKey));
   }
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Request failed' }));
-    const err = new Error(error.message || error.error || `HTTP ${response.status}`);
-    (err as any).status = response.status;
-    (err as any).code = error.error;
-    (err as any).retryable = response.status === 503 || response.status === 429 || response.status >= 500;
-    throw err;
-  }
-
-  return response.json();
+  return task;
 }
 
 // Account
