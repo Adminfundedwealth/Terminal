@@ -13,8 +13,54 @@
  *   master CSV at server startup.
  */
 export class InstrumentService {
-  constructor() {
+  constructor(options = {}) {
+    this.brokerAdapter = options.brokerAdapter || null;
+    this.cacheMs = options.cacheMs || 5 * 60 * 1000;
+    this._lastRefreshAt = 0;
     this.instruments = this.loadInstruments();
+  }
+
+  _normalizeInstrument(item, source = 'broker') {
+    if (!item || typeof item !== 'object') return null;
+    const symbol = String(item.tradingsymbol || item.symbol || item.name || '').trim();
+    const token = String(item.token || item.symboltoken || '').trim();
+    if (!symbol || !token) return null;
+    return {
+      ...item,
+      token,
+      symbol: symbol.toUpperCase(),
+      name: String(item.name || symbol).trim(),
+      segment: String(item.segment || item.exch_seg || item.exchange || 'NSE').toUpperCase(),
+      exchange: String(item.exchange || item.exch_seg || item.segment || 'NSE').toUpperCase(),
+      instrumentType: String(item.instrumentType || item.instrumenttype || item.type || 'EQ').toUpperCase(),
+      lotSize: Number(item.lotSize || item.lotsize || 1),
+      tickSize: Number(item.tickSize || item.ticksize || (Number(item.tick_size) / 100) || 0.05),
+      tradingSymbol: item.tradingsymbol || item.symbol || symbol,
+      source,
+    };
+  }
+
+  async refreshFromBroker() {
+    if (!this.brokerAdapter?.getInstrumentMaster) return { success: false, code: 'BROKER_UNAVAILABLE', message: 'No broker-backed instrument master is configured.' };
+    if (this._lastRefreshAt && Date.now() - this._lastRefreshAt < this.cacheMs) return { success: true, count: this.instruments.length, source: 'cache' };
+    try {
+      const payload = await this.brokerAdapter.getInstrumentMaster();
+      const normalized = (Array.isArray(payload) ? payload : []).map((item) => this._normalizeInstrument(item)).filter(Boolean);
+      if (!normalized.length) return { success: false, code: 'BROKER_INSTRUMENT_MASTER_EMPTY', message: 'Broker instrument master was empty or invalid.' };
+      this.instruments = [...this.instruments.filter((item) => !item.isPlaceholder), ...normalized];
+      this._lastRefreshAt = Date.now();
+      return { success: true, count: this.instruments.length, source: 'broker' };
+    } catch (error) {
+      return { success: false, code: 'BROKER_INSTRUMENT_MASTER_ERROR', message: error?.message || 'Failed to load broker instrument master.' };
+    }
+  }
+
+  async resolveInstrument(query, segment) {
+    if (this.brokerAdapter && Date.now() - this._lastRefreshAt >= this.cacheMs) await this.refreshFromBroker();
+    const raw = String(query || '').trim();
+    const value = raw.toUpperCase();
+    const instrument = this.instruments.find((item) => (!segment || item.segment === segment || item.exchange === segment) && !item.isPlaceholder && (String(item.symbol || '').toUpperCase() === value || String(item.tradingsymbol || item.tradingSymbol || '').toUpperCase() === value || String(item.token) === raw));
+    return instrument ? { success: true, instrument } : { success: false, code: 'INSTRUMENT_NOT_FOUND', message: `Instrument not found for "${query}".`, query, segment };
   }
 
   /** Returns true when a token is a real numeric Angel One broker token. */

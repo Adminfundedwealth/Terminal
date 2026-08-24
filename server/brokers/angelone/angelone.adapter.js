@@ -16,6 +16,8 @@ config();
 
 const BASE_URL = 'https://apiconnect.angelone.in';
 const MARKET_URL = 'https://apiconnect.angelone.in';
+const INSTRUMENT_MASTER_URL = 'https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json';
+const REQUEST_TIMEOUT_MS = 15000;
 
 export class AngelOneAdapter {
   constructor() {
@@ -44,6 +46,7 @@ export class AngelOneAdapter {
       password: this.password,
       totp: totp,
     }, {
+      timeout: REQUEST_TIMEOUT_MS,
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
@@ -187,6 +190,12 @@ export class AngelOneAdapter {
       close: c[4],
       volume: c[5],
     }));
+  }
+
+  async getInstrumentMaster(exchange = null) {
+    const response = await axios.get(INSTRUMENT_MASTER_URL, { timeout: REQUEST_TIMEOUT_MS });
+    const instruments = Array.isArray(response.data) ? response.data : [];
+    return exchange ? instruments.filter((item) => !item.exch_seg || item.exch_seg === exchange) : instruments;
   }
 
   async getOptionChain(symbol, expiry) {
@@ -346,6 +355,7 @@ export class AngelOneAdapter {
       const opts = {
         method,
         url: `${BASE_URL}${path}`,
+        timeout: REQUEST_TIMEOUT_MS,
         headers: this._headers(),
         ...(body && method !== 'GET' ? { data: body } : {}),
       };
@@ -382,6 +392,7 @@ export class AngelOneAdapter {
           const opts = {
             method,
             url: `${BASE_URL}${path}`,
+            timeout: REQUEST_TIMEOUT_MS,
             headers: this._headers(),
             ...(body && method !== 'GET' ? { data: body } : {}),
           };

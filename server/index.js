@@ -899,6 +899,8 @@ async function connectAngelFeedForBroker() {
     sharedAdapter._isConnected = true;
     sharedAdapter.feedToken = angelFeed.session.feedToken;
     BrokerFactory.registerInstance('angelone', sharedAdapter, angelFeed.session.clientId);
+    instrumentService.brokerAdapter = sharedAdapter;
+    await instrumentService.refreshFromBroker();
     console.log('[AngelFeed] ✓ Broker adapter registered for order execution');
 
   } catch (err) {
