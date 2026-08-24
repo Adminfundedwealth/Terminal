@@ -1289,7 +1289,7 @@ export function Watchlist() {
     if (['NFO', 'MCX', 'CDS'].includes(item.segment)) {
       try {
         const resolved = (await getInstruments(item.segment)).find((candidate) =>
-          candidate.symbol.toUpperCase() === item.symbol.toUpperCase()
+          candidate.symbol.toUpperCase().replace(/\s+FUT$/, '') === item.symbol.toUpperCase().replace(/\s+FUT$/, '')
         );
         if (resolved) {
           setActiveSymbol(resolved);
