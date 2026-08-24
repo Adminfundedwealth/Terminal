@@ -320,7 +320,7 @@ export function OrderPanel() {
                 setOrderForm({ qty: 0 });
                 return;
               }
-              const parsed = Number.parseInt(rawValue, 10);
+              const parsed = Number(rawValue);
               if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) {
                 setOrderForm({ qty: 0 });
                 return;
