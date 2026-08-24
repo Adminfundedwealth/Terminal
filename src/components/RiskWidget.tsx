@@ -11,7 +11,7 @@ export function RiskWidget() {
 
   useEffect(() => {
     fetchRisk();
-    const interval = setInterval(fetchRisk, 8000);
+    const interval = setInterval(fetchRisk, 30000);
     return () => clearInterval(interval);
   }, []);
 

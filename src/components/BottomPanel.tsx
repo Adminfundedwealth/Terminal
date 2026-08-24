@@ -119,7 +119,7 @@ export function BottomPanel() {
     const controller = new AbortController();
     refreshData(controller.signal);
     // Poll every 10s — WS handles real-time updates; this is a safety-net sync
-    const interval = setInterval(() => refreshData(controller.signal), 10000);
+    const interval = setInterval(() => refreshData(controller.signal), 30000);
     return () => { controller.abort(); clearInterval(interval); };
   }, [tradeFilter]);
 

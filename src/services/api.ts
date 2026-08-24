@@ -41,7 +41,7 @@ async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
     }
 
     if (!response.ok) {
-      const retryable = response.status === 429 || response.status === 503 || response.status >= 500;
+      const retryable = response.status === 503 || response.status >= 500;
       if (retryable && attempt < 2) {
         const delayMs = 500 * Math.pow(2, attempt);
         await new Promise((resolve) => setTimeout(resolve, delayMs));
