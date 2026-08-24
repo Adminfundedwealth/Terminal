@@ -17,6 +17,7 @@ class WebSocketService {
   // sent with every subscribe message so the server can forward to AngelFeed correctly
   private exchangeHints: Map<string, string> = new Map();
   private isConnecting = false;
+  private manuallyDisconnected = false;
   private _reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   // Throttle account re-fetch to prevent flooding
   private _lastAccountFetch = 0;
@@ -35,7 +36,9 @@ class WebSocketService {
   connect(url?: string) {
     if (this.isConnecting || (this.ws && this.ws.readyState === WebSocket.OPEN)) return;
 
+    this.manuallyDisconnected = false;
     this.isConnecting = true;
+    this.emitState('connecting');
     const wsUrl = url || `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`;
 
     try {
@@ -46,6 +49,7 @@ class WebSocketService {
         this.isConnecting = false;
         this.reconnectAttempts = 0;
         this._reconnectTimer = null;
+        this.emitState('connected');
 
         // Resubscribe to tokens (with exchange hints)
         if (this.subscribedTokens.size > 0) {
@@ -74,26 +78,35 @@ class WebSocketService {
 
       this.ws.onclose = () => {
         this.isConnecting = false;
+        this.ws = null;
+        if (this.manuallyDisconnected) {
+          this.emitState('disconnected');
+          return;
+        }
+        this.emitState('reconnecting');
         this.attemptReconnect();
       };
 
       this.ws.onerror = (error) => {
         console.error('[WS] Error:', error);
         this.isConnecting = false;
+        this.emitState('disconnected');
       };
     } catch (e) {
       this.isConnecting = false;
-      this.attemptReconnect();
+      this.emitState('disconnected');
+      if (!this.manuallyDisconnected) this.attemptReconnect();
     }
   }
 
   private attemptReconnect() {
-    if (this._reconnectTimer) return; // already scheduled
+    if (this.manuallyDisconnected || this._reconnectTimer) return; // already scheduled
 
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       console.error('[WS] Max reconnection attempts reached — reload the page to reconnect');
       // Dispatch a custom event so the UI can show a "Reconnecting..." banner
       window.dispatchEvent(new CustomEvent('ws:dead'));
+      this.emitState('disconnected');
       return;
     }
 
@@ -108,6 +121,12 @@ class WebSocketService {
       this._reconnectTimer = null;
       this.connect();
     }, delay);
+  }
+
+  private emitState(state: 'connected' | 'connecting' | 'reconnecting' | 'disconnected') {
+    const event = { type: 'connection', state };
+    this.handlers.get(`connection:${state}`)?.forEach((handler) => handler(event));
+    this.handlers.get('connection')?.forEach((handler) => handler(event));
   }
 
   private handleMessage(data: any) {
@@ -264,34 +283,36 @@ class WebSocketService {
   }
 
   subscribe(tokens: string[], exchangeHints?: Record<string, string>) {
-    tokens.forEach((t) => this.subscribedTokens.add(t));
+    const newTokens = tokens.filter((token) => !this.subscribedTokens.has(token));
+    newTokens.forEach((t) => this.subscribedTokens.add(t));
     // Store exchange hints so they are resent on reconnect
     if (exchangeHints) {
-      tokens.forEach((t) => {
+      newTokens.forEach((t) => {
         if (exchangeHints[t]) this.exchangeHints.set(t, exchangeHints[t]);
       });
     }
-    tokens.forEach((t) => useMarketStore.getState().subscribe(t));
+    newTokens.forEach((t) => useMarketStore.getState().subscribe(t));
 
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+    if (newTokens.length > 0 && this.ws && this.ws.readyState === WebSocket.OPEN) {
       const hints: Record<string, string> = {};
-      tokens.forEach((t) => {
+      newTokens.forEach((t) => {
         const h = this.exchangeHints.get(t);
         if (h) hints[t] = h;
       });
-      this.send({ type: 'subscribe', tokens, ...(Object.keys(hints).length > 0 ? { exchangeHints: hints } : {}) });
+      this.send({ type: 'subscribe', tokens: newTokens, ...(Object.keys(hints).length > 0 ? { exchangeHints: hints } : {}) });
     }
   }
 
   unsubscribe(tokens: string[]) {
-    tokens.forEach((t) => {
+    const activeTokens = tokens.filter((token) => this.subscribedTokens.has(token));
+    activeTokens.forEach((t) => {
       this.subscribedTokens.delete(t);
       this.exchangeHints.delete(t);
     });
-    tokens.forEach((t) => useMarketStore.getState().unsubscribe(t));
+    activeTokens.forEach((t) => useMarketStore.getState().unsubscribe(t));
 
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.send({ type: 'unsubscribe', tokens });
+    if (activeTokens.length > 0 && this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.send({ type: 'unsubscribe', tokens: activeTokens });
     }
   }
 
@@ -313,6 +334,11 @@ class WebSocketService {
   }
 
   disconnect() {
+    this.manuallyDisconnected = true;
+    if (this._reconnectTimer) {
+      clearTimeout(this._reconnectTimer);
+      this._reconnectTimer = null;
+    }
     // Flush any pending tick batch before closing so nothing is silently dropped.
     if (this._tickFlushTimer) {
       clearTimeout(this._tickFlushTimer);
@@ -322,6 +348,8 @@ class WebSocketService {
       this.ws.close();
       this.ws = null;
     }
+    this.isConnecting = false;
+    this.emitState('disconnected');
   }
 
   get connected() {

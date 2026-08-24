@@ -14,19 +14,14 @@ export function StatusBar() {
   const [wsState, setWsState] = useState<WsState>('disconnected');
   const [latency, setLatency] = useState<number | null>(null);
 
-  // Poll WebSocket connection state
   useEffect(() => {
-    const interval = setInterval(() => {
-      const connected = wsService.connected;
-      if (connected) {
-        setWsState('connected');
-      } else {
-        // Check if it's actively reconnecting
-        setWsState((prev) => prev === 'connecting' ? 'connecting' : 'disconnected');
-      }
-      if (!connected) setLatency(null);
-    }, 1500);
-    return () => clearInterval(interval);
+    const updateState = (data: any) => {
+      setWsState(data.state);
+      if (data.state !== 'connected') setLatency(null);
+    };
+    wsService.on('connection', updateState);
+    setWsState(wsService.connected ? 'connected' : 'disconnected');
+    return () => wsService.off('connection', updateState);
   }, []);
 
   // Measure latency via ping/pong
@@ -38,8 +33,9 @@ export function StatusBar() {
     };
 
     const handler = (data: any) => {
-      if (data.type === 'pong' && data.ts) {
-        setLatency(Date.now() - data.ts);
+      const sentAt = data.type === 'pong' ? (data.ts || data.timestamp) : null;
+      if (sentAt) {
+        setLatency(Date.now() - sentAt);
       }
     };
 
@@ -71,7 +67,7 @@ export function StatusBar() {
 
   return (
     <div className="h-[22px] min-h-[22px] bg-fw-bg border-t border-fw-border/50 flex items-center px-3 gap-4 text-[13px] select-none">
-      {/* Broker Feed Status */}
+      {/* Backend feed connection status */}
       <div className="flex items-center gap-1">
         {ws.icon}
         <span className={ws.color}>{ws.label}</span>

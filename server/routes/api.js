@@ -255,6 +255,8 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
 
       const feedConnected = marketDataEngine.isLive;
       const cachedQuotes = marketDataEngine.quotes.size;
+      const brokerHealth = BrokerFactory.getHealthReport();
+      const brokerEntry = brokerHealth.angelone || brokerHealth[`angelone:${process.env.ANGEL_CLIENT_ID}`];
 
       // Check account status for trading block
       let tradingBlocked = false;
@@ -272,8 +274,8 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
       res.json({
         executionMode: ExecutionMode.getState(),
         broker: {
-          provider: 'angelone',
-          connected: feedConnected,
+          provider: brokerEntry?.provider || 'angelone',
+          connected: brokerEntry?.connected === true,
           cachedQuotes,
         },
         feed: {

@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock dependencies
 vi.mock('../db/client.js', () => ({ supabase: null }));
-vi.mock('./riskEngine.js', () => ({
+vi.mock('../services/riskEngine.js', () => ({
   RiskEngine: {
     validateOrder: vi.fn().mockResolvedValue({ allowed: true }),
     postTradeCheck: vi.fn().mockResolvedValue({ status: 'ok' }),
@@ -22,23 +22,23 @@ vi.mock('../brokers/broker.factory.js', () => ({
   },
 }));
 vi.mock('../repositories/position.repository.js', () => ({
-  PositionRepository: vi.fn().mockImplementation(() => ({
-    upsertPosition: vi.fn().mockResolvedValue(null),
-    findOpenByAccountId: vi.fn().mockResolvedValue([]),
-  })),
+  PositionRepository: class PositionRepositoryMock {
+    async upsertPosition() { return null; }
+    async findOpenByAccountId() { return []; }
+  },
 }));
 vi.mock('../repositories/trade.repository.js', () => ({
-  TradeRepository: vi.fn().mockImplementation(() => ({
-    recordTrade: vi.fn().mockResolvedValue(null),
-  })),
+  TradeRepository: class TradeRepositoryMock {
+    async recordTrade() { return null; }
+  },
 }));
 vi.mock('../repositories/order.repository.js', () => ({
-  OrderRepository: vi.fn().mockImplementation(() => ({
-    markFilled: vi.fn().mockResolvedValue(null),
-    markRejected: vi.fn().mockResolvedValue(null),
-    updateStatus: vi.fn().mockResolvedValue(null),
-    createOrder: vi.fn().mockResolvedValue({ id: 'ord-new' }),
-  })),
+  OrderRepository: class OrderRepositoryMock {
+    async markFilled() { return null; }
+    async markRejected() { return null; }
+    async updateStatus() { return null; }
+    async createOrder() { return { id: 'ord-new' }; }
+  },
 }));
 vi.mock('../events/index.js', () => ({
   eventBus: { publish: vi.fn(), subscribe: vi.fn() },
@@ -48,7 +48,7 @@ vi.mock('./executionMode.js', () => ({
 }));
 
 import { OrderExecutionService } from '../services/orderExecutionService.js';
-import { RiskEngine } from './riskEngine.js';
+import { RiskEngine } from '../services/riskEngine.js';
 import { eventBus } from '../events/index.js';
 
 describe('OrderExecutionService.executeOrder', () => {
@@ -57,6 +57,8 @@ describe('OrderExecutionService.executeOrder', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    RiskEngine.validateOrder.mockResolvedValue({ allowed: true });
+    RiskEngine.postTradeCheck.mockResolvedValue({ status: 'ok' });
     mockMDE = {
       getQuote: vi.fn().mockReturnValue({ ltp: 150 }),
     };
@@ -95,6 +97,7 @@ describe('OrderExecutionService.executeOrder', () => {
       symbol: 'RELIANCE', token: '2885', segment: 'NSE', side: 'BUY', orderType: 'MARKET', productType: 'MIS', qty: 10,
     }, { broker_provider: 'angelone', balance: 1000000, status: 'active' });
 
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(RiskEngine.postTradeCheck).toHaveBeenCalledWith('acc-1', expect.any(Function));
   });
 
