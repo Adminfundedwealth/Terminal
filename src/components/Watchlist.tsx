@@ -1282,10 +1282,26 @@ export function Watchlist() {
   }, [activeWatchlist, activeWatchlistTab, activeWorkspace, inlineQuery, segFilter, pinnedTokens]);
 
   // handleSelectItem — enhanced with dynamic option linking
-  const handleSelectItem = useCallback((item: WatchlistItem) => {
+  const handleSelectItem = useCallback(async (item: WatchlistItem) => {
     useTradingStore.getState().setSelectedContract(null);
     const { exchange, instrumentType } = resolveInstrumentFields(item);
-    const instrument: Instrument = {
+
+    if (['NFO', 'MCX', 'CDS'].includes(item.segment)) {
+      try {
+        const resolved = (await getInstruments(item.segment)).find((candidate) =>
+          candidate.symbol.toUpperCase() === item.symbol.toUpperCase()
+        );
+        if (resolved) {
+          setActiveSymbol(resolved);
+          return;
+        }
+      } catch {
+        return;
+      }
+      return;
+    }
+
+    setActiveSymbol({
       token: item.token,
       symbol: item.symbol,
       name: item.symbol,
@@ -1294,8 +1310,7 @@ export function Watchlist() {
       exchange,
       lotSize: 1,
       tickSize: 0.05,
-    };
-    setActiveSymbol(instrument);
+    });
 
     // Dynamic option linking: when a stock is clicked in the STOCKS tab,
     // update activeSymbol so switching to OPTIONS tab immediately fetches
