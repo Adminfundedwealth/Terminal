@@ -680,7 +680,7 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
           token: String(contract.securityId),
           exchange: segment,
           expiry: contract.expiry || instrument.expiry,
-          lotSize: contract.lotSize || instrument.lotSize,
+          lotSize: contract.lotSize > 1 ? contract.lotSize : instrument.lotSize,
           tickSize: contract.tickSize || instrument.tickSize,
           isPlaceholder: false,
           _resolvedFrom: 'futures-contract-service',
