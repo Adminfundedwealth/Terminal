@@ -664,10 +664,33 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
     res.json(instrumentService.search(q, segment));
   });
 
-  router.get('/instruments', (req, res) => {
+  router.get('/instruments', async (req, res) => {
     const { segment } = req.query;
     if (!segment) return res.json([]);
-    res.json(instrumentService.getBySegment(segment));
+    const instruments = instrumentService.getBySegment(segment);
+    if (!['MCX', 'CDS'].includes(segment)) return res.json(instruments);
+
+    const resolved = await Promise.all(instruments.map(async (instrument) => {
+      if (!instrument.isPlaceholder) return instrument;
+      try {
+        const contract = await futuresContractService.resolve(instrument.token);
+        if (!contract?.securityId) return instrument;
+        return {
+          ...instrument,
+          token: String(contract.securityId),
+          exchange: segment,
+          expiry: contract.expiry || instrument.expiry,
+          lotSize: contract.lotSize || instrument.lotSize,
+          tickSize: contract.tickSize || instrument.tickSize,
+          isPlaceholder: false,
+          _resolvedFrom: 'futures-contract-service',
+        };
+      } catch (error) {
+        console.warn(`[Instruments] Failed to resolve ${instrument.symbol}:`, error.message);
+        return instrument;
+      }
+    }));
+    res.json(resolved);
   });
 
   /**
