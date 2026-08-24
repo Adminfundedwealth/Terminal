@@ -36,7 +36,7 @@ export function DOMPanel() {
     };
 
     fetchDepth();
-    const interval = setInterval(fetchDepth, 1000);
+    const interval = setInterval(fetchDepth, 5000);
     return () => { active = false; clearInterval(interval); };
   }, [activeSymbol?.token]);
 

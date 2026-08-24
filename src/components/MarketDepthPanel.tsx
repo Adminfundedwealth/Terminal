@@ -331,7 +331,7 @@ export function MarketDepthPanel() {
     };
     fetchDepth();
     // REST fallback poll — WS handles real-time, this is safety-net
-    const poll = setInterval(fetchDepth, 2000);
+    const poll = setInterval(fetchDepth, 5000);
 
     const depthHandler = (msg: any) => {
       if (msg.token !== activeSymbol.token) return;

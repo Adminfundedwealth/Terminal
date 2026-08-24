@@ -67,7 +67,7 @@ export function useDepth(token: string | undefined) {
 
     const interval = setInterval(() => {
       if (!cancelled) fetchDepthRest();
-    }, 3000);
+    }, 5000);
 
     return () => {
       cancelled = true;
