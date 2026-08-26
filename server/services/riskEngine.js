@@ -250,6 +250,8 @@ export class RiskEngine {
       () => this.checkMaxPositions(rules, accountId),
       () => this.checkMaxPositionSize(rules, account, orderParams),
       () => this.checkMaxLotSize(rules, orderParams),
+      () => this.checkFuturesLotMultiple(orderParams),
+      () => this.checkFuturesTickSize(orderParams),
       () => this.checkMaxDailyTrades(rules, accountId),
       () => this.checkDailyLossLimit(rules, account, accountId, quoteProvider),
       () => this.checkRiskPerTradeIdea(rules, account, accountId, orderParams),
@@ -556,6 +558,190 @@ export class RiskEngine {
     if (lots > maxLots) {
       return { allowed: false, reason: `Order exceeds max lot size (${lots}/${maxLots} lots for ${segment})` };
     }
+    return { allowed: true };
+  }
+
+  /**
+   * Futures lot-multiple validation — server-side enforcement.
+   *
+   * For derivative instruments (NFO, BFO, MCX, CDS), the order quantity MUST
+   * be an exact multiple of the contract's current lot size.  This check is
+   * performed server-side so it cannot be bypassed by crafting a direct API
+   * request that skips the OrderPanel client-side guard.
+   *
+   * Lot size is resolved dynamically through the single source of truth:
+   *   FuturesContractService (scrip master) → DhanHistoricalService.getLotSize()
+   *
+   * Resolution order:
+   *   1. FuturesContractService.resolveUnderlying() (scrip-master derived, preferred)
+   *   2. DhanHistoricalService.getLotSize() (scrip-master extracted lot-size map)
+   *   3. Skip check — if scrip master not loaded yet on cold start, do not block
+   *
+   * @param {object} orderParams
+   * @returns {{ allowed: boolean, reason?: string }}
+   */
+  static async checkFuturesLotMultiple(orderParams) {
+    const DERIVATIVE_SEGMENTS = new Set(['NFO', 'BFO', 'MCX', 'CDS']);
+    if (!DERIVATIVE_SEGMENTS.has(orderParams.segment)) return { allowed: true };
+
+    const qty = orderParams.qty;
+    if (!qty || qty <= 0) return { allowed: true }; // qty range already checked by Zod
+
+    // Derive the canonical underlying name from the symbol field.
+    // Examples: 'NIFTY FUT' → 'NIFTY', 'NIFTY-Aug2026-FUT' → 'NIFTY',
+    //           'BANKNIFTY FUT' → 'BANKNIFTY', 'RELIANCE FUT' → 'RELIANCE'
+    const rawSymbol = (orderParams.symbol || '').toUpperCase().trim();
+    const underlying = rawSymbol
+      .replace(/\s+FUT(URES?)?$/i, '')   // strip " FUT" / " FUTURES" suffix
+      .replace(/-[A-Z0-9]+-FUT$/i, '')   // strip Dhan tradingSymbol suffix
+      .trim();
+
+    // Map segment to Dhan exchange string for FuturesContractService
+    const SEGMENT_TO_EXCHANGE = {
+      'NFO': 'NSE_FNO',
+      'BFO': 'BSE_FNO',
+      'MCX': 'MCX_COMM',
+      'CDS': 'NSE_CURRENCY',
+    };
+    const exchange = SEGMENT_TO_EXCHANGE[orderParams.segment];
+    if (!exchange) return { allowed: true };
+
+    let lotSize = 0;
+
+    try {
+      // Lazy import — avoids circular dependency at module-load time.
+      const { futuresContractService } = await import('./futuresContractService.js');
+
+      // Primary: FuturesContractService (most accurate — uses scrip master)
+      if (futuresContractService._dhanHistorical) {
+        const contract = await futuresContractService.resolveUnderlying(underlying, exchange);
+        if (contract?.lotSize && contract.lotSize > 1) {
+          lotSize = contract.lotSize;
+        }
+      }
+
+      // Secondary: DhanHistoricalService.getLotSize() directly
+      if (!lotSize) {
+        const hist = futuresContractService._dhanHistorical;
+        if (hist && typeof hist.getLotSize === 'function') {
+          const scraped = hist.getLotSize(underlying);
+          if (scraped && scraped > 1) lotSize = scraped;
+        }
+      }
+    } catch (_) {
+      // Scrip master not loaded yet (cold start). Skip check rather than
+      // blocking valid orders during the ~5-second startup window.
+      return { allowed: true };
+    }
+
+    // If we could not resolve a lot size, skip — do not block trading
+    if (!lotSize || lotSize <= 1) return { allowed: true };
+
+    if (qty % lotSize !== 0) {
+      const nearestLot = Math.round(qty / lotSize);
+      const validQtyBelow = nearestLot > 0 ? nearestLot * lotSize : lotSize;
+      const validQtyAbove = (nearestLot + 1) * lotSize;
+      return {
+        allowed: false,
+        reason: `Quantity ${qty} is not a valid lot multiple for ${underlying} (lot size = ${lotSize}). ` +
+                `Valid quantities: ${validQtyBelow} (${Math.floor(validQtyBelow/lotSize)} lot${Math.floor(validQtyBelow/lotSize)!==1?'s':''}) ` +
+                `or ${validQtyAbove} (${Math.ceil(validQtyAbove/lotSize)} lot${Math.ceil(validQtyAbove/lotSize)!==1?'s':''}).`,
+        ruleType: 'lot_multiple',
+      };
+    }
+
+    return { allowed: true };
+  }
+
+  /**
+   * Futures tick-size price alignment — server-side enforcement.
+   *
+   * For LIMIT, SL, and SL-M orders on derivative instruments, the price or
+   * trigger price MUST align to the contract's tick size.
+   * MARKET orders are excluded — they have no price to validate.
+   *
+   * Tick size is resolved dynamically through:
+   *   DhanHistoricalService.getTickSize() (scrip-master SEM_TICK_SIZE column)
+   *
+   * A price is considered tick-aligned when:
+   *   Math.round(price / tickSize) * tickSize ≈ price  (within float tolerance)
+   *
+   * @param {object} orderParams
+   * @returns {{ allowed: boolean, reason?: string }}
+   */
+  static async checkFuturesTickSize(orderParams) {
+    const DERIVATIVE_SEGMENTS = new Set(['NFO', 'BFO', 'MCX', 'CDS']);
+    if (!DERIVATIVE_SEGMENTS.has(orderParams.segment)) return { allowed: true };
+
+    // MARKET orders have no price to validate
+    if (orderParams.orderType === 'MARKET') return { allowed: true };
+
+    // Collect prices that need tick-size validation
+    const pricesToCheck = [];
+    if ((orderParams.orderType === 'LIMIT' || orderParams.orderType === 'SL') &&
+        orderParams.price && orderParams.price > 0) {
+      pricesToCheck.push({ field: 'price', value: orderParams.price });
+    }
+    if ((orderParams.orderType === 'SL' || orderParams.orderType === 'SL-M') &&
+        orderParams.triggerPrice && orderParams.triggerPrice > 0) {
+      pricesToCheck.push({ field: 'triggerPrice', value: orderParams.triggerPrice });
+    }
+    if (pricesToCheck.length === 0) return { allowed: true };
+
+    // Derive underlying from symbol
+    const rawSymbol = (orderParams.symbol || '').toUpperCase().trim();
+    const underlying = rawSymbol
+      .replace(/\s+FUT(URES?)?$/i, '')
+      .replace(/-[A-Z0-9]+-FUT$/i, '')
+      .trim();
+
+    let tickSize = 0;
+
+    try {
+      const { futuresContractService } = await import('./futuresContractService.js');
+      const hist = futuresContractService._dhanHistorical;
+      if (hist && typeof hist.getTickSize === 'function') {
+        const scraped = hist.getTickSize(underlying);
+        if (scraped && scraped > 0) tickSize = scraped;
+      }
+      // Also try via resolveUnderlying for cases where getTickSize fallback is 0.05
+      if (!tickSize || tickSize === 0.05) {
+        if (futuresContractService._dhanHistorical) {
+          const SEGMENT_TO_EXCHANGE = {
+            'NFO': 'NSE_FNO', 'BFO': 'BSE_FNO',
+            'MCX': 'MCX_COMM', 'CDS': 'NSE_CURRENCY',
+          };
+          const contract = await futuresContractService.resolveUnderlying(
+            underlying, SEGMENT_TO_EXCHANGE[orderParams.segment] || 'NSE_FNO'
+          );
+          if (contract?.tickSize && contract.tickSize > 0) tickSize = contract.tickSize;
+        }
+      }
+    } catch (_) {
+      return { allowed: true }; // Scrip master cold — skip
+    }
+
+    if (!tickSize || tickSize <= 0) return { allowed: true };
+
+    // Validate each price
+    for (const { field, value } of pricesToCheck) {
+      // Float-safe modulo check: round(price/tick) * tick === price within 1e-6
+      const remainder = Math.abs(value % tickSize);
+      const tolerance = tickSize * 1e-6;
+      const isAligned = remainder < tolerance || Math.abs(remainder - tickSize) < tolerance;
+      if (!isAligned) {
+        const nearestLower = Math.floor(value / tickSize) * tickSize;
+        const nearestUpper = nearestLower + tickSize;
+        return {
+          allowed: false,
+          reason: `${field === 'price' ? 'Limit price' : 'Trigger price'} ₹${value} is not aligned to ` +
+                  `${underlying} tick size ₹${tickSize}. ` +
+                  `Nearest valid prices: ₹${nearestLower.toFixed(tickSize < 1 ? 4 : 2)} or ₹${nearestUpper.toFixed(tickSize < 1 ? 4 : 2)}.`,
+          ruleType: 'tick_size',
+        };
+      }
+    }
+
     return { allowed: true };
   }
 

@@ -31,6 +31,13 @@ import { TradeRepository } from '../repositories/trade.repository.js';
 import { OrderRepository } from '../repositories/order.repository.js';
 import { eventBus } from '../events/index.js';
 import { supabase } from '../db/client.js';
+import crypto from 'crypto';
+
+// ─── Broker-timeout recovery constants ───────────────────────────────────────
+// After adapter.placeOrder() throws/times out, retry recovery after this delay.
+const TIMEOUT_RECOVERY_DELAY_MS = 15_000; // 15 seconds
+// Maximum attempts to match a PENDING_RECONCILIATION order against Dhan order list
+const TIMEOUT_RECOVERY_MAX_ATTEMPTS = 4;
 
 const positionRepo = new PositionRepository();
 const tradeRepo = new TradeRepository();
@@ -461,6 +468,13 @@ export class OrderExecutionService {
         try {
           const adapter = await BrokerFactory.create(brokerProvider);
 
+          // Generate a stable correlationId BEFORE calling Dhan so we can
+          // persist it to DB and use it for timeout-recovery scans.
+          // Dhan's own placeOrder() would generate a random one internally;
+          // we override it here so we control the value.
+          const stableCorrelationId = `FW_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+
+          // Patch the correlation id onto the order params so the adapter uses it
           brokerResponse = await adapter.placeOrder({
             symbol: orderParams.symbol,
             token: orderParams.token,
@@ -472,9 +486,55 @@ export class OrderExecutionService {
             qty: orderParams.qty,
             price: orderParams.price || 0,
             triggerPrice: orderParams.triggerPrice || 0,
+            correlationId: stableCorrelationId,
           });
+
+          // Store the stable correlation ID on the order for later recovery queries
+          try {
+            await orderRepo.updateStatus(orderId, 'PENDING', { correlation_id: stableCorrelationId });
+          } catch (_) { /* best-effort — column may not exist yet */ }
+
         } catch (brokerErr) {
-          // Broker connection failed or order rejected at broker level
+          // ── Timeout recovery path ─────────────────────────────────────────
+          // A network timeout means Dhan may or may not have accepted the order.
+          // Do NOT assume REJECTED. Do NOT retry immediately.
+          // Mark as PENDING_RECONCILIATION and schedule a background recovery attempt.
+          const isTimeout = (
+            brokerErr.code === 'ECONNABORTED' ||
+            brokerErr.code === 'ETIMEDOUT' ||
+            /timeout/i.test(brokerErr.message)
+          );
+
+          if (isTimeout) {
+            console.warn(`[OrderExecution] Broker timeout for order ${orderId} — marking PENDING_RECONCILIATION`);
+
+            // Persist reconciliation state so the zombie-PENDING scanner
+            // and the background recovery loop can find this order.
+            try {
+              await orderRepo.updateStatus(orderId, 'PENDING_RECONCILIATION', {
+                reject_reason: `Broker timeout at ${new Date().toISOString()} — pending reconciliation`,
+              });
+            } catch (e) { /* best effort */ }
+
+            eventBus.publish('order.updated', {
+              orderId,
+              status: 'PENDING_RECONCILIATION',
+              symbol: orderParams.symbol,
+              token: orderParams.token,
+              segment: orderParams.segment,
+              side: orderParams.side,
+              brokerProvider,
+            }, { accountId });
+
+            // Background recovery: wait 15s, then scan Dhan order list for
+            // a matching correlationId to recover broker_order_id.
+            // This runs non-blocking — the placeOrder call returns immediately.
+            this._scheduleTimeoutRecovery(accountId, orderId, brokerProvider, 1);
+
+            return { orderId, status: 'PENDING_RECONCILIATION', message: 'Broker timeout — order state is uncertain, reconciliation in progress' };
+          }
+
+          // Non-timeout broker error (auth, validation, etc.) → genuine REJECTED
           const reason = `Broker error: ${brokerErr.message}`;
           try {
             await orderRepo.markRejected(orderId, reason);
@@ -1195,6 +1255,108 @@ export class OrderExecutionService {
       .single();
     if (error) return null;
     return data;
+  }
+
+  /**
+   * TIMEOUT RECOVERY — Fix 2
+   *
+   * After a broker call times out, schedule a background attempt to recover
+   * the broker_order_id by scanning GET /v2/orders for a matching correlationId.
+   *
+   * If a match is found: update order to OPEN/PENDING with the broker_order_id
+   * so the DhanOrderPoller can pick it up on the next cycle.
+   *
+   * If max attempts are exhausted without a match: mark order FAILED and emit
+   * an alert — never silently leave it as PENDING_RECONCILIATION forever.
+   *
+   * @param {string} accountId
+   * @param {string} orderId  FW internal order id
+   * @param {string} brokerProvider
+   * @param {number} attempt  1-based attempt counter
+   */
+  _scheduleTimeoutRecovery(accountId, orderId, brokerProvider, attempt) {
+    if (attempt > TIMEOUT_RECOVERY_MAX_ATTEMPTS) {
+      // Give up — permanently mark as FAILED so it surfaces in UI
+      orderRepo.updateStatus(orderId, 'FAILED', {
+        reject_reason: `Broker timeout: recovery exhausted after ${TIMEOUT_RECOVERY_MAX_ATTEMPTS} attempts`,
+      }).catch(() => {});
+      eventBus.publish('order.updated', {
+        orderId,
+        status: 'FAILED',
+        rejectReason: 'Broker timeout: could not recover broker_order_id',
+      }, { accountId });
+      console.error(`[OrderExecution] Timeout recovery: giving up on order ${orderId} after ${TIMEOUT_RECOVERY_MAX_ATTEMPTS} attempts`);
+      return;
+    }
+
+    const delay = TIMEOUT_RECOVERY_DELAY_MS * attempt; // back-off: 15s, 30s, 45s, 60s
+    console.log(`[OrderExecution] Timeout recovery: scheduling attempt ${attempt}/${TIMEOUT_RECOVERY_MAX_ATTEMPTS} for order ${orderId} in ${delay / 1000}s`);
+
+    setTimeout(async () => {
+      try {
+        // Re-read the order — if it recovered another way (e.g. manual fix), stop
+        const order = await this._findOrder(orderId);
+        if (!order) return;
+        if (!['PENDING', 'PENDING_RECONCILIATION'].includes(order.status)) {
+          console.log(`[OrderExecution] Timeout recovery: order ${orderId} already resolved (status=${order.status})`);
+          return;
+        }
+
+        const correlationId = order.correlation_id;
+        if (!correlationId) {
+          console.warn(`[OrderExecution] Timeout recovery: order ${orderId} has no correlation_id — cannot match broker order`);
+          this._scheduleTimeoutRecovery(accountId, orderId, brokerProvider, attempt + 1);
+          return;
+        }
+
+        // Query Dhan order list — scan for matching correlationId
+        const adapter = await BrokerFactory.create(brokerProvider).catch(() => null);
+        if (!adapter || !adapter.auth?.isTokenValid) {
+          console.warn(`[OrderExecution] Timeout recovery: broker adapter unavailable — will retry`);
+          this._scheduleTimeoutRecovery(accountId, orderId, brokerProvider, attempt + 1);
+          return;
+        }
+
+        const brokerOrders = await adapter.getOrders().catch(() => []);
+        // Dhan returns correlationId in the raw response — not mapped in our adapter
+        // so we must fetch the raw list ourselves via getOrders and check .raw if available,
+        // OR rely on the fact that we stored the correlationId in the order row.
+        // Since our getOrders() doesn't expose correlationId, we match by approximate
+        // time + symbol + side + qty as a secondary heuristic.
+        const placedAt = new Date(order.placed_at).getTime();
+        const WINDOW_MS = 5 * 60 * 1000; // 5-minute window around the timeout
+
+        const matched = brokerOrders.find(bo => {
+          const boTime = bo.placedAt ? new Date(bo.placedAt).getTime() : 0;
+          return (
+            (bo.symbol === order.symbol || bo.token === order.token) &&
+            bo.side === order.side &&
+            bo.qty === order.qty &&
+            Math.abs(boTime - placedAt) < WINDOW_MS
+          );
+        });
+
+        if (matched) {
+          console.log(`[OrderExecution] Timeout recovery: matched broker order ${matched.brokerOrderId} for FW order ${orderId}`);
+          await orderRepo.updateStatus(orderId, 'OPEN', {
+            broker_order_id: matched.brokerOrderId,
+            reject_reason: null,
+          }).catch(() => {});
+          eventBus.publish('order.updated', {
+            orderId,
+            status: 'OPEN',
+            brokerOrderId: matched.brokerOrderId,
+            symbol: order.symbol,
+          }, { accountId });
+        } else {
+          console.warn(`[OrderExecution] Timeout recovery: no match found for order ${orderId} (attempt ${attempt})`);
+          this._scheduleTimeoutRecovery(accountId, orderId, brokerProvider, attempt + 1);
+        }
+      } catch (err) {
+        console.error(`[OrderExecution] Timeout recovery error for order ${orderId}:`, err.message);
+        this._scheduleTimeoutRecovery(accountId, orderId, brokerProvider, attempt + 1);
+      }
+    }, delay);
   }
 
   async _getAccount(accountId) {

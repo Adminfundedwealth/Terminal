@@ -23,6 +23,41 @@ import crypto from 'crypto';
 // In-memory order store for when trading_orders table doesn't exist
 const memOrders = new Map();
 
+// ─── In-memory idempotency store (keyed by idempotency_key) ─────────────────
+// Used when the DB column does not exist yet (schema migration pending).
+// Stores { orderId, status, placedAt } for up to 24 hours.
+const _idemStore = new Map();
+
+/**
+ * Generate a deterministic idempotency key for an order.
+ *
+ * Key inputs: accountId + symbol + side + qty + productType + calendar-day (IST).
+ * The calendar-day prevents stale same-day keys from blocking next-day orders
+ * for the same instrument.
+ *
+ * SHA-256 → first 16 hex chars (64-bit prefix — collision probability negligible
+ * for the order volumes a prop-firm handles).
+ *
+ * @param {string} accountId
+ * @param {object} params  - { symbol, side, qty, productType }
+ * @returns {string}  e.g. "fw_idem_a3f9c2d1b7e84f21"
+ */
+function _buildIdempotencyKey(accountId, params) {
+  // IST calendar day: UTC+5:30
+  const istMs  = Date.now() + (5 * 60 + 30) * 60 * 1000;
+  const istDay = new Date(istMs).toISOString().slice(0, 10); // "YYYY-MM-DD"
+  const raw = [
+    accountId,
+    (params.symbol || '').toUpperCase().trim(),
+    (params.side  || '').toUpperCase().trim(),
+    String(params.qty  || 0),
+    (params.productType || '').toUpperCase().trim(),
+    istDay,
+  ].join(':');
+  const hash = crypto.createHash('sha256').update(raw).digest('hex').slice(0, 16);
+  return `fw_idem_${hash}`;
+}
+
 export class AccountService {
   constructor(marketDataEngine) {
     this.marketDataEngine = marketDataEngine;
@@ -467,10 +502,6 @@ export class AccountService {
     }
 
     // ── Market-closed guard (live mode only) ──────────────────────────────
-    // In paper mode any-time-of-day orders are allowed for simulation purposes.
-    // In live mode we must reject orders outside NSE trading hours (09:15–15:30 IST,
-    // weekdays, non-holiday) unless the order is explicitly an AMO.
-    // Import is dynamic to keep paper mode overhead zero.
     if (!params.isAmo) {
       const { ExecutionMode } = await import('./executionMode.js');
       if (!ExecutionMode.isPaper) {
@@ -481,11 +512,43 @@ export class AccountService {
       }
     }
 
+    // ── SERVER-SIDE IDEMPOTENCY GUARD ──────────────────────────────────────
+    // Generates a deterministic key from (accountId, symbol, side, qty, product,
+    // IST calendar day). If a non-terminal order with this key already exists,
+    // return it — do NOT insert a second order or submit to Dhan again.
+    // Protects against: double-click, multi-tab, retry-after-timeout, network retry.
+    const idempotencyKey = _buildIdempotencyKey(accountId, params);
+
+    // DB-backed duplicate check (preferred)
+    try {
+      const { data: existing } = await supabase
+        .from('trading_orders')
+        .select('id, status, placed_at')
+        .eq('trading_account_id', accountId)
+        .eq('idempotency_key', idempotencyKey)
+        .not('status', 'in', '("REJECTED","CANCELLED","FAILED")')
+        .order('placed_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (existing) {
+        console.log(`[AccountService] Idempotency: returning existing order ${existing.id} (status=${existing.status}) for key ${idempotencyKey}`);
+        return { orderId: existing.id, status: existing.status, duplicate: true };
+      }
+    } catch (idemErr) {
+      // Column may not exist yet (pre-migration) — fall through to in-memory check
+      const mem = _idemStore.get(idempotencyKey);
+      if (mem && Date.now() - mem.placedAt < 24 * 60 * 60 * 1000) {
+        console.log(`[AccountService] Idempotency (in-memory): returning existing order ${mem.orderId} for key ${idempotencyKey}`);
+        return { orderId: mem.orderId, status: mem.status, duplicate: true };
+      }
+    }
+
     // Normalise exchange — defaults to segment when not provided
     const exchange = params.exchange || params.segment;
 
-    // Insert order into trading_orders — FK is trading_account_id
-    const { data, error } = await supabase.from('trading_orders').insert({
+    // Insert order — include idempotency_key (column added via migration)
+    const insertPayload = {
       trading_account_id: accountId,
       symbol: params.symbol,
       token: params.token || null,
@@ -498,7 +561,13 @@ export class AccountService {
       price: params.price || null,
       trigger_price: params.triggerPrice || null,
       status: 'PENDING',
-    }).select().single();
+      // idempotency_key: include if column exists; DB silently ignores unknown
+      // columns in older schemas only when using INSERT with explicit columns.
+      // The try/catch below handles the case where the column does not exist.
+      idempotency_key: idempotencyKey,
+    };
+
+    const { data, error } = await supabase.from('trading_orders').insert(insertPayload).select().single();
 
     if (error) {
       // Table doesn't exist — use in-memory store
@@ -511,6 +580,8 @@ export class AccountService {
           trigger_price: params.triggerPrice || null, status: 'PENDING', placed_at: new Date().toISOString(),
         };
         memOrders.set(orderId, order);
+        // Cache in in-memory idempotency store
+        _idemStore.set(idempotencyKey, { orderId, status: 'PENDING', placedAt: Date.now() });
 
         eventBus.publish('order.created', {
           orderId, symbol: params.symbol, token: params.token, segment: params.segment,
@@ -518,15 +589,38 @@ export class AccountService {
           qty: params.qty, price: params.price || null, status: 'PENDING',
         }, { accountId });
 
-        // Trigger execution even for in-memory path
         this._executeOrderAsync(accountId, orderId, { ...params, exchange });
-
         return { orderId, status: 'PENDING' };
+      }
+      // idempotency_key column doesn't exist yet — retry without it
+      if (error.message && (error.message.includes('idempotency_key') || error.message.includes('column'))) {
+        const { data: data2, error: err2 } = await supabase.from('trading_orders').insert({
+          trading_account_id: accountId,
+          symbol: params.symbol,
+          token: params.token || null,
+          segment: params.segment || null,
+          instrument_type: params.instrumentType || null,
+          side: params.side,
+          order_type: params.orderType,
+          product_type: params.productType || 'MIS',
+          qty: params.qty,
+          price: params.price || null,
+          trigger_price: params.triggerPrice || null,
+          status: 'PENDING',
+        }).select().single();
+        if (err2) throw new Error(`Order insert failed: ${err2.message}`);
+        // Cache in in-memory idempotency store (column fallback)
+        _idemStore.set(idempotencyKey, { orderId: data2.id, status: 'PENDING', placedAt: Date.now() });
+        eventBus.publish('order.created', { orderId: data2.id, symbol: params.symbol, token: params.token, segment: params.segment, side: params.side, orderType: params.orderType, productType: params.productType, qty: params.qty, price: params.price || null, status: 'PENDING' }, { accountId });
+        this._executeOrderAsync(accountId, data2.id, { ...params, exchange });
+        return { orderId: data2.id, status: 'PENDING' };
       }
       throw new Error(`Order insert failed: ${error.message}`);
     }
 
-    // Publish order.created event to event bus
+    // Cache in in-memory store so in-process restarts can still dedup
+    _idemStore.set(idempotencyKey, { orderId: data.id, status: 'PENDING', placedAt: Date.now() });
+
     eventBus.publish('order.created', {
       orderId: data.id,
       symbol: params.symbol,
@@ -540,9 +634,7 @@ export class AccountService {
       status: 'PENDING',
     }, { accountId });
 
-    // Trigger async execution (risk → broker → position → trade)
     this._executeOrderAsync(accountId, data.id, { ...params, exchange });
-
     return { orderId: data.id, status: 'PENDING' };
   }
 

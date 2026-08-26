@@ -58,6 +58,14 @@ const MIS_MULTIPLIER = 0.4;
 
 export class MarginService {
   /**
+   * DhanHistoricalService reference — injected via setHistoricalService().
+   * null until server/index.js calls MarginService.setHistoricalService()
+   * during startup. _getLotSize() falls back to hardcoded values when null.
+   * @type {import('../brokers/dhan/dhan.historical.js').DhanHistoricalService|null}
+   */
+  static _historicalService = null;
+
+  /**
    * Calculate required margin for an order.
    * @param {object} orderParams - { symbol, token, segment, side, orderType, productType, qty, price }
    * @param {function} quoteProvider - (token) => ltp
@@ -361,27 +369,86 @@ export class MarginService {
     return false;
   }
 
+  /**
+   * Resolve lot size for a given symbol and segment.
+   *
+   * Source-of-truth chain (NFO / BFO):
+   *   1. MarginService._historicalService.getLotSize(underlying)
+   *      Injected at server startup via MarginService.setHistoricalService().
+   *      Reads the SEM_LOT_UNITS value loaded from the Dhan scrip master by
+   *      DhanHistoricalService._loadScripMaster().
+   *   2. Hardcoded fallbacks — used ONLY on cold start before the scrip master
+   *      has been downloaded. These are the Aug 2026 NSE values; they will
+   *      auto-correct once setHistoricalService() is called.
+   *
+   * MCX and CDS lot sizes are NOT in the NSE scrip master; they keep their
+   * existing hardcoded values which match exchange specifications.
+   */
+
+  /**
+   * Inject the DhanHistoricalService so _getLotSize() can read current lot
+   * sizes directly from the in-memory scrip master.
+   *
+   * Called once from server/index.js immediately after
+   * futuresContractService.init(dhanAdapter.historical):
+   *   MarginService.setHistoricalService(dhanAdapter.historical);
+   *
+   * Follows the same pattern as marketDataEngine.setLtpFallbacks().
+   * Safe to call multiple times (idempotent — just overwrites the reference).
+   *
+   * @param {import('../brokers/dhan/dhan.historical.js').DhanHistoricalService} historicalSvc
+   */
+  static setHistoricalService(historicalSvc) {
+    MarginService._historicalService = historicalSvc;
+  }
+
   static _getLotSize(symbol, segment) {
     const upper = (symbol || '').toUpperCase();
+
     switch (segment) {
       case 'NFO':
-      case 'BFO':
-        if (upper.includes('NIFTY') && !upper.includes('BANK') && !upper.includes('FIN') && !upper.includes('MID')) return 50;
-        if (upper.includes('BANKNIFTY')) return 30;
-        if (upper.includes('FINNIFTY')) return 40;
-        if (upper.includes('MIDCPNIFTY')) return 50;
-        return 1; // Stock F&O — lot size varies, use 1 as fallback
+      case 'BFO': {
+        // Derive the canonical underlying name from the symbol.
+        // Examples: 'NIFTY FUT' → 'NIFTY', 'BANKNIFTY FUT' → 'BANKNIFTY',
+        //           'NIFTY-Aug2026-FUT' → 'NIFTY', 'RELIANCE FUT' → 'RELIANCE'
+        const underlying = upper
+          .replace(/\s+FUT(URES?)?$/i, '')   // strip " FUT" / " FUTURES" suffix
+          .replace(/-[A-Z0-9]+-FUT$/i, '')   // strip Dhan tradingSymbol suffix
+          .replace(/\s+\d+(CE|PE).*$/i, '')  // strip option strike suffix
+          .trim();
+
+        // Primary: scrip-master derived lot size via injected DhanHistoricalService.
+        // Returns the SEM_LOT_UNITS value for this underlying, or 1 as fallback.
+        const scraped = MarginService._historicalService?.getLotSize?.(underlying) || 0;
+        if (scraped > 1) return scraped;
+
+        // Cold-start fallback — setHistoricalService() not yet called (scrip
+        // master still loading). Values from Aug 2026 NSE revision; will
+        // auto-correct once setHistoricalService() is called at startup.
+        if (upper.includes('MIDCPNIFTY'))                        return 120;
+        if (upper.includes('BANKNIFTY'))                         return 30;
+        if (upper.includes('FINNIFTY'))                          return 60;
+        if (upper.includes('NIFTY') &&
+            !upper.includes('BANK') &&
+            !upper.includes('FIN')  &&
+            !upper.includes('MID'))                              return 65;
+        if (upper.includes('SENSEX') || upper.includes('BANKEX')) return 20;
+        return 1; // Stock F&O — unknown lot size at cold start
+      }
+
       case 'MCX':
-        if (upper.includes('GOLDM')) return 10;
-        if (upper.includes('GOLD')) return 100;
-        if (upper.includes('SILVERM')) return 5;
-        if (upper.includes('SILVER')) return 30;
-        if (upper.includes('CRUDE')) return 100;
-        if (upper.includes('NATURAL') || upper.includes('NG')) return 1250;
-        if (upper.includes('COPPER')) return 2500;
+        if (upper.includes('GOLDM'))                              return 10;
+        if (upper.includes('GOLD'))                               return 100;
+        if (upper.includes('SILVERM'))                            return 5;
+        if (upper.includes('SILVER'))                             return 30;
+        if (upper.includes('CRUDE'))                              return 100;
+        if (upper.includes('NATURAL') || upper.includes('NG'))   return 1250;
+        if (upper.includes('COPPER'))                             return 2500;
         return 1;
+
       case 'CDS':
         return 1000;
+
       default:
         return 1;
     }

@@ -42,6 +42,11 @@ const POLL_INTERVAL_MS = 5000;     // 5-second poll cycle
 const INITIAL_DELAY_MS = 8000;     // Wait 8s after startup before first poll
 const MAX_CONSECUTIVE_ERRORS = 5;  // Pause polling after this many consecutive failures
 
+// Zombie-PENDING recovery: orders with no broker_order_id older than this are scanned
+const ZOMBIE_STALENESS_MS = 30_000;   // 30 seconds
+// After this many scan cycles without recovery, mark FAILED
+const ZOMBIE_MAX_CYCLES = 8;          // 8 × 5s = 40 seconds of retry, then FAILED
+
 const orderRepo = new OrderRepository();
 
 export class DhanOrderPoller {
@@ -60,6 +65,10 @@ export class DhanOrderPoller {
     // Idempotency: "orderId:filledQty" → true
     // Persisted across polls; rehydrated from DB on start.
     this._processedFills = new Set();
+
+    // Zombie-PENDING tracker: orderId → scanCycleCount
+    // Incremented each poll cycle the order stays unresolved.
+    this._zombieScanCount = new Map();
   }
 
   // ─── Lifecycle ────────────────────────────────────────────────────────────
@@ -149,6 +158,174 @@ export class DhanOrderPoller {
     for (const order of openOrders) {
       if (!this._running) break;
       await this._checkOrder(order);
+    }
+
+    // ── Fix 3: Zombie-PENDING recovery ────────────────────────────────────
+    // Find PENDING / PENDING_RECONCILIATION orders that have NO broker_order_id
+    // and were placed more than ZOMBIE_STALENESS_MS ago.
+    // These are orders where the broker response was never received (network drop,
+    // process crash, timeout before the broker_order_id write).
+    // We try to match them against today's Dhan order list by symbol/side/qty/time.
+    // If unrecoverable after ZOMBIE_MAX_CYCLES attempts: mark FAILED.
+    await this._recoverZombieOrders();
+  }
+
+  // ─── Fix 3: Zombie-PENDING recovery ─────────────────────────────────────
+  //
+  // An order is a "zombie" when:
+  //   • status IN ('PENDING', 'PENDING_RECONCILIATION')
+  //   • broker_order_id IS NULL
+  //   • placed_at < now - 30s
+  //
+  // Recovery strategy:
+  //   1. Fetch today's Dhan order list once (shared across all zombies this cycle).
+  //   2. For each zombie, try to match a Dhan order by (symbol OR token) +
+  //      side + qty + time window.
+  //   3. On match: write broker_order_id + upgrade status to OPEN so the normal
+  //      poll path can handle the rest.
+  //   4. After ZOMBIE_MAX_CYCLES scan cycles with no match: mark FAILED and
+  //      emit an alert.  Never silently leave zombie orders alive.
+  //
+  // NOTE: We must NOT fabricate a broker_order_id. A match here is a
+  // best-effort heuristic — if the order cannot be confidently matched,
+  // it is marked FAILED so the trader can manually reconcile.
+  async _recoverZombieOrders() {
+    const cutoff = new Date(Date.now() - ZOMBIE_STALENESS_MS).toISOString();
+
+    const { data: zombies, error } = await supabase
+      .from('trading_orders')
+      .select('id, trading_account_id, symbol, token, side, qty, placed_at, correlation_id, status')
+      .in('status', ['PENDING', 'PENDING_RECONCILIATION'])
+      .is('broker_order_id', null)
+      .not('broker_order_id', 'like', 'PAPER-%')  // never touch paper orders
+      .lt('placed_at', cutoff);
+
+    if (error) {
+      console.warn('[DhanPoller] Zombie scan DB query failed:', error.message);
+      return;
+    }
+    if (!zombies || zombies.length === 0) return;
+
+    // Fetch today's Dhan order list once — shared for all zombies this cycle.
+    // CRITICAL: distinguish three outcomes:
+    //   brokerOrders = []    → broker responded, no orders found (genuine empty)
+    //   brokerOrders = array → broker responded with orders to scan
+    //   brokerOrders = null  → broker API call FAILED (auth error, network error, timeout)
+    //
+    // Only pass brokerOrders to _tryRecoverZombie when the broker API call succeeded.
+    // When the call fails: log the error and return WITHOUT touching any order status
+    // or incrementing any cycle counter. Retry on the next normal poll cycle.
+    // A temporary broker API failure must NEVER cause a live order to become FAILED.
+    let brokerOrders = null;
+    let brokerFetchOk = false;
+    try {
+      brokerOrders = await this._dhanAdapter.getOrders();
+      brokerFetchOk = true;
+    } catch (err) {
+      // Classify the failure for observability
+      const isAuth    = /token|invalid|unauthori/i.test(err.message);
+      const isTimeout = /timeout|ETIMEDOUT|ECONNABORTED/i.test(err.message);
+      const label     = isAuth ? 'AUTH ERROR' : isTimeout ? 'TIMEOUT' : 'BROKER API ERROR';
+      console.warn(`[DhanPoller] Zombie scan: ${label} fetching Dhan order list — skipping cycle, NOT incrementing failure counters: ${err.message}`);
+      return; // Do NOT process zombies this cycle
+    }
+
+    for (const zombie of zombies) {
+      if (!this._running) break;
+      // brokerFetchOk is always true here (we returned early on error above),
+      // but pass the flag explicitly so _tryRecoverZombie can assert it.
+      await this._tryRecoverZombie(zombie, brokerOrders, brokerFetchOk);
+    }
+  }
+
+  async _tryRecoverZombie(zombie, brokerOrders, brokerFetchOk) {
+    const orderId   = zombie.id;
+    const accountId = zombie.trading_account_id;
+
+    // Only increment the scan-cycle counter when the Dhan order list was
+    // successfully fetched. A broker API failure is NOT evidence that the
+    // order does not exist at the broker — it is a network/auth problem.
+    // Incrementing on API failure would eventually falsely mark a live broker
+    // order as FAILED after ZOMBIE_MAX_CYCLES transient failures.
+    if (!brokerFetchOk) {
+      // Should never reach here (caller returns early on fetch failure),
+      // but guard defensively.
+      console.warn(`[DhanPoller] _tryRecoverZombie called with brokerFetchOk=false for order ${orderId} — skipping`);
+      return;
+    }
+
+    const cycles = (this._zombieScanCount.get(orderId) || 0) + 1;
+    this._zombieScanCount.set(orderId, cycles);
+
+    // Time window: ±5 minutes around placed_at
+    const placedMs  = new Date(zombie.placed_at).getTime();
+    const WINDOW_MS = 5 * 60 * 1000;
+
+    // Try to match a Dhan order by symbol+side+qty within the time window.
+    // We do NOT match on correlationId because Dhan's GET /v2/orders response
+    // does not expose it in our current adapter mapping.
+    const match = (brokerOrders || []).find(bo => {
+      const boTime = bo.placedAt ? new Date(bo.placedAt).getTime() : 0;
+      return (
+        (bo.symbol === zombie.symbol || bo.token === zombie.token) &&
+        bo.side?.toUpperCase() === zombie.side?.toUpperCase() &&
+        Number(bo.qty) === Number(zombie.qty) &&
+        Math.abs(boTime - placedMs) < WINDOW_MS
+      );
+    });
+
+    if (match) {
+      console.log(
+        `[DhanPoller] Zombie recovered: FW order ${orderId} → ` +
+        `Dhan ${match.brokerOrderId} (${zombie.symbol} ${zombie.side} ${zombie.qty})`
+      );
+      try {
+        await orderRepo.updateStatus(orderId, 'OPEN', {
+          broker_order_id: match.brokerOrderId,
+          reject_reason: null,
+        });
+      } catch (e) {
+        console.error(`[DhanPoller] Failed to update zombie order ${orderId}:`, e.message);
+      }
+      this._zombieScanCount.delete(orderId);
+
+      eventBus.publish('order.updated', {
+        orderId,
+        status: 'OPEN',
+        brokerOrderId: match.brokerOrderId,
+        symbol: zombie.symbol,
+        side: zombie.side,
+      }, { accountId });
+      return;
+    }
+
+    // No match this cycle
+    if (cycles >= ZOMBIE_MAX_CYCLES) {
+      console.error(
+        `[DhanPoller] Zombie FAILED (unrecoverable after ${ZOMBIE_MAX_CYCLES} cycles): ` +
+        `order ${orderId} (${zombie.symbol} ${zombie.side} ${zombie.qty})`
+      );
+      try {
+        await orderRepo.updateStatus(orderId, 'FAILED', {
+          reject_reason: `Zombie PENDING: no broker_order_id after ${ZOMBIE_MAX_CYCLES} recovery attempts. Manual reconciliation required.`,
+        });
+      } catch (e) {
+        console.error(`[DhanPoller] Failed to mark zombie ${orderId} as FAILED:`, e.message);
+      }
+      this._zombieScanCount.delete(orderId);
+
+      eventBus.publish('order.updated', {
+        orderId,
+        status: 'FAILED',
+        rejectReason: 'Zombie PENDING: unrecoverable — manual reconciliation required',
+        symbol: zombie.symbol,
+        side: zombie.side,
+      }, { accountId });
+    } else {
+      console.warn(
+        `[DhanPoller] Zombie not matched yet: order ${orderId} ` +
+        `(${zombie.symbol} ${zombie.side} ${zombie.qty}) — cycle ${cycles}/${ZOMBIE_MAX_CYCLES}`
+      );
     }
   }
 

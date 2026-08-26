@@ -330,7 +330,9 @@ export class DhanAdapter {
 
     const payload = {
       dhanClientId: this.auth.clientId,
-      correlationId: `ORD_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+      // Use caller-supplied correlationId when provided (timeout recovery requires
+      // a stable, pre-known value). Fall back to a generated one.
+      correlationId: order.correlationId || `ORD_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
       transactionType: (order.side || order.transactionType || 'BUY').toUpperCase(),
       exchangeSegment: this._mapExchange(order.exchange || order.segment),
       productType: this._mapProduct(order.productType),

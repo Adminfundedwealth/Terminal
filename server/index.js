@@ -63,6 +63,7 @@ import { eventDispatcher } from './services/eventDispatcher.js';
 import { DataProviderSwitch } from './services/dataProviderSwitch.js';
 import { DhanOrderPoller } from './services/dhanOrderPoller.js';
 import { futuresContractService } from './services/futuresContractService.js';
+import { MarginService } from './services/marginService.js';
 
 const PORT = process.env.PORT || 4000;
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
@@ -474,6 +475,7 @@ async function startup() {
         console.log(`[Startup] ✓ Dhan scrip master pre-loaded: ${m?.byId?.size || 0} instruments`);
         // Init FuturesContractService and warm cache immediately after scrip master loads
         futuresContractService.init(dhanAdapter.historical);
+        MarginService.setHistoricalService(dhanAdapter.historical);
         return futuresContractService.warmCache();
       })
       .then(() => {
