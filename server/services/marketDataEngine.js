@@ -1,5 +1,40 @@
 import { eventBus } from '../events/index.js';
 
+/**
+ * Canonical exchange-segment → Dhan-segment map.
+ *
+ * Single source of truth for BOTH the single-quote path (getLivePrice) and the
+ * batch path (Dhan LTP poller). Previously the single-quote path used an inline
+ * ternary that had no BFO case, so BSE option (BFO) tokens fell through to
+ * NSE_EQ and Dhan returned nothing for them (P5.1 audit P0 finding).
+ *
+ * Keys include both the terminal's exchange codes (NSE/BSE/NFO/BFO/MCX/CDS) and
+ * already-Dhan-format keys (NSE_EQ/BSE_FNO/…) so cached metadata in either form
+ * resolves correctly. CDS → 'CUR' matches the order path (dhan.adapter._mapExchange
+ * and dhan.types.SEGMENT_MAP); the legacy 'NSE_CURRENCY' input key also maps to 'CUR'.
+ */
+const SEGMENT_MAP = {
+  // Terminal exchange codes
+  'NSE': 'NSE_EQ', 'BSE': 'BSE_EQ',
+  'NFO': 'NSE_FNO', 'BFO': 'BSE_FNO',
+  'MCX': 'MCX_COMM', 'CDS': 'CUR',
+  // Already Dhan-format keys — pass through
+  'NSE_EQ': 'NSE_EQ', 'BSE_EQ': 'BSE_EQ',
+  'NSE_FNO': 'NSE_FNO', 'BSE_FNO': 'BSE_FNO',
+  'MCX_COMM': 'MCX_COMM', 'IDX_I': 'IDX_I',
+  'CUR': 'CUR', 'NSE_CURRENCY': 'CUR',
+};
+
+/**
+ * Resolve a terminal/exchange segment code to its Dhan segment.
+ * Unknown/missing segments fall back to the safe NSE_EQ default (unchanged behavior).
+ * @param {string|null|undefined} segment
+ * @returns {string} Dhan segment (e.g. 'NSE_EQ', 'NSE_FNO', 'BSE_FNO', 'MCX_COMM', 'CUR')
+ */
+export function resolveDhanSegment(segment) {
+  return SEGMENT_MAP[segment] || 'NSE_EQ';
+}
+
 export class MarketDataEngine {
   constructor() {
     this.subscribers = new Map();
@@ -166,7 +201,9 @@ export class MarketDataEngine {
     // 2. Dhan quote API
     if (this._dhanAdapter) {
       try {
-        const dhanSeg = segment === 'NFO' ? 'NSE_FNO' : segment === 'MCX' ? 'MCX_COMM' : segment === 'CDS' ? 'NSE_CURRENCY' : 'NSE_EQ';
+        // Single-quote segment resolution — reuse the shared SEGMENT_MAP so BFO
+        // (BSE options) correctly resolves to BSE_FNO instead of falling back to NSE_EQ.
+        const dhanSeg = resolveDhanSegment(segment);
         const result = await this._dhanAdapter.getQuote(token, dhanSeg);
         const ltp = result?.ltp || result?.last_price;
         if (ltp && Number.isFinite(ltp) && ltp > 0) {
@@ -304,27 +341,14 @@ export class MarketDataEngine {
         );
         if (numericTokens.length === 0) return;
 
-        // Build segment-aware token list by reading the cached quote metadata.
-        // Without this, every token defaults to NSE_EQ in getQuotes() and
-        // MCX/IDX/CDS tokens return nothing from Dhan.
-        const SEGMENT_MAP = {
-          'NSE': 'NSE_EQ', 'BSE': 'BSE_EQ',
-          'NFO': 'NSE_FNO', 'BFO': 'BSE_FNO',
-          'MCX': 'MCX_COMM', 'CDS': 'CUR',
-          // Already Dhan-format keys — pass through
-          'NSE_EQ': 'NSE_EQ', 'BSE_EQ': 'BSE_EQ',
-          'NSE_FNO': 'NSE_FNO', 'BSE_FNO': 'BSE_FNO',
-          'MCX_COMM': 'MCX_COMM', 'IDX_I': 'IDX_I',
-          'CUR': 'CUR', 'NSE_CURRENCY': 'CUR',
-        };
-
         // Group tokens by their known Dhan segment (from cached quote metadata)
         // so getQuotes() receives pre-segmented batches and avoids the NSE_EQ default.
+        // Uses the shared resolveDhanSegment() helper (same map as the single-quote path).
         const bySegment = {};
         for (const token of numericTokens) {
           const cached = this.quotes.get(token);
           const rawSeg = cached?.segment || cached?.exchange || 'NSE_EQ';
-          const dhanSeg = SEGMENT_MAP[rawSeg] || 'NSE_EQ';
+          const dhanSeg = resolveDhanSegment(rawSeg);
           if (!bySegment[dhanSeg]) bySegment[dhanSeg] = [];
           bySegment[dhanSeg].push(token);
         }
