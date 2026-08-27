@@ -11,6 +11,7 @@
  * - Module-level caches reduce repeat latency without persisting stale data.
  */
 import { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react';
+import type { Ref } from 'react';
 import { useAppStore } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
 import { getOptionChain, getExpiries, getLotSize } from '@/services/api';
@@ -172,6 +173,10 @@ interface StrikeRowProps {
   // P5.3: tick direction for LTP flash (1 = up, -1 = down, 0 = unchanged)
   callTickDir: number;
   putTickDir: number;
+  // P5: ref attached to the ATM row's <tr> so the parent can scroll to it.
+  atmRef?: Ref<HTMLTableRowElement>;
+  // P5: when true, show inline Greeks (delta) next to IV.
+  showGreeks: boolean;
 }
 
 // ─── P5.3 formatting helpers (module-level, pure) ───────────────────────────
@@ -239,6 +244,8 @@ const StrikeRow = memo(function StrikeRow({
   putIv,
   callTickDir,
   putTickDir,
+  atmRef,
+  showGreeks,
 }: StrikeRowProps) {
   const callOiChg = e.callOiChange || 0;
   const putOiChg  = e.putOiChange  || 0;
@@ -255,6 +262,7 @@ const StrikeRow = memo(function StrikeRow({
 
   return (
     <tr
+      ref={atmRef}
       className={cn(
         'border-b border-fw-border/20 transition-colors group',
         isAtm
@@ -310,9 +318,14 @@ const StrikeRow = memo(function StrikeRow({
           >
             {formatNumber(e.callVolume || 0)}
           </td>
-          {/* CALL IV */}
-          <td className="px-1 py-1 text-right font-mono tabular-nums text-fw-text-secondary">
-            {displayCallIv > 0 ? displayCallIv.toFixed(1) + '%' : '—'}
+          {/* CALL IV (+ delta when Greeks enabled) */}
+          <td className="px-1 py-1 text-right font-mono tabular-nums text-fw-text-secondary leading-tight">
+            <span className="block">{displayCallIv > 0 ? displayCallIv.toFixed(1) + '%' : '—'}</span>
+            {showGreeks && (
+              <span className="block text-[8px] text-fw-text-muted" title="Delta">
+                Δ {e.callDelta ? e.callDelta.toFixed(2) : '—'}
+              </span>
+            )}
           </td>
           {/* CALL BID / ASK (qty + spread in tooltip) */}
           <td
@@ -383,9 +396,14 @@ const StrikeRow = memo(function StrikeRow({
             <span className="block text-emerald-400/80">{formatQuote(e.putBidPrice)}</span>
             <span className="block text-red-400/80">{formatQuote(e.putAskPrice)}</span>
           </td>
-          {/* PUT IV */}
-          <td className="px-1 py-1 text-left font-mono tabular-nums text-fw-text-secondary">
-            {displayPutIv > 0 ? displayPutIv.toFixed(1) + '%' : '—'}
+          {/* PUT IV (+ delta when Greeks enabled) */}
+          <td className="px-1 py-1 text-left font-mono tabular-nums text-fw-text-secondary leading-tight">
+            <span className="block">{displayPutIv > 0 ? displayPutIv.toFixed(1) + '%' : '—'}</span>
+            {showGreeks && (
+              <span className="block text-[8px] text-fw-text-muted" title="Delta">
+                Δ {e.putDelta ? e.putDelta.toFixed(2) : '—'}
+              </span>
+            )}
           </td>
           {/* Volume — red bar */}
           <td
@@ -437,7 +455,7 @@ const StrikeRow = memo(function StrikeRow({
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function OptionChainModal() {
-  const { activeSymbol, setActiveSymbol } = useAppStore();
+  const { activeSymbol, setActiveSymbol, watchlists } = useAppStore();
   const { setOrderForm, setSelectedContract, selectedContract } = useTradingStore();
   const quotes = useMarketStore((s) => s.quotes);
 
@@ -471,6 +489,15 @@ export function OptionChainModal() {
     | { type: 'unsupported'; instrument: string }
     | { type: 'ready' }
   >({ type: 'idle' });
+
+  // ── P5 UI state (declared early so render-time memos can read it) ──────────
+  // Number of strikes shown on each side of ATM (expandable). Default 20.
+  const [strikeWindow, setStrikeWindow] = useState<number>(STRIKES_AROUND_ATM);
+  // Show Greeks (delta) inline. Data is already present; off by default to keep
+  // the default desktop view uncluttered.
+  const [showGreeks, setShowGreeks] = useState<boolean>(false);
+  // Ref to the ATM row so "Jump to ATM" can scroll it into view.
+  const atmRowRef = useRef<HTMLTableRowElement | null>(null);
 
   // ── Control refs ──────────────────────────────────────────────────────────
   const isMountedRef     = useRef(true);
@@ -557,10 +584,13 @@ export function OptionChainModal() {
       const d = Math.abs(chain[i].strike - spotPrice);
       if (d < minDiff) { minDiff = d; atmIdx = i; }
     }
-    const s = Math.max(0, atmIdx - STRIKES_AROUND_ATM);
-    const e = Math.min(chain.length, atmIdx + STRIKES_AROUND_ATM + 1);
+    const s = Math.max(0, atmIdx - strikeWindow);
+    const e = Math.min(chain.length, atmIdx + strikeWindow + 1);
     return chain.slice(s, e);
-  }, [chain, spotPrice]);
+  }, [chain, spotPrice, strikeWindow]);
+
+  // P5: whether more strikes exist beyond the current window (drives "Expand").
+  const canExpandStrikes = chain.length > filteredChain.length;
 
   // ── Timer management ──────────────────────────────────────────────────────
   const clearAll = useCallback(() => {
@@ -762,6 +792,7 @@ export function OptionChainModal() {
     setMaxPainStrike(0);
     setResolvedLotSize(0); // will be refetched below
     prevLtpRef.current.clear(); // P5.3: reset tick baseline on underlying change
+    setStrikeWindow(STRIKES_AROUND_ATM); // P5: reset expanded strike window
 
     // Unsubscribe previous option token when underlying changes
     if (activeOptionTokenRef.current) {
@@ -831,6 +862,7 @@ export function OptionChainModal() {
     setWorkerIv(new Map());
     setMaxPainStrike(0);
     prevLtpRef.current.clear(); // P5.3: reset tick baseline on expiry change
+    setStrikeWindow(STRIKES_AROUND_ATM); // P5: reset expanded strike window
     setStatus({ type: 'loading', label: `${underlying} · ${expiry}`, attempt: 0 });
     startBudget(session);
     loadChain(underlying, expiry, 0, session);
@@ -940,6 +972,47 @@ export function OptionChainModal() {
   // View mode: CE only, PE only, or both
   const [viewMode, setViewMode] = useState<'both' | 'ce' | 'pe'>('both');
 
+  // P5: dynamic underlying selector list, sourced from the OPTIONS watchlist
+  // (never hardcoded). Falls back to the INDEX watchlist if OPTIONS is empty.
+  const underlyingOptions = useMemo(() => {
+    const optionsWl = watchlists.find((w) => w.id === 'options')
+      || watchlists.find((w) => w.id === 'index');
+    const items = optionsWl?.items || [];
+    // De-duplicate by canonical underlying symbol so "NIFTY 50" and "NIFTY"
+    // don't both appear. Preserve first occurrence order.
+    const seen = new Set<string>();
+    const out: { token: string; symbol: string; segment: string }[] = [];
+    for (const it of items) {
+      const canon = it.symbol.replace(/\s+\d+$/, '').trim().toUpperCase();
+      if (seen.has(canon)) continue;
+      seen.add(canon);
+      out.push({ token: it.token, symbol: it.symbol, segment: it.segment as string });
+    }
+    return out;
+  }, [watchlists]);
+
+  // P5: switching the underlying reuses the SAME activeSymbol flow the watchlist
+  // uses — no new selection path. The underlying-change effect handles the rest.
+  const handleUnderlyingChange = useCallback((token: string) => {
+    const item = underlyingOptions.find((o) => o.token === token);
+    if (!item) return;
+    setActiveSymbol({
+      token: item.token,
+      symbol: item.symbol,
+      name: item.symbol,
+      segment: item.segment as any,
+      exchange: item.segment as any,
+      instrumentType: 'EQ',
+      lotSize: 1,
+      tickSize: 0.05,
+    });
+  }, [underlyingOptions, setActiveSymbol]);
+
+  // P5: jump the ATM row into the center of the scroll viewport.
+  const jumpToAtm = useCallback(() => {
+    atmRowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, []);
+
   // OI + Volume max for proportional bars
   const { maxOi, maxVol } = useMemo(() => {
     let maxOi = 0, maxVol = 0;
@@ -951,6 +1024,30 @@ export function OptionChainModal() {
     }
     return { maxOi: maxOi || 1, maxVol: maxVol || 1 };
   }, [filteredChain]);
+
+  // ── P5: OI / market analysis (from ACTUAL chain data, never fabricated) ─────
+  // Highest CE OI strike (resistance), highest PE OI strike (support), and PCR
+  // (total put OI / total call OI). Uses the full chain, not the ATM window, so
+  // the numbers reflect the whole option chain. Returns 0 when data is absent.
+  const oiAnalysis = useMemo(() => {
+    let maxCeOi = 0, maxPeOi = 0, maxCeOiStrike = 0, maxPeOiStrike = 0;
+    let totalCeOi = 0, totalPeOi = 0;
+    for (const e of chain) {
+      const ce = e.callOi || 0;
+      const pe = e.putOi || 0;
+      totalCeOi += ce;
+      totalPeOi += pe;
+      if (ce > maxCeOi) { maxCeOi = ce; maxCeOiStrike = e.strike; }
+      if (pe > maxPeOi) { maxPeOi = pe; maxPeOiStrike = e.strike; }
+    }
+    const pcr = totalCeOi > 0 ? totalPeOi / totalCeOi : 0;
+    return {
+      maxCeOiStrike, maxPeOiStrike,
+      hasOi: totalCeOi > 0 || totalPeOi > 0,
+      pcr: Math.round(pcr * 100) / 100,
+      hasPcr: totalCeOi > 0,
+    };
+  }, [chain]);
 
   // ATM strike value
   const atmStrike = useMemo(() => {
@@ -1016,11 +1113,25 @@ export function OptionChainModal() {
       {/* ── Header ── */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-fw-border flex-shrink-0 bg-fw-surface">
         <span className="text-[13px] font-bold text-fw-text tracking-wide flex-shrink-0">OPT CHAIN</span>
-        {underlying && (
-          <>
-            <SymbolLogo symbol={underlying} size={18} className="flex-shrink-0" />
-            <span className="text-[13px] font-bold text-fw-accent">{underlying}</span>
-          </>
+        {underlying && <SymbolLogo symbol={underlying} size={18} className="flex-shrink-0" />}
+        {/* P5: dynamic underlying selector (sourced from the OPTIONS watchlist). */}
+        {underlyingOptions.length > 0 ? (
+          <select
+            value={activeSymbol?.token || ''}
+            onChange={(e) => handleUnderlyingChange(e.target.value)}
+            className="bg-fw-bg text-fw-accent text-[13px] font-bold border border-fw-border rounded px-1.5 py-0.5 cursor-pointer hover:border-fw-accent/50 transition-colors max-w-[130px]"
+            title="Select underlying"
+          >
+            {/* Keep the current underlying selectable even if it isn't a listed option */}
+            {activeSymbol && !underlyingOptions.some((o) => o.token === activeSymbol.token) && (
+              <option value={activeSymbol.token}>{underlying}</option>
+            )}
+            {underlyingOptions.map((o) => (
+              <option key={o.token} value={o.token}>{o.symbol}</option>
+            ))}
+          </select>
+        ) : (
+          underlying && <span className="text-[13px] font-bold text-fw-accent">{underlying}</span>
         )}
         {expiries.length > 0 && (
           <select
@@ -1106,11 +1217,60 @@ export function OptionChainModal() {
               </button>
             ))}
           </div>
+          {/* P5: Greeks toggle — reveals delta inline (data already present) */}
+          <button
+            onClick={() => setShowGreeks((v) => !v)}
+            className={cn(
+              'px-2 py-0.5 text-[10px] font-bold uppercase rounded border transition-colors',
+              showGreeks
+                ? 'bg-fw-accent/20 text-fw-accent border-fw-accent/40'
+                : 'text-fw-text-muted border-fw-border/50 hover:text-fw-text hover:bg-fw-hover/30',
+            )}
+            title="Toggle Greeks (Δ delta)"
+          >Δ</button>
+
+          {/* P5: Jump to ATM */}
+          {atmStrike > 0 && (
+            <button
+              onClick={jumpToAtm}
+              className="px-2 py-0.5 text-[10px] font-bold uppercase rounded border border-fw-border/50 text-fw-text-muted hover:text-fw-accent hover:border-fw-accent/40 transition-colors"
+              title="Scroll the ATM strike into view"
+            >ATM</button>
+          )}
+
+          {/* P5: Expand strikes (loads more above + below from the real chain) */}
+          {canExpandStrikes && (
+            <button
+              onClick={() => setStrikeWindow((w) => w + STRIKES_AROUND_ATM)}
+              className="px-2 py-0.5 text-[10px] font-bold uppercase rounded border border-fw-border/50 text-fw-text-muted hover:text-fw-text hover:bg-fw-hover/30 transition-colors"
+              title="Show more strikes above and below"
+            >+ Strikes</button>
+          )}
+
           <span className="text-[11px] text-fw-text-muted ml-2">
             {filteredChain.length} strikes
           </span>
+
+          <div className="flex-1" />
+
+          {/* P5: OI analysis (from actual chain data) */}
+          {oiAnalysis.hasOi && (
+            <>
+              <span className="text-[10px] text-emerald-400/90 font-mono" title="Strike with the highest Call OI (typical resistance)">
+                CE OI↑ {oiAnalysis.maxCeOiStrike}
+              </span>
+              <span className="text-[10px] text-red-400/90 font-mono" title="Strike with the highest Put OI (typical support)">
+                PE OI↑ {oiAnalysis.maxPeOiStrike}
+              </span>
+            </>
+          )}
+          {oiAnalysis.hasPcr && (
+            <span className="text-[10px] text-fw-text-secondary font-mono" title="Put/Call Ratio = total Put OI ÷ total Call OI">
+              PCR {oiAnalysis.pcr.toFixed(2)}
+            </span>
+          )}
           {atmStrike > 0 && (
-            <span className="text-[11px] text-fw-accent font-mono ml-auto">
+            <span className="text-[11px] text-fw-accent font-mono">
               ATM: {atmStrike}
             </span>
           )}
@@ -1254,6 +1414,8 @@ export function OptionChainModal() {
                   <StrikeRow
                     key={e.strike}
                     e={e}
+                    atmRef={isAtm ? atmRowRef : undefined}
+                    showGreeks={showGreeks}
                     isAtm={isAtm}
                     isItmCall={isItmCall}
                     isItmPut={isItmPut}

@@ -40,8 +40,8 @@ describe('resolveDhanSegment — single-quote segment mapping (P5.2)', () => {
     expect(resolveDhanSegment('MCX')).toBe('MCX_COMM');
   });
 
-  it('CDS → CUR (matches order-path _mapExchange)', () => {
-    expect(resolveDhanSegment('CDS')).toBe('CUR');
+  it('CDS → NSE_CURRENCY (marketfeed API key; order API uses CUR separately)', () => {
+    expect(resolveDhanSegment('CDS')).toBe('NSE_CURRENCY');
   });
 
   it('unknown/missing segment → NSE_EQ safe fallback', () => {
@@ -58,7 +58,7 @@ describe('resolveDhanSegment — single-quote segment mapping (P5.2)', () => {
     expect(resolveDhanSegment('BSE_FNO')).toBe('BSE_FNO');
     expect(resolveDhanSegment('MCX_COMM')).toBe('MCX_COMM');
     expect(resolveDhanSegment('IDX_I')).toBe('IDX_I');
-    expect(resolveDhanSegment('CUR')).toBe('CUR');
-    expect(resolveDhanSegment('NSE_CURRENCY')).toBe('CUR');
+    expect(resolveDhanSegment('CUR')).toBe('NSE_CURRENCY');
+    expect(resolveDhanSegment('NSE_CURRENCY')).toBe('NSE_CURRENCY');
   });
 });
