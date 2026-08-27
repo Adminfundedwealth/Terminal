@@ -182,6 +182,37 @@ export interface PlaceOrderParams {
   tpPrice?: number;   // optional bracket take-profit limit price
 }
 
+// Margin quote — single source of truth for pre-trade margin display.
+// Returns the exact required margin the backend risk engine will validate.
+export interface MarginQuote {
+  tradeable: boolean;
+  reason?: string;
+  requiredMargin: number;
+  marginType?: string;
+  leverage?: number;
+  availableMargin?: number;
+  usedMargin?: number;
+  balance?: number;
+  orderValue?: number;
+  maxAffordableQty?: number;
+  sufficient?: boolean;
+}
+
+export const getMarginQuote = (params: {
+  symbol: string;
+  token: string;
+  segment: string;
+  side?: OrderSide;
+  productType?: ProductType;
+  instrumentType?: string;
+  qty: number;
+  price?: number;
+}) =>
+  request<MarginQuote>('/orders/margin-quote', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+
 export const placeOrder = (params: PlaceOrderParams) => {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout

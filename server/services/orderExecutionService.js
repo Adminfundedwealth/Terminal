@@ -26,6 +26,7 @@ import { RiskEngine } from './riskEngine.js';
 import { FlashRiskEngine } from './flashRiskEngine.js';
 import { FlashRiskProfileService } from './flashRiskProfileService.js';
 import { BrokerFactory } from '../brokers/broker.factory.js';
+import { ProtectiveOrderService, PROTECTION_LEG } from './protectiveOrderService.js';
 import { PositionRepository } from '../repositories/position.repository.js';
 import { TradeRepository } from '../repositories/trade.repository.js';
 import { OrderRepository } from '../repositories/order.repository.js';
@@ -53,7 +54,26 @@ export class OrderExecutionService {
     this._pendingPaperOrders = new Map();
     // Concurrency guard for exitPosition: positionId → Promise
     this._exitInFlight = new Map();
+    // P4.1: broker-side protective-order service (live mode only). Lazily built.
+    this._protectiveService = null;
     this._startPaperOrderMonitor();
+  }
+
+  /**
+   * P4.1: lazily construct the ProtectiveOrderService with live dependencies.
+   * Only used in the LIVE branch of attachStopLoss/attachTakeProfit. The paper
+   * path never touches this.
+   */
+  _getProtectiveService() {
+    if (!this._protectiveService) {
+      this._protectiveService = new ProtectiveOrderService({
+        orderRepo,
+        supabase,
+        eventBus,
+        getAdapter: (provider) => BrokerFactory.create(provider),
+      });
+    }
+    return this._protectiveService;
   }
 
   /**
@@ -364,6 +384,19 @@ export class OrderExecutionService {
   }
 
   /**
+   * P4.1: reconcile broker-side SL/TP protection after a restart (LIVE mode).
+   * Delegates to ProtectiveOrderService.reconcileProtection, which flags any
+   * open position that desires protection but has no live broker order.
+   * Read-only against the broker; fails closed by flagging, never assumes safe.
+   *
+   * @param {string} brokerProvider
+   * @returns {Promise<{checked:number, unresolved:number, positions:Array}|null>}
+   */
+  async reconcileBrokerProtection(brokerProvider = 'dhan') {
+    return this._getProtectiveService().reconcileProtection(brokerProvider);
+  }
+
+  /**
    * Execute an order that has already been inserted into t_orders with PENDING status.
    * Full pipeline: risk check → broker → fill handling → position/trade update.
    * 
@@ -403,7 +436,11 @@ export class OrderExecutionService {
         if (FlashRiskProfileService.isFlashAccount(account)) {
           riskResult = await FlashRiskEngine.validateOrder(accountId, orderParams, quoteProvider, account);
         } else {
-          riskResult = await RiskEngine.validateOrder(accountId, orderParams, quoteProvider);
+          // Pass the challenge-joined account so RiskEngine can resolve the
+          // correct profile leverage/rules (1-Step/2-Step/Instant). Without
+          // this it re-loads the bare row via findById, losing the plan and
+          // falling back to a hardcoded 10x leverage.
+          riskResult = await RiskEngine.validateOrder(accountId, orderParams, quoteProvider, account);
         }
       } catch (riskErr) {
         // PRODUCTION: Risk engine failure = REJECT order. Never allow trading when risk checks fail.
@@ -1149,8 +1186,31 @@ export class OrderExecutionService {
       return { orderId: order.id, status: 'OPEN', type: 'SL-M', triggerPrice };
     }
 
-    const result = await this.executeOrder(accountId, order.id, orderParams, account);
-    return result;
+    // ── LIVE mode (P4.1): submit a broker-side protective SL-M order ──────────
+    // The DB order row created above (`order`) was a placeholder for the paper
+    // path; in live mode we route through the ProtectiveOrderService which
+    // creates its own correlated order row, submits to the broker, and is
+    // fail-closed. Cancel the placeholder so it does not linger as PENDING.
+    try { await orderRepo.updateStatus(order.id, 'CANCELLED', { reject_reason: 'Superseded by broker-side protection (P4.1)' }); } catch (_) {}
+
+    const brokerProvider = account?.broker_provider || account?.brokerProvider || 'dhan';
+    const protectiveResult = await this._getProtectiveService().submitProtection({
+      accountId,
+      position,
+      leg: PROTECTION_LEG.SL,
+      price: triggerPrice,
+      brokerProvider,
+    });
+
+    return {
+      orderId: protectiveResult.orderId,
+      status: protectiveResult.status === 'PROTECTED' ? 'OPEN' : 'FAILED',
+      type: 'SL-M',
+      triggerPrice,
+      protection: protectiveResult.status,
+      brokerOrderId: protectiveResult.brokerOrderId,
+      reason: protectiveResult.reason,
+    };
   }
 
   /**
@@ -1194,8 +1254,29 @@ export class OrderExecutionService {
       return { orderId: order.id, status: 'OPEN', type: 'LIMIT', price: targetPrice };
     }
 
-    const result = await this.executeOrder(accountId, order.id, orderParams, account);
-    return result;
+    // ── LIVE mode (P4.1): submit a broker-side protective LIMIT (TP) order ────
+    // See attachStopLoss for rationale. Cancel the placeholder row and route
+    // through the fail-closed ProtectiveOrderService.
+    try { await orderRepo.updateStatus(order.id, 'CANCELLED', { reject_reason: 'Superseded by broker-side protection (P4.1)' }); } catch (_) {}
+
+    const brokerProvider = account?.broker_provider || account?.brokerProvider || 'dhan';
+    const protectiveResult = await this._getProtectiveService().submitProtection({
+      accountId,
+      position,
+      leg: PROTECTION_LEG.TP,
+      price: targetPrice,
+      brokerProvider,
+    });
+
+    return {
+      orderId: protectiveResult.orderId,
+      status: protectiveResult.status === 'PROTECTED' ? 'OPEN' : 'FAILED',
+      type: 'LIMIT',
+      price: targetPrice,
+      protection: protectiveResult.status,
+      brokerOrderId: protectiveResult.brokerOrderId,
+      reason: protectiveResult.reason,
+    };
   }
 
   /**

@@ -296,7 +296,15 @@ export class MarginService {
   static _getAccountLeverage(account) {
     if (!account) return 10; // Default prop-firm leverage (10x = 10% margin)
 
-    const lev = account.leverage_max
+    // Priority order:
+    //   1. effective_leverage — resolved by the Risk Engine from the account's
+    //      challenge profile (1-Step / 2-Step / Instant / Flash). This is the
+    //      authoritative value and the single source of truth for leverage.
+    //   2. leverage_max — flat field (used by Flash accounts / direct configs).
+    //   3. nested risk_profile / challenge leverage_max.
+    //   4. Default: 10x (only when no profile is attached — e.g. cold fallback).
+    const lev = account.effective_leverage
+      || account.leverage_max
       || account.risk_profile?.leverage_max
       || account.challenge?.leverage_max;
 

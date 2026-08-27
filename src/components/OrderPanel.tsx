@@ -2,7 +2,7 @@
 import { useTradingStore } from '@/store/tradingStore';
 import { useAppStore } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
-import { placeOrder, exitPosition } from '@/services/api';
+import { placeOrder, exitPosition, getMarginQuote, type MarginQuote } from '@/services/api';
 import { cn, formatPrice } from '@/utils/helpers';
 import { orderSuccessMessage, exitSuccessMessage } from '@/utils/orderMessages';
 import { ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
@@ -27,6 +27,39 @@ export function validateOrderQty(value: number): string | null {
   return null;
 }
 
+// Spot indices (NIFTY 50, BANKNIFTY, SENSEX, …) are calculated values — NOT
+// tradeable contracts. They belong to the INDEX tab for charting only. Trading
+// happens through their futures (FUT) or options (CE/PE). This mirrors the
+// backend RiskEngine.checkTradeableInstrument guard so the UI blocks the order
+// before it is ever sent.
+const SPOT_INDEX_NAMES = new Set([
+  'NIFTY', 'NIFTY50', 'BANKNIFTY', 'FINNIFTY', 'MIDCPNIFTY', 'NIFTYNEXT50',
+  'SENSEX', 'BANKEX', 'INDIAVIX', 'NIFTYIT', 'NIFTYPHARMA', 'NIFTYAUTO',
+  'NIFTYMETAL', 'NIFTYPSE', 'NIFTYREALTY', 'NIFTYFMCG', 'NIFTYENERGY',
+  'NIFTYINFRA', 'NIFTYSMALLCAP', 'NIFTYMIDCAP',
+]);
+
+export function isSpotIndexInstrument(opts: {
+  symbol?: string;
+  segment?: string;
+  instrumentType?: string;
+}): boolean {
+  const segment = String(opts.segment || '').toUpperCase();
+  const instrumentType = String(opts.instrumentType || '').toUpperCase();
+  const sym = String(opts.symbol || '').toUpperCase().trim();
+
+  if (['IDX_I', 'INDEX', 'MCX_INDEX', 'IDX'].includes(segment)) return true;
+  if (['INDEX', 'IDX', 'SPOT_INDEX'].includes(instrumentType)) return true;
+
+  const isDerivative =
+    segment === 'NFO' || segment === 'BFO' ||
+    /\bFUT\b|FUT$/.test(sym) || /\d*(CE|PE)$/.test(sym) ||
+    ['FUT', 'CE', 'PE'].includes(instrumentType);
+  if (isDerivative) return false;
+
+  return SPOT_INDEX_NAMES.has(sym.replace(/\s+/g, ''));
+}
+
 export function OrderPanel() {
   const { orderForm, setOrderForm } = useTradingStore();
   const account = useTradingStore((s) => s.account);
@@ -39,6 +72,7 @@ export function OrderPanel() {
   const [slPrice, setSlPrice] = useState<number>(0);
   const [tpPrice, setTpPrice] = useState<number>(0);
   const [confirmOrder, setConfirmOrder] = useState<{ side: OrderSide } | null>(null);
+  const [marginQuote, setMarginQuote] = useState<MarginQuote | null>(null);
 
   // Listen for real order status events pushed via WebSocket → CustomEvent.
   // These fire when the backend async execution completes (FILLED / REJECTED).
@@ -70,6 +104,37 @@ export function OrderPanel() {
   const symbol = orderForm.symbol || activeSymbol?.symbol || '';
   const token = orderForm.token || activeSymbol?.token || '';
 
+  // Is the current instrument a non-tradeable spot index?
+  const isSpotIndex = isSpotIndexInstrument({
+    symbol,
+    segment: activeSymbol?.segment,
+    instrumentType: activeSymbol?.instrumentType,
+  });
+
+  // ── Fetch the authoritative margin quote from the backend ────────────────
+  // This is the SINGLE SOURCE OF TRUTH. The number shown here is exactly what
+  // the risk engine validates against — no more hardcoded percentages.
+  useEffect(() => {
+    if (!symbol || !token || !orderForm.qty || orderForm.qty <= 0 || isSpotIndex) {
+      setMarginQuote(null);
+      return;
+    }
+    let cancelled = false;
+    const handle = setTimeout(() => {
+      getMarginQuote({
+        symbol, token,
+        segment: activeSymbol?.segment || 'NSE',
+        productType: orderForm.productType,
+        instrumentType: activeSymbol?.instrumentType,
+        qty: orderForm.qty,
+        price: orderForm.orderType === 'LIMIT' || orderForm.orderType === 'SL' ? orderForm.price : undefined,
+      })
+        .then((q) => { if (!cancelled) setMarginQuote(q); })
+        .catch(() => { if (!cancelled) setMarginQuote(null); });
+    }, 250);
+    return () => { cancelled = true; clearTimeout(handle); };
+  }, [symbol, token, activeSymbol?.segment, activeSymbol?.instrumentType, orderForm.qty, orderForm.productType, orderForm.orderType, orderForm.price, isSpotIndex]);
+
   // Find open position for the current symbol (for EXIT button)
   const openPosition = useTradingStore.getState().positions.find(
     (p) => p.symbol === symbol && p.qty !== 0
@@ -80,6 +145,10 @@ export function OrderPanel() {
   // Client-side validation before order submission
   function validateOrder(side: OrderSide): string | null {
     if (!symbol || !token) return 'No symbol selected';
+    if (isSpotIndex) {
+      const base = symbol.replace(/\s*50$/, '').trim() || symbol;
+      return `${symbol} is a spot index — not tradeable. Open ${base} in the FUTURES or OPTIONS tab to trade it.`;
+    }
     const qtyError = validateOrderQty(orderForm.qty);
     if (qtyError) return qtyError;
     // Lot-size multiple validation for derivative instruments
@@ -464,7 +533,16 @@ export function OrderPanel() {
         <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
           <div className="flex items-center justify-between">
             <span className="tv-label">Est. Margin</span>
-            <span className="font-mono text-[12px] font-semibold text-fw-text-secondary tabular-nums">₹{quote ? formatPrice(quote.ltp * orderForm.qty * 0.15) : '—'}</span>
+            <span className={cn(
+              'font-mono text-[12px] font-semibold tabular-nums',
+              marginQuote && marginQuote.sufficient === false ? 'text-red-400' : 'text-fw-text-secondary'
+            )}>
+              {isSpotIndex
+                ? 'N/A'
+                : marginQuote?.tradeable
+                  ? `₹${formatPrice(marginQuote.requiredMargin)}`
+                  : '—'}
+            </span>
           </div>
           <div className="flex items-center justify-between">
             <span className="tv-label">Max Loss</span>

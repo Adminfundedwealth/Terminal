@@ -153,15 +153,47 @@ export class RiskEngine {
   }
 
   /**
+   * Resolve the effective leverage multiplier for an account from its
+   * challenge profile. Single source of truth shared by validateOrder and the
+   * /orders/margin-quote endpoint so the frontend estimate always matches the
+   * backend risk check.
+   *
+   * @param {string} accountId
+   * @param {object} account  challenge-joined account (from accountService.getAccount)
+   * @returns {Promise<number>} leverage multiplier (>=1)
+   */
+  static async getEffectiveLeverage(accountId, account) {
+    try {
+      const rules = await this._getRulesMap(accountId, account);
+      const lev = rules?.leverage_limit?.maxMultiplier;
+      if (lev && Number(lev) > 0) return Number(lev);
+    } catch (e) {
+      console.warn(`[RiskEngine] getEffectiveLeverage failed: ${e.message}`);
+    }
+    // Fall back to any flat field on the account, else standard 10x.
+    const flat = account?.effective_leverage || account?.leverage_max;
+    return flat && Number(flat) > 0 ? Number(flat) : 10;
+  }
+
+  /**
    * Pre-trade validation.
    * Returns { allowed: true } or { allowed: false, reason: "..." }
    */
-  static async validateOrder(accountId, orderParams, quoteProvider = null) {
-    let account = null;
-    try {
-      account = await accountRepo.findById(accountId);
-    } catch (e) {
-      console.warn(`[RiskEngine] accountRepo.findById failed: ${e.message} — using fallback`);
+  static async validateOrder(accountId, orderParams, quoteProvider = null, preloadedAccount = null) {
+    let account = preloadedAccount || null;
+
+    // Only re-load from the raw table when the caller didn't already supply a
+    // (challenge-joined) account. accountRepo.findById returns the bare
+    // trading_accounts row WITHOUT the challenge, which strips the plan and
+    // prevents profile-based leverage/rule resolution — so the pre-loaded
+    // account (from accountService.getAccount, which joins the challenge) is
+    // strongly preferred and passed in by orderExecutionService.
+    if (!account) {
+      try {
+        account = await accountRepo.findById(accountId);
+      } catch (e) {
+        console.warn(`[RiskEngine] accountRepo.findById failed: ${e.message} — using fallback`);
+      }
     }
 
     if (!account) {
@@ -177,6 +209,14 @@ export class RiskEngine {
       return { allowed: true };
     }
 
+    // ── Spot index / non-tradeable instrument guard ─────────────────────────
+    // A spot index (NIFTY 50, BANKNIFTY, SENSEX, INDIA VIX, …) is a calculated
+    // value, NOT a tradeable contract. Placing an order on it is invalid and
+    // was the cause of the "insufficient margin" rejections (the spot notional
+    // was being treated as an equity order). Trade the FUTURE or an OPTION.
+    const tradeable = this.checkTradeableInstrument(orderParams);
+    if (!tradeable.allowed) return tradeable;
+
     if (account.status !== 'active') {
       return { allowed: false, reason: `Account is ${account.status}. Trading disabled.` };
     }
@@ -185,6 +225,18 @@ export class RiskEngine {
     // For Instant accounts: built from instant_risk_profile table (admin-editable).
     // For all other types: loaded from per-account risk_rules DB rows.
     const rules = await this._getRulesMap(accountId, account);
+
+    // ── Single source of truth for leverage ─────────────────────────────────
+    // Resolve the effective leverage from the loaded profile rules and attach
+    // it to the account object so MarginService uses the SAME value the risk
+    // engine enforces (1-Step→30x, 2-Step→phase, Instant→50x, Flash→field).
+    // Without this, MarginService fell back to a hardcoded 10x for every
+    // profile-based account, producing a margin that neither matched the
+    // configured leverage nor the frontend estimate.
+    const effectiveLeverage = rules?.leverage_limit?.maxMultiplier;
+    if (effectiveLeverage && Number(effectiveLeverage) > 0) {
+      account.effective_leverage = Number(effectiveLeverage);
+    }
 
     // ── Weekend / holiday checks for Instant accounts ────────────────────────
     // The instant_risk_profile controls whether weekends and holidays block trading.
@@ -489,6 +541,63 @@ export class RiskEngine {
     const balance = parseFloat(account.balance) || 0;
     const result = await MarginService.validateMargin(accountId, orderParams, balance, quoteProvider, account);
     return result;
+  }
+
+  /**
+   * Reject orders on non-tradeable instruments (spot indices).
+   *
+   * A spot index is an index value published by the exchange — it has no
+   * order book and cannot be bought or sold. Only its derivatives (futures,
+   * options) are tradeable. The FundedWealth INDEX watchlist tab exists for
+   * charting/quotes only.
+   *
+   * Detection (any of):
+   *   - segment is a spot-index segment: IDX_I / INDEX / MCX_INDEX
+   *   - instrumentType is INDEX / IDX / SPOT_INDEX
+   *   - a known spot-index symbol on an equity segment (NSE/BSE) — this is the
+   *     mis-mapped case that caused the original bug (e.g. "NIFTY 50" sent as
+   *     an NSE equity). Real tradeable derivatives use NFO/BFO with a FUT/CE/PE
+   *     symbol, so they never match this list.
+   *
+   * @returns {{allowed:true}|{allowed:false,reason:string}}
+   */
+  static checkTradeableInstrument(orderParams) {
+    const segment = String(orderParams.segment || '').toUpperCase();
+    const instrumentType = String(orderParams.instrumentType || '').toUpperCase();
+    const rawSymbol = String(orderParams.symbol || '').toUpperCase().trim();
+
+    const SPOT_INDEX_SEGMENTS = ['IDX_I', 'INDEX', 'MCX_INDEX', 'IDX'];
+    const SPOT_INDEX_TYPES = ['INDEX', 'IDX', 'SPOT_INDEX'];
+
+    // Known spot-index names (normalised — spaces removed) that must NOT be
+    // tradeable when presented on an equity/spot segment. A tradeable
+    // derivative would carry a FUT / CE / PE suffix and an NFO/BFO segment.
+    const SPOT_INDEX_NAMES = new Set([
+      'NIFTY', 'NIFTY50', 'BANKNIFTY', 'FINNIFTY', 'MIDCPNIFTY', 'NIFTYNEXT50',
+      'SENSEX', 'BANKEX', 'INDIAVIX', 'NIFTYIT', 'NIFTYPHARMA', 'NIFTYAUTO',
+      'NIFTYMETAL', 'NIFTYPSE', 'NIFTYREALTY', 'NIFTYFMCG', 'NIFTYENERGY',
+      'NIFTYINFRA', 'NIFTYSMALLCAP', 'NIFTYMIDCAP',
+    ]);
+
+    const isDerivative =
+      segment === 'NFO' || segment === 'BFO' ||
+      /\bFUT\b|FUT$/.test(rawSymbol) || /\d*(CE|PE)$/.test(rawSymbol) ||
+      ['FUT', 'FUTIDX', 'FUTSTK', 'OPTIDX', 'OPTSTK', 'CE', 'PE'].includes(instrumentType);
+
+    const looksLikeSpotIndex =
+      SPOT_INDEX_SEGMENTS.includes(segment) ||
+      SPOT_INDEX_TYPES.includes(instrumentType) ||
+      (!isDerivative && SPOT_INDEX_NAMES.has(rawSymbol.replace(/\s+/g, '')));
+
+    if (looksLikeSpotIndex) {
+      const base = rawSymbol.replace(/\s*50$/, '').trim() || rawSymbol;
+      return {
+        allowed: false,
+        reason: `${orderParams.symbol} is a spot index and cannot be traded directly. Trade the ${base} futures (F&O) or an option contract instead.`,
+      };
+    }
+
+    return { allowed: true };
   }
 
   static async checkAllowedSegments(rules, orderParams) {

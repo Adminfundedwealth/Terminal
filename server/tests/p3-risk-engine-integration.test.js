@@ -304,3 +304,55 @@ describe('P3.1 — RiskEngine.validateOrder: Futures lot + tick validation', () 
     expect(r.ruleType).toBe('tick_size');
   });
 });
+
+// ── Spot-index tradeability guard (NIFTY-margin bug regression) ─────────────
+// A spot index (NIFTY 50 on NSE, IDX_I, etc.) must be rejected as non-tradeable.
+// This is the root cause of the original "insufficient margin" rejections:
+// the spot notional was being treated as an equity order. Trade FUT/options.
+describe('RiskEngine.checkTradeableInstrument — spot index guard', () => {
+  it('rejects NIFTY 50 on NSE (spot index mis-mapped as equity)', () => {
+    const r = RiskEngine.checkTradeableInstrument({ symbol: 'NIFTY 50', segment: 'NSE' });
+    expect(r.allowed).toBe(false);
+    expect(r.reason).toMatch(/spot index/i);
+  });
+
+  it('rejects segment IDX_I regardless of symbol', () => {
+    const r = RiskEngine.checkTradeableInstrument({ symbol: 'ANYTHING', segment: 'IDX_I' });
+    expect(r.allowed).toBe(false);
+  });
+
+  it('rejects instrumentType INDEX', () => {
+    const r = RiskEngine.checkTradeableInstrument({ symbol: 'BANKNIFTY', segment: 'NSE', instrumentType: 'INDEX' });
+    expect(r.allowed).toBe(false);
+  });
+
+  it('rejects SENSEX spot', () => {
+    const r = RiskEngine.checkTradeableInstrument({ symbol: 'SENSEX', segment: 'BSE' });
+    expect(r.allowed).toBe(false);
+  });
+
+  it('ALLOWS NIFTY FUT on NFO (tradeable derivative)', () => {
+    const r = RiskEngine.checkTradeableInstrument({ symbol: 'NIFTY FUT', segment: 'NFO' });
+    expect(r.allowed).toBe(true);
+  });
+
+  it('ALLOWS NIFTY option CE on NFO', () => {
+    const r = RiskEngine.checkTradeableInstrument({ symbol: 'NIFTY24200CE', segment: 'NFO', instrumentType: 'CE' });
+    expect(r.allowed).toBe(true);
+  });
+
+  it('ALLOWS RELIANCE equity on NSE (normal stock)', () => {
+    const r = RiskEngine.checkTradeableInstrument({ symbol: 'RELIANCE', segment: 'NSE', instrumentType: 'EQ' });
+    expect(r.allowed).toBe(true);
+  });
+
+  it('validateOrder rejects a spot-index order end-to-end', async () => {
+    const r = await RiskEngine.validateOrder(
+      'test-account',
+      { symbol: 'NIFTY 50', token: '99926000', segment: 'NSE', side: 'BUY', orderType: 'MARKET', productType: 'MIS', qty: 50 },
+      validQuoteProvider,
+    );
+    expect(r.allowed).toBe(false);
+    expect(r.reason).toMatch(/spot index/i);
+  });
+});

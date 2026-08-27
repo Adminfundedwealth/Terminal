@@ -1,6 +1,6 @@
 // Market Data Types
 export type Segment = 'NSE' | 'BSE' | 'NFO' | 'MCX' | 'CDS' | 'BFO';
-export type InstrumentType = 'EQ' | 'FUT' | 'CE' | 'PE';
+export type InstrumentType = 'EQ' | 'FUT' | 'CE' | 'PE' | 'INDEX';
 export type ProductType = 'CNC' | 'MIS' | 'NRML' | 'BO' | 'CO';
 export type OrderType = 'MARKET' | 'LIMIT' | 'SL' | 'SL-M';
 export type OrderSide = 'BUY' | 'SELL';

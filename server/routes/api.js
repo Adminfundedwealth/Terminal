@@ -587,6 +587,82 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
     }
   });
 
+  // ── Margin quote — SINGLE SOURCE OF TRUTH for order margin ──────────────
+  // The frontend calls this to display "Est. Margin" so the number shown to
+  // the trader is EXACTLY what the backend risk engine will validate against.
+  // Returns tradeability, required margin, available margin, and the maximum
+  // affordable quantity/lots. Never let the UI show an affordable trade the
+  // backend would reject.
+  router.post('/orders/margin-quote', requireAuth, async (req, res) => {
+    try {
+      const { MarginService } = await import('../services/marginService.js');
+      const { RiskEngine } = await import('../services/riskEngine.js');
+
+      const realId = await accountService.resolveAccountId(req.user.accountId);
+      const account = await accountService.getAccount(realId);
+      if (!account) return res.status(404).json({ message: 'Account not found' });
+
+      const {
+        symbol, token, segment, side,
+        productType = 'MIS', instrumentType, qty = 0, price,
+      } = req.body || {};
+
+      const orderParams = { symbol, token, segment, side, productType, instrumentType, qty: Number(qty) || 0 };
+
+      // 1. Tradeability guard (spot indices are not tradeable)
+      const tradeable = RiskEngine.checkTradeableInstrument(orderParams);
+      if (!tradeable.allowed) {
+        return res.json({ tradeable: false, reason: tradeable.reason, requiredMargin: 0 });
+      }
+
+      // 2. Resolve LTP: explicit price → live quote cache
+      let ltp = Number(price) || 0;
+      if (!ltp && token) {
+        const q = marketDataEngine.getQuote(token);
+        if (q?.ltp > 0) ltp = q.ltp;
+      }
+
+      // 3. Effective leverage from the account's challenge profile (SSOT)
+      const leverage = await RiskEngine.getEffectiveLeverage(realId, account);
+      account.effective_leverage = leverage;
+
+      // 4. Required margin — identical calculation to validateMargin
+      const { requiredMargin, marginType } = MarginService.calculateOrderMargin(
+        { ...orderParams, price: ltp },
+        (t) => { const q = marketDataEngine.getQuote(t); return q?.ltp > 0 ? q.ltp : 0; },
+        account,
+      );
+
+      const balance = parseFloat(account.balance) || 0;
+      const { availableMargin, usedMargin } = await MarginService.getAvailableMargin(
+        realId, balance,
+        (t) => { const q = marketDataEngine.getQuote(t); return q?.ltp > 0 ? q.ltp : 0; },
+        account,
+      );
+
+      // 5. Max affordable qty (best-effort — proportional for equity/derivative)
+      let maxAffordableQty = 0;
+      if (requiredMargin > 0 && Number(qty) > 0) {
+        maxAffordableQty = Math.floor((availableMargin / requiredMargin) * Number(qty));
+      }
+
+      res.json({
+        tradeable: true,
+        requiredMargin,
+        marginType,
+        leverage,
+        availableMargin,
+        usedMargin,
+        balance,
+        orderValue: ltp * (Number(qty) || 0),
+        maxAffordableQty,
+        sufficient: requiredMargin <= availableMargin,
+      });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   router.put('/orders/:id/modify', requireAuth, requirePermission('trade'), validateBody(schemas.modifyOrder), async (req, res) => {
     try {
       const realId = await accountService.resolveAccountId(req.user.accountId);

@@ -211,10 +211,16 @@ const defaultWatchlists: Watchlist[] = [
 // Default instruments per workspace (auto-load on workspace switch)
 const workspaceDefaults: Record<Workspace, Instrument | null> = {
   home:     null,
-  index:    { token: '99926000', symbol: 'NIFTY 50',      name: 'Nifty 50',           segment: 'NSE', instrumentType: 'EQ',  exchange: 'NSE', lotSize: 50,   tickSize: 0.05 },
+  // NIFTY 50 is a SPOT INDEX (charting/quotes only) — instrumentType INDEX and
+  // lotSize 1 so it is never presented as a tradeable equity. Trade via the
+  // FUTURES or OPTIONS tab. lotSize 50 here previously caused the qty selector
+  // to default to 50 "shares" of the index and produced bogus margin.
+  index:    { token: '99926000', symbol: 'NIFTY 50',      name: 'Nifty 50',           segment: 'NSE', instrumentType: 'INDEX',  exchange: 'NSE', lotSize: 1,   tickSize: 0.05 },
   stocks:   { token: '2885',     symbol: 'RELIANCE',       name: 'Reliance Industries', segment: 'NSE', instrumentType: 'EQ',  exchange: 'NSE', lotSize: 1,    tickSize: 0.05 },
   futures:  null,
-  options:  { token: '99926000', symbol: 'NIFTY',          name: 'Nifty 50',           segment: 'NSE', instrumentType: 'EQ',  exchange: 'NSE', lotSize: 50,   tickSize: 0.05 },
+  // Options tab: NIFTY here is the option-chain UNDERLYING reference (spot index).
+  // The actual tradeable contract is chosen from the chain (selectedContract).
+  options:  { token: '99926000', symbol: 'NIFTY',          name: 'Nifty 50',           segment: 'NSE', instrumentType: 'INDEX',  exchange: 'NSE', lotSize: 1,   tickSize: 0.05 },
   mcx:      null,
   cds:      null,
   etf:      { token: '2150',     symbol: 'NIFTYBEES',      name: 'Nippon India ETF Nifty BeES', segment: 'NSE', instrumentType: 'EQ', exchange: 'NSE', lotSize: 1, tickSize: 0.01 },
