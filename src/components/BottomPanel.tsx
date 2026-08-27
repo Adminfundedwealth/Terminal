@@ -6,6 +6,7 @@ import { cn, formatPrice, formatPnl, getChangeColor } from '@/utils/helpers';
 import { RefreshCw, X, RotateCcw, Plus, Edit, TrendingUp, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/components/ToastProvider';
 import { JournalPanel } from '@/components/JournalPanel';
+import { initTrailing, stepTrailing, type PositionDir as TrailDir, type TrailingState as TrailState } from '@/utils/trailingStop';
 import { AlertsPanel } from '@/components/AlertsPanel';
 import { AnalyticsPanel } from '@/components/AnalyticsPanel';
 import { RiskPanel } from '@/components/RiskPanel';
@@ -387,8 +388,60 @@ function PositionsTable({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [slInput, setSlInput] = useState<{ id: string; price: string } | null>(null);
   const [tpInput, setTpInput] = useState<{ id: string; price: string } | null>(null);
+  // P6.5: per-position trailing-stop state, keyed by position id.
+  const [tslInput, setTslInput] = useState<{ id: string; trail: string } | null>(null);
+  const trailRef = useRef<Map<string, { dir: TrailDir; trail: number; state: TrailState }>>(new Map());
+  const [activeTsl, setActiveTsl] = useState<Set<string>>(new Set());
   const { setBottomTab } = useAppStore();
   const setOrderForm = useTradingStore((s) => s.setOrderForm);
+
+  // P6.5: activate a trailing stop for a position. Places the initial stop via
+  // the EXISTING attachStopLoss endpoint (verified paper pipeline) and starts
+  // ratcheting on subsequent LTP updates.
+  const handleActivateTsl = async (id: string, trailStr: string) => {
+    const trail = parseFloat(trailStr);
+    const pos = positions.find((p) => p.id === id);
+    if (!pos || !(trail > 0) || !(pos.ltp > 0)) return;
+    const dir: TrailDir = pos.qty > 0 ? 'LONG' : 'SHORT';
+    const state = initTrailing(dir, pos.ltp, trail);
+    const key = id + ':tsl';
+    if (inFlightKeys.current.has(key)) return;
+    inFlightKeys.current.add(key);
+    try {
+      await attachStopLoss(id, state.stop);
+      trailRef.current.set(id, { dir, trail, state });
+      setActiveTsl((s) => new Set(s).add(id));
+      setTslInput(null);
+    } catch { /* surfaced by list refresh */ }
+    finally { inFlightKeys.current.delete(key); }
+  };
+
+  const handleStopTsl = (id: string) => {
+    trailRef.current.delete(id);
+    setActiveTsl((s) => { const n = new Set(s); n.delete(id); return n; });
+  };
+
+  // P6.5: ratchet active trailing stops as position LTP updates. Re-attaches
+  // the SL (same endpoint) only when the stop strictly improves — deterministic.
+  useEffect(() => {
+    for (const pos of positions) {
+      const t = trailRef.current.get(pos.id);
+      if (!t || !(pos.ltp > 0)) continue;
+      const { newStop, state } = stepTrailing(t.dir, t.state, pos.ltp, t.trail);
+      t.state = state;
+      if (newStop != null) {
+        const key = pos.id + ':tsl-ratchet';
+        if (inFlightKeys.current.has(key)) continue;
+        inFlightKeys.current.add(key);
+        attachStopLoss(pos.id, newStop).catch(() => {}).finally(() => inFlightKeys.current.delete(key));
+      }
+    }
+    // Clean up trailing state for positions that no longer exist.
+    for (const id of Array.from(trailRef.current.keys())) {
+      if (!positions.some((p) => p.id === id)) { trailRef.current.delete(id); }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [positions]);
 
   const handleBreakEven = async (id: string) => {
     if (inFlightKeys.current.has(id + ':be')) return;
@@ -546,8 +599,23 @@ function PositionsTable({
                     SL
                   </button>
 
-                  {/* Trailing Stop Loss — not yet implemented */}
-                  <PosActionBtn label="TSL" title="Trailing Stop Loss — coming soon" className="opacity-40 cursor-not-allowed" />
+                  {/* Trailing Stop Loss — functional (paper): ratchets SL via attachStopLoss */}
+                  <button
+                    onClick={() => {
+                      if (activeTsl.has(pos.id)) { handleStopTsl(pos.id); }
+                      else { setTslInput(tslInput?.id === pos.id ? null : { id: pos.id, trail: '' }); setSlInput(null); setTpInput(null); }
+                    }}
+                    className={cn(
+                      'px-1.5 py-0.5 rounded text-[11px] font-bold border transition-colors',
+                      activeTsl.has(pos.id)
+                        ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
+                        : 'bg-fw-bg border-fw-border text-fw-text-secondary hover:text-amber-400 hover:border-amber-500/40',
+                      tslInput?.id === pos.id && 'border-amber-400 text-amber-400',
+                    )}
+                    title={activeTsl.has(pos.id) ? 'Trailing Stop active — click to stop' : 'Trailing Stop Loss'}
+                  >
+                    TSL{activeTsl.has(pos.id) ? '•' : ''}
+                  </button>
 
                   {/* Modify */}
                   <button
@@ -619,6 +687,28 @@ function PositionsTable({
                         className="px-1.5 py-0.5 text-[11px] font-bold bg-red-900/30 text-red-400 border border-red-800/40 rounded disabled:opacity-40"
                       >
                         Set
+                      </button>
+                    </div>
+                  )}
+
+                  {/* TSL Input (P6.5) — trail distance in points */}
+                  {tslInput?.id === pos.id && (
+                    <div className="flex items-center gap-1 ml-1 pl-1.5 border-l border-amber-500/40">
+                      <input
+                        type="number"
+                        placeholder="Trail pts"
+                        value={tslInput.trail}
+                        onChange={e => setTslInput({ ...tslInput, trail: e.target.value })}
+                        className="w-20 h-5 bg-fw-surface-2 border border-amber-500/40 rounded text-[12px] font-mono text-fw-text px-1.5 outline-none focus:border-amber-400"
+                        autoFocus
+                      />
+                      <button
+                        onClick={() => handleActivateTsl(pos.id, tslInput.trail)}
+                        disabled={inFlightKeys.current.has(pos.id + ':tsl')}
+                        className="px-1.5 py-0.5 text-[11px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/40 rounded disabled:opacity-40"
+                        title="Start trailing stop"
+                      >
+                        Start
                       </button>
                     </div>
                   )}

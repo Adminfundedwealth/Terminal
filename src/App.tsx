@@ -3,7 +3,7 @@ import { Sidebar } from '@/components/Sidebar';
 import { TopBar } from '@/components/TopBar';
 import { Watchlist } from '@/components/Watchlist';
 import { ChartPanel } from '@/components/ChartPanel';
-import { OrderPanel } from '@/components/OrderPanel';
+import { OrderPanelTabs } from '@/components/OrderPanelTabs';
 import { BottomPanel } from '@/components/BottomPanel';
 import { SearchModal } from '@/components/SearchModal';
 import { MarketDepthPanel } from '@/components/MarketDepthPanel';
@@ -264,7 +264,7 @@ export default function App() {
         </ErrorBoundary>
         <div className="flex-1 overflow-y-auto min-h-0">
           <ErrorBoundary fallbackTitle="Order Panel Error">
-            <OrderPanel />
+            <OrderPanelTabs />
           </ErrorBoundary>
         </div>
         {panels.marketDepth && (
@@ -422,7 +422,7 @@ export default function App() {
                     </ErrorBoundary>
                     <div className="flex-1 overflow-y-auto min-h-0">
                       <ErrorBoundary fallbackTitle="Order Panel Error">
-                        <OrderPanel />
+                        <OrderPanelTabs />
                       </ErrorBoundary>
                     </div>
                   </div>
