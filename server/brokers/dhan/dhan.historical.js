@@ -696,7 +696,7 @@ export class DhanHistoricalService {
 
     // 2. Try the Dhan scrip search API
     try {
-      const dhanSeg = segment === 'MCX_COMM' ? 'MCX' : 'CUR';
+      const dhanSeg = segment === 'MCX_COMM' ? 'MCX_COMM' : 'NSE_CURRENCY';
       const resp = await this._post(`https://api.dhan.co/v2/searchScrip`, {
         searchString: symbol,
         exchange: dhanSeg,

@@ -10,26 +10,29 @@ import { eventBus } from '../events/index.js';
  *
  * Keys include both the terminal's exchange codes (NSE/BSE/NFO/BFO/MCX/CDS) and
  * already-Dhan-format keys (NSE_EQ/BSE_FNO/…) so cached metadata in either form
- * resolves correctly. CDS → 'CUR' matches the order path (dhan.adapter._mapExchange
- * and dhan.types.SEGMENT_MAP); the legacy 'NSE_CURRENCY' input key also maps to 'CUR'.
+ * resolves correctly. NOTE on currency: this map feeds the Dhan MARKETFEED API
+ * (getQuote/getQuotes use the value directly as the request key), which expects
+ * 'NSE_CURRENCY' for CDS — NOT 'CUR'. ('CUR' is only used by the ORDER API via
+ * dhan.adapter._mapExchange.) So CDS and the legacy 'CUR' input both map to
+ * 'NSE_CURRENCY' here.
  */
 const SEGMENT_MAP = {
   // Terminal exchange codes
   'NSE': 'NSE_EQ', 'BSE': 'BSE_EQ',
   'NFO': 'NSE_FNO', 'BFO': 'BSE_FNO',
-  'MCX': 'MCX_COMM', 'CDS': 'CUR',
+  'MCX': 'MCX_COMM', 'CDS': 'NSE_CURRENCY',
   // Already Dhan-format keys — pass through
   'NSE_EQ': 'NSE_EQ', 'BSE_EQ': 'BSE_EQ',
   'NSE_FNO': 'NSE_FNO', 'BSE_FNO': 'BSE_FNO',
   'MCX_COMM': 'MCX_COMM', 'IDX_I': 'IDX_I',
-  'CUR': 'CUR', 'NSE_CURRENCY': 'CUR',
+  'CUR': 'NSE_CURRENCY', 'NSE_CURRENCY': 'NSE_CURRENCY',
 };
 
 /**
  * Resolve a terminal/exchange segment code to its Dhan segment.
  * Unknown/missing segments fall back to the safe NSE_EQ default (unchanged behavior).
  * @param {string|null|undefined} segment
- * @returns {string} Dhan segment (e.g. 'NSE_EQ', 'NSE_FNO', 'BSE_FNO', 'MCX_COMM', 'CUR')
+ * @returns {string} Dhan marketfeed segment (e.g. 'NSE_EQ', 'NSE_FNO', 'BSE_FNO', 'MCX_COMM', 'NSE_CURRENCY')
  */
 export function resolveDhanSegment(segment) {
   return SEGMENT_MAP[segment] || 'NSE_EQ';

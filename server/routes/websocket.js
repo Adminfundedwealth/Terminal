@@ -171,7 +171,7 @@ function handleMessage(ws, data, subscriptions, depthSubscriptions, marketDataEn
             if (!exchange) exchange = 'NSE';
 
             // Map exchange to Dhan segment
-            const segmentMap = { 'NSE': 'NSE_EQ', 'NFO': 'NSE_FNO', 'MCX': 'MCX_COMM', 'CDS': 'CUR', 'BSE': 'BSE_EQ', 'IDX': 'IDX_I' };
+            const segmentMap = { 'NSE': 'NSE_EQ', 'NFO': 'NSE_FNO', 'MCX': 'MCX_COMM', 'CDS': 'NSE_CURRENCY', 'BSE': 'BSE_EQ', 'IDX': 'IDX_I' };
             const segment = segmentMap[exchange] || 'NSE_EQ';
             feedInstruments.push({ securityId: token, segment });
           }
@@ -275,7 +275,7 @@ function handleMessage(ws, data, subscriptions, depthSubscriptions, marketDataEn
           .map(t => {
             const quote = marketDataEngine.getQuote(t);
             const exchange = quote?.exchange || 'NSE';
-            const segmentMap = { 'NSE': 'NSE_EQ', 'NFO': 'NSE_FNO', 'MCX': 'MCX_COMM', 'CDS': 'CUR', 'BSE': 'BSE_EQ' };
+            const segmentMap = { 'NSE': 'NSE_EQ', 'NFO': 'NSE_FNO', 'MCX': 'MCX_COMM', 'CDS': 'NSE_CURRENCY', 'BSE': 'BSE_EQ' };
             return { securityId: t, segment: segmentMap[exchange] || 'NSE_EQ' };
           });
         if (depthEligible.length > 0) {

@@ -1232,14 +1232,14 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
 
         // Path A: known static securityId
         if (mapping.securityId) {
-          const dhanSeg = mapping.segment === 'NSE_CURRENCY' ? 'CUR' : mapping.segment;
+          const dhanSeg = mapping.segment;
           const result = await dhan.getQuote(mapping.securityId, dhanSeg);
           return _parseDhanQuote(result, mapping.securityId, dhanSeg);
         }
 
         // Path B: dynamic resolution via getActiveContract (MCX/CDS nearest expiry)
         if (mapping.scripSymbol && dhan.historical) {
-          const dhanSeg = mapping.segment === 'CUR' ? 'CUR' : mapping.segment;
+          const dhanSeg = mapping.segment;
           const activeId = dhan.historical.getActiveContract(mapping.scripSymbol, mapping.segment);
           if (activeId) {
             const result = await dhan.getQuote(activeId, dhanSeg);
@@ -1278,7 +1278,7 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
       try {
         const activeId = dhan.historical?.getActiveContract(numericAlias.symbol, numericAlias.segment);
         const securityId = activeId || String(token);
-        const dhanSegment = numericAlias.segment === 'NSE_CURRENCY' ? 'CUR' : numericAlias.segment;
+        const dhanSegment = numericAlias.segment;
         const result = await dhan.getQuote(securityId, dhanSegment);
         const ltp = _parseDhanQuote(result, securityId, dhanSegment);
         if (ltp && ltp > 0) {
