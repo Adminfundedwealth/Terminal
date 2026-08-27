@@ -507,6 +507,14 @@ async function startup() {
     accountService.executionService.recoverPendingOrders().catch(e => 
       console.warn('[Startup] Pending order recovery:', e.message)
     );
+    // P4.1: reconcile broker-side SL/TP protection after restart (LIVE mode only).
+    // In paper mode this is a no-op — protection is managed by the paper monitor.
+    import('./services/executionMode.js').then(({ ExecutionMode }) => {
+      if (ExecutionMode.isPaper) return;
+      accountService.executionService.reconcileBrokerProtection('dhan')
+        .then(r => r && console.log(`[Startup] Broker protection reconciled: checked=${r.checked} unresolved=${r.unresolved}`))
+        .catch(e => console.warn('[Startup] Protection reconciliation:', e.message));
+    }).catch(() => {});
   }
 
   // 2b. Initialize Event Dispatcher (persistence subscriber)
