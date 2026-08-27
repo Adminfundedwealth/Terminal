@@ -29,6 +29,16 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
     return null;
   }
 
+  const NUMERIC_DHAN_DERIVATIVE_MAP = {
+    '429604': { symbol: 'GOLD', segment: 'MCX_COMM' },
+    '429638': { symbol: 'SILVER', segment: 'MCX_COMM' },
+    '425475': { symbol: 'CRUDEOIL', segment: 'MCX_COMM' },
+    '11091': { symbol: 'USDINR', segment: 'NSE_CURRENCY' },
+    '11363': { symbol: 'EURINR', segment: 'NSE_CURRENCY' },
+    '11096': { symbol: 'GBPINR', segment: 'NSE_CURRENCY' },
+    '11098': { symbol: 'JPYINR', segment: 'NSE_CURRENCY' },
+  };
+
   // === PROTECTED ===
 
   router.get('/account', requireAuth, async (req, res) => {
@@ -256,6 +266,7 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
 
       const feedConnected = marketDataEngine.isLive;
       const cachedQuotes = marketDataEngine.quotes.size;
+      const providerStatus = dataProviderSwitch?.getStatus?.();
       const brokerHealth = BrokerFactory.getHealthReport();
       const brokerEntry = brokerHealth.angelone || brokerHealth[`angelone:${process.env.ANGEL_CLIENT_ID}`];
 
@@ -275,8 +286,8 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
       res.json({
         executionMode: ExecutionMode.getState(),
         broker: {
-          provider: brokerEntry?.provider || 'angelone',
-          connected: brokerEntry?.connected === true,
+          provider: providerStatus?.activeProvider || brokerEntry?.provider || 'unknown',
+          connected: providerStatus?.dhanReady === true || brokerEntry?.connected === true,
           cachedQuotes,
         },
         feed: {
@@ -1124,6 +1135,19 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
   router.get('/market/depth', async (req, res) => {
     const { token, exchange } = req.query;
     if (!token) return res.status(400).json({ message: 'token required' });
+
+    const dhan = dataProviderSwitch?.getDhanAdapter?.();
+    const alias = NUMERIC_DHAN_DERIVATIVE_MAP[String(token)];
+    if (dhan?.isConnected && alias) {
+      try {
+        const activeId = dhan.historical?.getActiveContract(alias.symbol, alias.segment);
+        const securityId = activeId || String(token);
+        const depth = await dhan.getDepth(securityId, alias.segment === 'NSE_CURRENCY' ? 'CUR' : alias.segment);
+        if (depth) return res.json({ ...depth, token: String(token), securityId, exchange: alias.segment });
+      } catch (error) {
+        console.warn(`[Depth] Dhan lookup failed for ${token}:`, error.message);
+      }
+    }
     if (depthService) {
       const depth = await depthService.getDepth(token, exchange || 'NSE');
       return res.json(depth);
@@ -1134,6 +1158,7 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
   router.get('/market/quote', async (req, res) => {
     let { token, exchange } = req.query;
     if (!token) return res.status(400).json({ message: 'token required' });
+    const dhan = dataProviderSwitch?.getDhanAdapter?.();
 
     // Native Dhan mapping for Futures, Commodities & Currencies.
     // NSE/BSE Futures placeholders are resolved via FuturesContractService
@@ -1248,6 +1273,22 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
     }
 
     // Non-placeholder token — standard lookup
+    const numericAlias = NUMERIC_DHAN_DERIVATIVE_MAP[String(token)];
+    if (dhan?.isConnected && numericAlias) {
+      try {
+        const activeId = dhan.historical?.getActiveContract(numericAlias.symbol, numericAlias.segment);
+        const securityId = activeId || String(token);
+        const dhanSegment = numericAlias.segment === 'NSE_CURRENCY' ? 'CUR' : numericAlias.segment;
+        const result = await dhan.getQuote(securityId, dhanSegment);
+        const ltp = _parseDhanQuote(result, securityId, dhanSegment);
+        if (ltp && ltp > 0) {
+          return res.json({ token: String(token), securityId, ltp, exchange: numericAlias.segment, symbol: numericAlias.symbol, timestamp: Date.now() });
+        }
+      } catch (error) {
+        console.warn(`[Quote] Dhan lookup failed for ${token}:`, error.message);
+      }
+    }
+
     const quote = marketDataEngine.getQuote(token);
     if (quote && quote.ltp > 0) return res.json(quote);
 
