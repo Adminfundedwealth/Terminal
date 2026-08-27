@@ -700,6 +700,16 @@ header [data-brand] {
   100% { background-color: transparent; }
 }
 
+/* ─── P5.3 Option Chain LTP tick flash ───────────────────────────────────────
+   Brief background tint when a strike's CE/PE LTP ticks up or down.
+   Reuses the semantic green/red dim theme variables (no hardcoded colors).
+   Wrapped in prefers-reduced-motion: no-preference so users who request
+   reduced motion see no animation (accessibility). */
+@media (prefers-reduced-motion: no-preference) {
+  .fw-tick-up   { animation: priceFlashGreen 0.6s ease-out; }
+  .fw-tick-down { animation: priceFlashRed 0.6s ease-out; }
+}
+
 /* Drag resize handle */
 .resize-handle {
   position: absolute;

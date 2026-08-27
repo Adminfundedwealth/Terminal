@@ -6,6 +6,7 @@ import { eventBus } from '../events/eventBus.js';
 
 import { TradingViewDatafeed } from '../realtime/tradingview.datafeed.js';
 import { futuresContractService } from '../services/futuresContractService.js';
+import { enrichOptionChainEntry } from '../services/optionChainNormalizer.js';
 
 export function createApiRouter(accountService, instrumentService, marketDataEngine, candleService, depthService, optionChainService, dataProviderSwitch) {
   const router = Router();
@@ -1314,8 +1315,11 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
         }
 
         if (Array.isArray(chain) && chain.length > 0) {
-          // Ensure every entry has the required fields with correct types
-          const normalized = chain.map(entry => ({
+          // Ensure every entry has the required fields with correct types.
+          // P5.3: bid/ask/qty + change/change%/spread are computed via
+          // enrichOptionChainEntry so every underlying (NFO + BFO) gets the
+          // same normalized market-data shape.
+          const normalized = chain.map(entry => enrichOptionChainEntry({
             strike: Number(entry.strike || entry.strikePrice || entry.strike_price || 0),
             callToken: String(entry.callToken || entry.ce_security_id || ''),
             callSymbol: entry.callSymbol || '',
@@ -1323,6 +1327,11 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
             callVolume: Number(entry.callVolume || entry.ce_volume || 0),
             callOi: Number(entry.callOi || entry.ce_oi || 0),
             callOiChange: Number(entry.callOiChange || entry.ce_oi_change || 0),
+            callBidPrice: Number(entry.callBidPrice || 0),
+            callAskPrice: Number(entry.callAskPrice || 0),
+            callBidQty: Number(entry.callBidQty || 0),
+            callAskQty: Number(entry.callAskQty || 0),
+            callPrevClose: Number(entry.callPrevClose || 0),
             callIv: Number(entry.callIv || entry.ce_iv || 0),
             callDelta: Number(entry.callDelta || entry.ce_delta || 0),
             callGamma: Number(entry.callGamma || entry.ce_gamma || 0),
@@ -1334,6 +1343,11 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
             putVolume: Number(entry.putVolume || entry.pe_volume || 0),
             putOi: Number(entry.putOi || entry.pe_oi || 0),
             putOiChange: Number(entry.putOiChange || entry.pe_oi_change || 0),
+            putBidPrice: Number(entry.putBidPrice || 0),
+            putAskPrice: Number(entry.putAskPrice || 0),
+            putBidQty: Number(entry.putBidQty || 0),
+            putAskQty: Number(entry.putAskQty || 0),
+            putPrevClose: Number(entry.putPrevClose || 0),
             putIv: Number(entry.putIv || entry.pe_iv || 0),
             putDelta: Number(entry.putDelta || entry.pe_delta || 0),
             putGamma: Number(entry.putGamma || entry.pe_gamma || 0),
@@ -2144,13 +2158,18 @@ function _normalizeOcMap(data) {
     if (!strike || isNaN(strike)) continue;
     const ce = sides.ce || {};
     const pe = sides.pe || {};
-    chain.push({
+    chain.push(enrichOptionChainEntry({
       strike,
       callToken: String(ce.security_id || ''),
       callLtp: Number(ce.last_price || 0),
       callVolume: Number(ce.volume || 0),
       callOi: Number(ce.oi || 0),
       callOiChange: Number(ce.previous_oi ? (ce.oi || 0) - ce.previous_oi : 0),
+      callBidPrice: Number(ce.top_bid_price || ce.bid || 0),
+      callAskPrice: Number(ce.top_ask_price || ce.ask || 0),
+      callBidQty: Number(ce.top_bid_quantity || 0),
+      callAskQty: Number(ce.top_ask_quantity || 0),
+      callPrevClose: Number(ce.previous_close_price || 0),
       callIv: Number(ce.implied_volatility || 0),
       callDelta: Number(ce.greeks?.delta || 0),
       callGamma: Number(ce.greeks?.gamma || 0),
@@ -2161,12 +2180,17 @@ function _normalizeOcMap(data) {
       putVolume: Number(pe.volume || 0),
       putOi: Number(pe.oi || 0),
       putOiChange: Number(pe.previous_oi ? (pe.oi || 0) - pe.previous_oi : 0),
+      putBidPrice: Number(pe.top_bid_price || pe.bid || 0),
+      putAskPrice: Number(pe.top_ask_price || pe.ask || 0),
+      putBidQty: Number(pe.top_bid_quantity || 0),
+      putAskQty: Number(pe.top_ask_quantity || 0),
+      putPrevClose: Number(pe.previous_close_price || 0),
       putIv: Number(pe.implied_volatility || 0),
       putDelta: Number(pe.greeks?.delta || 0),
       putGamma: Number(pe.greeks?.gamma || 0),
       putTheta: Number(pe.greeks?.theta || 0),
       putVega: Number(pe.greeks?.vega || 0),
-    });
+    }));
   }
   chain.sort((a, b) => a.strike - b.strike);
   return chain;

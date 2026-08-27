@@ -156,6 +156,28 @@ export interface OptionChainEntry {
   putGamma: number;
   putTheta: number;
   putVega: number;
+  // ── P5.3: bid/ask depth + derived change/spread (optional; 0/false when
+  //    the upstream source does not provide them — never fabricated) ──
+  callBidPrice?: number;
+  callAskPrice?: number;
+  callBidQty?: number;
+  callAskQty?: number;
+  callPrevClose?: number;
+  callChange?: number;
+  callChangePct?: number;
+  callHasChange?: boolean;
+  callSpread?: number;
+  callHasSpread?: boolean;
+  putBidPrice?: number;
+  putAskPrice?: number;
+  putBidQty?: number;
+  putAskQty?: number;
+  putPrevClose?: number;
+  putChange?: number;
+  putChangePct?: number;
+  putHasChange?: boolean;
+  putSpread?: number;
+  putHasSpread?: boolean;
 }
 
 export interface AccountInfo {
