@@ -1069,6 +1069,29 @@ export function OptionChainModal() {
     } catch { return exp; }
   };
 
+  // ── P5: spot movement (honest — from the quote's own change fields) ─────────
+  // Uses MarketQuote.change / changePercent for the underlying's token. Shown
+  // only when a positive spot exists; never fabricated.
+  const spotMove = useMemo(() => {
+    if (!activeSymbol || spotPrice <= 0) return null;
+    const q = quotes[activeSymbol.token];
+    if (!q) return null;
+    const change = Number.isFinite(q.change) ? q.change : 0;
+    const changePercent = Number.isFinite(q.changePercent) ? q.changePercent : 0;
+    if (change === 0 && changePercent === 0) return null;
+    return { change, changePercent };
+  }, [activeSymbol?.token, quotes, spotPrice]);
+
+  // ── P5: days to expiry (from the selected expiry date, IST-safe enough) ─────
+  // Whole calendar days from now to the selected expiry; null when unavailable.
+  const daysToExpiry = useMemo(() => {
+    if (!selectedExpiry) return null;
+    const t = new Date(selectedExpiry).getTime();
+    if (Number.isNaN(t)) return null;
+    const d = Math.ceil((t - Date.now()) / 86_400_000);
+    return d >= 0 ? d : null;
+  }, [selectedExpiry]);
+
   // ── Data-state pill ───────────────────────────────────────────────────────
   // Derives the canonical feed state to display in the header.
   // Rules:
@@ -1142,6 +1165,15 @@ export function OptionChainModal() {
             {expiries.map((e) => <option key={e} value={e}>{e}</option>)}
           </select>
         )}
+        {/* P5: days to expiry */}
+        {daysToExpiry !== null && (
+          <span
+            className="text-[10px] font-mono text-fw-text-muted flex-shrink-0"
+            title="Days to expiry"
+          >
+            {daysToExpiry}d
+          </span>
+        )}
 
         {/* ── Data-state pill ── */}
         {activeSymbol && (
@@ -1155,10 +1187,23 @@ export function OptionChainModal() {
 
         <div className="flex-1" />
 
-        {/* Spot price */}
+        {/* Spot price + movement (P5) */}
         {spotPrice > 0 && (
-          <span className="text-[12px] font-mono font-bold text-emerald-400 tabular-nums flex-shrink-0">
-            {formatPrice(spotPrice)}
+          <span className="flex items-baseline gap-1 flex-shrink-0">
+            <span className="text-[12px] font-mono font-bold text-emerald-400 tabular-nums">
+              {formatPrice(spotPrice)}
+            </span>
+            {spotMove && (
+              <span
+                className={cn(
+                  'text-[10px] font-mono font-semibold tabular-nums',
+                  spotMove.change > 0 ? 'text-emerald-400' : spotMove.change < 0 ? 'text-red-400' : 'text-fw-text-muted',
+                )}
+                title="Underlying change today"
+              >
+                {spotMove.change > 0 ? '+' : ''}{spotMove.change.toFixed(2)} ({spotMove.change > 0 ? '+' : ''}{spotMove.changePercent.toFixed(2)}%)
+              </span>
+            )}
           </span>
         )}
 
