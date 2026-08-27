@@ -588,6 +588,8 @@ export class DhanHistoricalService {
     const target = symbol.toUpperCase();
     const matches = this._scripMaster.futuresEntries.filter(item => {
       if (item.segment !== segment) return false;
+      const instrumentType = String(item.instrument || item.instrumentType || '').toUpperCase();
+      if (!['FUTCOM', 'FUTCUR', 'FUT'].includes(instrumentType)) return false;
       // Match by symbol name (SM_SYMBOL_NAME) OR trading symbol prefix.
       // NOTE: NSE CDS entries have empty SM_SYMBOL_NAME — must use tradingSymbol.
       const sym = (item.symbol || '').toUpperCase();

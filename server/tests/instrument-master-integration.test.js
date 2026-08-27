@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { InstrumentService } from '../services/instrumentService.js';
+import { DhanHistoricalService } from '../brokers/dhan/dhan.historical.js';
 
 describe('Angel One instrument-master integration', () => {
   it('loads and normalizes a broker NFO future without a placeholder token', async () => {
@@ -34,5 +35,17 @@ describe('Angel One instrument-master integration', () => {
       success: false,
       code: 'INSTRUMENT_NOT_FOUND',
     }));
+  });
+
+  it('does not resolve a CDS underlying row as a futures contract', () => {
+    const service = new DhanHistoricalService();
+    service._scripMaster = {
+      futuresEntries: [
+        { securityId: '1', symbol: 'USDINR', tradingSymbol: 'USDINR', segment: 'NSE_CURRENCY', instrument: 'UNDCUR', expiry: null },
+        { securityId: '1196', symbol: '', tradingSymbol: 'USDINR26APR', segment: 'NSE_CURRENCY', instrument: 'FUTCUR', expiry: '2027-04-30' },
+      ],
+    };
+
+    expect(service.getActiveContract('USDINR', 'NSE_CURRENCY')).toBe('1196');
   });
 });
