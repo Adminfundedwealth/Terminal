@@ -1287,6 +1287,19 @@ export function Watchlist() {
     const { exchange, instrumentType } = resolveInstrumentFields(item);
 
     if (['NFO', 'MCX', 'CDS'].includes(item.segment)) {
+      if (['MCX', 'CDS'].includes(item.segment)) {
+        setActiveSymbol({
+          token: item.token,
+          symbol: item.symbol,
+          name: item.symbol,
+          segment: item.segment,
+          instrumentType: 'FUT',
+          exchange: item.segment,
+          lotSize: 1,
+          tickSize: 0.05,
+        });
+        return;
+      }
       try {
         const resolved = (await getInstruments(item.segment)).find((candidate) =>
           candidate.symbol.toUpperCase().replace(/\s+FUT$/, '') === item.symbol.toUpperCase().replace(/\s+FUT$/, '')
