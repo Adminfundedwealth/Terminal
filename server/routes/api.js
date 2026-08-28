@@ -1356,9 +1356,27 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
         const securityId = activeId || String(token);
         const dhanSegment = numericAlias.segment;
         const result = await dhan.getQuote(securityId, dhanSegment);
-        const ltp = _parseDhanQuote(result, securityId, dhanSegment);
+        let ltp = _parseDhanQuote(result, securityId, dhanSegment);
+        // Dhan's LTP endpoint is the authoritative fallback when the quote
+        // endpoint returns an empty or differently shaped payload for a
+        // derivative contract. Keep the resolved active ID and segment.
+        let batchQuote = null;
+        if (!ltp && dhan.getQuotes) {
+          const quotes = await dhan.getQuotes([{ token: securityId, segment: dhanSegment }]);
+          batchQuote = quotes?.find(quote => String(quote.token) === String(securityId)) || quotes?.[0] || null;
+          ltp = batchQuote?.ltp || batchQuote?.last_price || null;
+        }
         if (ltp && ltp > 0) {
-          return res.json({ token: String(token), securityId, ltp, exchange: numericAlias.segment, symbol: numericAlias.symbol, timestamp: Date.now() });
+          return res.json({
+            token: String(token),
+            securityId,
+            ltp,
+            volume: batchQuote?.volume,
+            oi: batchQuote?.oi,
+            exchange: numericAlias.segment,
+            symbol: numericAlias.symbol,
+            timestamp: Date.now(),
+          });
         }
       } catch (error) {
         console.warn(`[Quote] Dhan lookup failed for ${token}:`, error.message);
