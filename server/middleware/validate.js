@@ -100,6 +100,11 @@ export const schemas = {
     token: z.string().min(1).max(30),
     segment: z.string().min(1).max(10),
     exchange: z.string().min(1).max(10).optional(), // Optional — defaults to segment if not provided
+    instrumentType: z.string().min(1).max(20).optional(),
+    expiry: z.string().max(30).optional(),
+    strike: z.number().min(0).optional(),
+    optionType: z.enum(['CE', 'PE']).optional(),
+    lotSize: z.number().int().min(1).optional(),
     side: z.enum(['BUY', 'SELL']),
     orderType: z.enum(['MARKET', 'LIMIT', 'SL', 'SL-M']),
     productType: z.enum(['CNC', 'MIS', 'NRML', 'INTRADAY']),

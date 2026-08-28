@@ -19,43 +19,49 @@ import { eventBus } from '../events/index.js';
 import { OrderExecutionService } from './orderExecutionService.js';
 import { HolidayService } from './holidayService.js';
 import crypto from 'crypto';
+import { OrderRepository, buildOrderIdempotencyKey, buildOrderCorrelationId } from '../repositories/order.repository.js';
 
 // In-memory order store for when trading_orders table doesn't exist
 const memOrders = new Map();
+const inFlightOrderClaims = new Map();
+const orderRepo = new OrderRepository();
 
-// ─── In-memory idempotency store (keyed by idempotency_key) ─────────────────
-// Used when the DB column does not exist yet (schema migration pending).
-// Stores { orderId, status, placedAt } for up to 24 hours.
-const _idemStore = new Map();
+function comparableOrderValue(value) {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value === 'number') return value;
+  if (typeof value === 'boolean') return value;
+  const numericValue = Number(value);
+  return Number.isNaN(numericValue) ? String(value) : numericValue;
+}
 
-/**
- * Generate a deterministic idempotency key for an order.
- *
- * Key inputs: accountId + symbol + side + qty + productType + calendar-day (IST).
- * The calendar-day prevents stale same-day keys from blocking next-day orders
- * for the same instrument.
- *
- * SHA-256 → first 16 hex chars (64-bit prefix — collision probability negligible
- * for the order volumes a prop-firm handles).
- *
- * @param {string} accountId
- * @param {object} params  - { symbol, side, qty, productType }
- * @returns {string}  e.g. "fw_idem_a3f9c2d1b7e84f21"
- */
-function _buildIdempotencyKey(accountId, params) {
-  // IST calendar day: UTC+5:30
-  const istMs  = Date.now() + (5 * 60 + 30) * 60 * 1000;
-  const istDay = new Date(istMs).toISOString().slice(0, 10); // "YYYY-MM-DD"
-  const raw = [
-    accountId,
-    (params.symbol || '').toUpperCase().trim(),
-    (params.side  || '').toUpperCase().trim(),
-    String(params.qty  || 0),
-    (params.productType || '').toUpperCase().trim(),
-    istDay,
-  ].join(':');
-  const hash = crypto.createHash('sha256').update(raw).digest('hex').slice(0, 16);
-  return `fw_idem_${hash}`;
+function orderParametersMatch(existing, params) {
+  const fields = [
+    ['symbol', 'symbol'],
+    ['token', 'token'],
+    ['segment', 'segment'],
+    ['side', 'side'],
+    ['order_type', 'orderType'],
+    ['product_type', 'productType'],
+    ['qty', 'qty'],
+    ['price', 'price'],
+    ['trigger_price', 'triggerPrice'],
+    ['validity', 'validity'],
+    ['is_amo', 'isAmo'],
+  ];
+
+  return fields.every(([storedField, requestField]) => (
+    comparableOrderValue(existing[storedField]) === comparableOrderValue(
+      params[requestField] ?? (requestField === 'productType' ? 'MIS' : requestField === 'validity' ? 'DAY' : requestField === 'isAmo' ? false : null)
+    )
+  ));
+}
+
+function idempotencyConflict(existing, params) {
+  const error = new Error(`Idempotency key already exists for different order parameters (order ${existing.id})`);
+  error.code = 'IDEMPOTENCY_CONFLICT';
+  error.statusCode = 409;
+  error.orderId = existing.id;
+  return error;
 }
 
 export class AccountService {
@@ -502,6 +508,10 @@ export class AccountService {
     }
 
     // ── Market-closed guard (live mode only) ──────────────────────────────
+    // In paper mode any-time-of-day orders are allowed for simulation purposes.
+    // In live mode we must reject orders outside NSE trading hours (09:15–15:30 IST,
+    // weekdays, non-holiday) unless the order is explicitly an AMO.
+    // Import is dynamic to keep paper mode overhead zero.
     if (!params.isAmo) {
       const { ExecutionMode } = await import('./executionMode.js');
       if (!ExecutionMode.isPaper) {
@@ -512,44 +522,78 @@ export class AccountService {
       }
     }
 
-    // ── SERVER-SIDE IDEMPOTENCY GUARD ──────────────────────────────────────
-    // Generates a deterministic key from (accountId, symbol, side, qty, product,
-    // IST calendar day). If a non-terminal order with this key already exists,
-    // return it — do NOT insert a second order or submit to Dhan again.
-    // Protects against: double-click, multi-tab, retry-after-timeout, network retry.
-    const idempotencyKey = _buildIdempotencyKey(accountId, params);
-
-    // DB-backed duplicate check (preferred)
-    try {
-      const { data: existing } = await supabase
-        .from('trading_orders')
-        .select('id, status, placed_at')
-        .eq('trading_account_id', accountId)
-        .eq('idempotency_key', idempotencyKey)
-        .not('status', 'in', '("REJECTED","CANCELLED","FAILED")')
-        .order('placed_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (existing) {
-        console.log(`[AccountService] Idempotency: returning existing order ${existing.id} (status=${existing.status}) for key ${idempotencyKey}`);
-        return { orderId: existing.id, status: existing.status, duplicate: true };
-      }
-    } catch (idemErr) {
-      // Column may not exist yet (pre-migration) — fall through to in-memory check
-      const mem = _idemStore.get(idempotencyKey);
-      if (mem && Date.now() - mem.placedAt < 24 * 60 * 60 * 1000) {
-        console.log(`[AccountService] Idempotency (in-memory): returning existing order ${mem.orderId} for key ${idempotencyKey}`);
-        return { orderId: mem.orderId, status: mem.status, duplicate: true };
-      }
-    }
-
     // Normalise exchange — defaults to segment when not provided
     const exchange = params.exchange || params.segment;
+    const orderParams = { ...params, exchange };
+    const idempotencyKey = params.idempotencyKey || buildOrderIdempotencyKey(accountId, orderParams);
+    const correlationId = params.correlationId || buildOrderCorrelationId(accountId, idempotencyKey);
+    orderParams.idempotencyKey = idempotencyKey;
+    orderParams.correlationId = correlationId;
+    const claimMapKey = `${accountId}:${idempotencyKey}`;
 
-    // Insert order — include idempotency_key (column added via migration)
-    const insertPayload = {
+    const inFlightClaim = inFlightOrderClaims.get(claimMapKey);
+    if (inFlightClaim) {
+      return { ...(await inFlightClaim), duplicate: true };
+    }
+
+    const claimPromise = this._claimOrder(accountId, orderParams, idempotencyKey, correlationId);
+    inFlightOrderClaims.set(claimMapKey, claimPromise);
+
+    let claim;
+    try {
+      claim = await claimPromise;
+    } finally {
+      inFlightOrderClaims.delete(claimMapKey);
+    }
+
+    const { data, duplicate } = claim;
+    if (duplicate) {
+      return {
+        orderId: data.id,
+        status: data.status,
+        brokerOrderId: data.broker_order_id || undefined,
+        duplicate: true,
+      };
+    }
+
+    // Publish order.created event to event bus
+    eventBus.publish('order.created', {
+      orderId: data.id,
+      symbol: orderParams.symbol,
+      token: orderParams.token,
+      segment: orderParams.segment,
+      side: orderParams.side,
+      orderType: orderParams.orderType,
+      productType: orderParams.productType,
+      qty: orderParams.qty,
+      price: orderParams.price || null,
+      status: 'PENDING',
+    }, { accountId });
+
+    // Paper MARKET orders return only after the confirmed fill is persisted.
+    const executionPromise = this._executeOrderAsync(accountId, data.id, orderParams);
+    const { ExecutionMode } = await import('./executionMode.js');
+    if (ExecutionMode.isPaper && orderParams.orderType === 'MARKET') {
+      const result = await executionPromise;
+      return { ...result, orderId: data.id };
+    }
+
+    return { orderId: data.id, status: 'PENDING' };
+  }
+
+  async _claimOrder(accountId, params, idempotencyKey, correlationId) {
+    const existing = await orderRepo.findByIdempotencyKey(accountId, idempotencyKey);
+    if (existing) {
+      if (!orderParametersMatch(existing, params)) {
+        throw idempotencyConflict(existing, params);
+      }
+      return { data: existing, duplicate: true };
+    }
+
+    const { data, error } = await supabase.from('trading_orders').insert({
       trading_account_id: accountId,
+      idempotency_key: idempotencyKey,
+      correlation_id: correlationId,
       symbol: params.symbol,
       token: params.token || null,
       segment: params.segment || null,
@@ -557,85 +601,55 @@ export class AccountService {
       side: params.side,
       order_type: params.orderType,
       product_type: params.productType || 'MIS',
+      validity: params.validity || 'DAY',
       qty: params.qty,
       price: params.price || null,
       trigger_price: params.triggerPrice || null,
+      is_amo: params.isAmo || false,
       status: 'PENDING',
-      // idempotency_key: include if column exists; DB silently ignores unknown
-      // columns in older schemas only when using INSERT with explicit columns.
-      // The try/catch below handles the case where the column does not exist.
-      idempotency_key: idempotencyKey,
-    };
+    }).select().single();
 
-    const { data, error } = await supabase.from('trading_orders').insert(insertPayload).select().single();
+    if (!error) return { data, duplicate: false };
 
-    if (error) {
-      // Table doesn't exist — use in-memory store
-      if (error.message && error.message.includes('schema cache')) {
-        const orderId = crypto.randomUUID();
-        const order = {
-          id: orderId, account_id: accountId, symbol: params.symbol, token: params.token,
-          segment: params.segment, side: params.side, order_type: params.orderType,
-          product_type: params.productType, qty: params.qty, price: params.price || null,
-          trigger_price: params.triggerPrice || null, status: 'PENDING', placed_at: new Date().toISOString(),
-        };
-        memOrders.set(orderId, order);
-        // Cache in in-memory idempotency store
-        _idemStore.set(idempotencyKey, { orderId, status: 'PENDING', placedAt: Date.now() });
-
-        eventBus.publish('order.created', {
-          orderId, symbol: params.symbol, token: params.token, segment: params.segment,
-          side: params.side, orderType: params.orderType, productType: params.productType,
-          qty: params.qty, price: params.price || null, status: 'PENDING',
-        }, { accountId });
-
-        this._executeOrderAsync(accountId, orderId, { ...params, exchange });
-        return { orderId, status: 'PENDING' };
+    const errorText = `${error.code || ''} ${error.message || ''}`.toLowerCase();
+    if (errorText.includes('duplicate') || errorText.includes('unique')) {
+      const concurrentOrder = await orderRepo.findByIdempotencyKey(accountId, idempotencyKey);
+      if (!concurrentOrder) {
+        throw new Error(`Order claim conflict could not be resolved: ${error.message}`);
       }
-      // idempotency_key column doesn't exist yet — retry without it
-      if (error.message && (error.message.includes('idempotency_key') || error.message.includes('column'))) {
-        const { data: data2, error: err2 } = await supabase.from('trading_orders').insert({
-          trading_account_id: accountId,
-          symbol: params.symbol,
-          token: params.token || null,
-          segment: params.segment || null,
-          instrument_type: params.instrumentType || null,
-          side: params.side,
-          order_type: params.orderType,
-          product_type: params.productType || 'MIS',
-          qty: params.qty,
-          price: params.price || null,
-          trigger_price: params.triggerPrice || null,
-          status: 'PENDING',
-        }).select().single();
-        if (err2) throw new Error(`Order insert failed: ${err2.message}`);
-        // Cache in in-memory idempotency store (column fallback)
-        _idemStore.set(idempotencyKey, { orderId: data2.id, status: 'PENDING', placedAt: Date.now() });
-        eventBus.publish('order.created', { orderId: data2.id, symbol: params.symbol, token: params.token, segment: params.segment, side: params.side, orderType: params.orderType, productType: params.productType, qty: params.qty, price: params.price || null, status: 'PENDING' }, { accountId });
-        this._executeOrderAsync(accountId, data2.id, { ...params, exchange });
-        return { orderId: data2.id, status: 'PENDING' };
+      if (!orderParametersMatch(concurrentOrder, params)) {
+        throw idempotencyConflict(concurrentOrder, params);
       }
-      throw new Error(`Order insert failed: ${error.message}`);
+      return { data: concurrentOrder, duplicate: true };
     }
 
-    // Cache in in-memory store so in-process restarts can still dedup
-    _idemStore.set(idempotencyKey, { orderId: data.id, status: 'PENDING', placedAt: Date.now() });
+    // Table doesn't exist — use in-memory store
+    if (error.message && error.message.includes('schema cache')) {
+      const orderId = crypto.randomUUID();
+      const order = {
+        id: orderId,
+        trading_account_id: accountId,
+        idempotency_key: idempotencyKey,
+        correlation_id: correlationId,
+        symbol: params.symbol,
+        token: params.token,
+        segment: params.segment,
+        side: params.side,
+        order_type: params.orderType,
+        product_type: params.productType || 'MIS',
+        qty: params.qty,
+        price: params.price || null,
+        trigger_price: params.triggerPrice || null,
+        validity: params.validity || 'DAY',
+        is_amo: params.isAmo || false,
+        status: 'PENDING',
+        placed_at: new Date().toISOString(),
+      };
+      memOrders.set(orderId, order);
+      return { data: order, duplicate: false };
+    }
 
-    eventBus.publish('order.created', {
-      orderId: data.id,
-      symbol: params.symbol,
-      token: params.token,
-      segment: params.segment,
-      side: params.side,
-      orderType: params.orderType,
-      productType: params.productType,
-      qty: params.qty,
-      price: params.price || null,
-      status: 'PENDING',
-    }, { accountId });
-
-    this._executeOrderAsync(accountId, data.id, { ...params, exchange });
-    return { orderId: data.id, status: 'PENDING' };
+    throw new Error(`Order insert failed: ${error.message}`);
   }
 
   async modifyOrder(accountId, orderId, params) {
@@ -728,7 +742,7 @@ export class AccountService {
    */
   _executeOrderAsync(accountId, orderId, params) {
     // Non-blocking — execution happens in background
-    (async () => {
+    return (async () => {
       try {
         const account = await this.getAccount(accountId);
         if (!account) {
@@ -761,8 +775,10 @@ export class AccountService {
             }
           }
         }
+        return result;
       } catch (err) {
         console.error(`[AccountService] Order execution failed for ${orderId}:`, err.message);
+        return { orderId, status: 'REJECTED', message: err.message };
       }
     })();
   }

@@ -170,6 +170,12 @@ export interface PlaceOrderParams {
   symbol: string;
   token: string;
   segment: string;
+  exchange?: string;
+  instrumentType?: string;
+  expiry?: string;
+  strike?: number;
+  optionType?: 'CE' | 'PE';
+  lotSize?: number;
   side: OrderSide;
   orderType: OrderType;
   productType: ProductType;

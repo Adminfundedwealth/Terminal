@@ -182,6 +182,12 @@ export function OrderPanel() {
       const result = await placeOrder({
         symbol, token,
         segment: activeSymbol?.segment || 'NSE',
+        exchange: activeSymbol?.exchange,
+        instrumentType: activeSymbol?.instrumentType,
+        expiry: activeSymbol?.expiry,
+        strike: activeSymbol?.strike,
+        optionType: activeSymbol?.optionType,
+        lotSize: activeSymbol?.lotSize,
         side,
         orderType: orderForm.orderType,
         productType: orderForm.productType,
