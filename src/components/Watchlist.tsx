@@ -1251,8 +1251,14 @@ export function Watchlist() {
       // merge in missing items from the master list
       if (masterList && items.length < masterList.length) {
         const existingTokens = new Set(items.map(i => i.token));
+        const existingResolvedSymbols = new Set(
+          items
+            .filter(i => /^\d+$/.test(i.token))
+            .map(i => i.symbol.toUpperCase().trim()),
+        );
         for (const mi of masterList) {
-          if (!existingTokens.has(mi.token)) {
+          const isPlaceholder = !/^\d+$/.test(mi.token);
+          if (!existingTokens.has(mi.token) && !(isPlaceholder && existingResolvedSymbols.has(mi.symbol.toUpperCase().trim()))) {
             items.push(mi);
           }
         }

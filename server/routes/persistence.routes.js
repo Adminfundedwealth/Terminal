@@ -106,20 +106,62 @@ export function createPersistenceRouter() {
   router.post('/themes', requireAuth, async (req, res) => {
     try {
       const { name, colors, font_family, font_size, chart_colors } = req.body;
-      const { data, error } = await supabase
+      const theme = {
+        trader_id: req.user.userId,
+        name: name || 'Custom',
+        colors: colors || {},
+        font_family: font_family || 'Inter',
+        font_size: font_size || 'normal',
+        chart_colors: chart_colors || {},
+      };
+
+      // Update first so this remains idempotent even when PostgREST does not
+      // apply the column-based upsert conflict target on the deployed schema.
+      const existing = await supabase
         .from('themes')
-        .insert({
-          trader_id: req.user.userId,
-          name: name || 'Custom',
-          colors: colors || {},
-          font_family: font_family || 'Inter',
-          font_size: font_size || 'normal',
-          chart_colors: chart_colors || {},
-        })
-        .select()
-        .single();
-      if (error) throw error;
-      res.json(data);
+        .select('id')
+        .eq('trader_id', theme.trader_id)
+        .eq('name', theme.name)
+        .maybeSingle();
+      if (existing.error) throw existing.error;
+
+      if (existing.data?.id) {
+        const { data, error } = await supabase
+          .from('themes')
+          .update({ ...theme, updated_at: new Date().toISOString() })
+          .eq('id', existing.data.id)
+          .eq('trader_id', theme.trader_id)
+          .select()
+          .single();
+        if (error) throw error;
+        return res.json(data);
+      }
+
+      const inserted = await supabase.from('themes').insert(theme).select().single();
+      if (!inserted.error) return res.json(inserted.data);
+
+      // Another tab may have inserted the same theme between the lookup and
+      // insert. Re-read and update that row rather than returning HTTP 500.
+      if (inserted.error.code === '23505') {
+        const concurrent = await supabase
+          .from('themes')
+          .select('id')
+          .eq('trader_id', theme.trader_id)
+          .eq('name', theme.name)
+          .single();
+        if (concurrent.error) throw concurrent.error;
+        const { data, error } = await supabase
+          .from('themes')
+          .update({ ...theme, updated_at: new Date().toISOString() })
+          .eq('id', concurrent.data.id)
+          .eq('trader_id', theme.trader_id)
+          .select()
+          .single();
+        if (error) throw error;
+        return res.json(data);
+      }
+
+      throw inserted.error;
     } catch (e) { res.status(500).json({ message: e.message }); }
   });
 
