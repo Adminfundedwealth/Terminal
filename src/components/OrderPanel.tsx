@@ -566,7 +566,7 @@ export function OrderPanel() {
       </div>
 
       {/* Submit Buttons — Premium institutional BUY/SELL */}
-      <div className="px-3 py-3 border-t border-fw-border bg-fw-surface flex-shrink-0">
+      <div className="relative z-20 px-3 py-3 border-t border-fw-border bg-fw-surface flex-shrink-0">
         {isSpotIndex && (
           <div className="mb-2 rounded border border-orange-800/40 bg-orange-900/20 px-2 py-1.5 text-[12px] text-orange-300">
             {symbol} is a spot index — not tradable. Open {symbol.replace(/\s*50$/, '').trim() || symbol} in the FUTURES or OPTIONS tab to trade it.

@@ -13,6 +13,10 @@ export function formatPrice(price: number, decimals = 2): string {
   });
 }
 
+export function hasUsableQuote(quote: { ltp?: number } | null | undefined): boolean {
+  return quote != null && Number.isFinite(quote.ltp) && quote.ltp > 0;
+}
+
 export function formatNumber(num: number): string {
   if (num == null || isNaN(num)) return '0';
   if (Math.abs(num) >= 10000000) {

@@ -15,7 +15,7 @@ import { useAppStore } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
 import { useTradingStore } from '@/store/tradingStore';
 import { wsService } from '@/services/websocket';
-import { cn, formatPrice, getChangeColor, debounce } from '@/utils/helpers';
+import { cn, formatPrice, getChangeColor, debounce, hasUsableQuote } from '@/utils/helpers';
 import { searchInstruments, getInstruments } from '@/services/api';
 import { SymbolLogo } from '@/components/SymbolLogo';
 import type { WatchlistItem, Instrument } from '@/types';
@@ -470,6 +470,7 @@ interface WatchlistRowProps {
 
 function WatchlistRow({ item, isSelected, isPinned, onSelect, onRemove, onPin, onOpenNews }: WatchlistRowProps) {
   const quote = useMarketStore((s) => s.quotes[item.token]);
+  const hasQuote = hasUsableQuote(quote);
   const prevLtpRef = useRef<number | null>(null);
   const [flash, setFlash] = useState<'green' | 'red' | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -478,7 +479,7 @@ function WatchlistRow({ item, isSelected, isPinned, onSelect, onRemove, onPin, o
 
   // Tick flash
   useEffect(() => {
-    if (!quote?.ltp || prevLtpRef.current === null) {
+    if (!hasQuote || prevLtpRef.current === null) {
       prevLtpRef.current = quote?.ltp ?? null;
       return;
     }
@@ -488,7 +489,7 @@ function WatchlistRow({ item, isSelected, isPinned, onSelect, onRemove, onPin, o
     prevLtpRef.current = quote.ltp;
     const t = setTimeout(() => setFlash(null), 600);
     return () => clearTimeout(t);
-  }, [quote?.ltp]);
+  }, [quote?.ltp, hasQuote]);
 
   // Close menu when another row opens � handled via global open state in parent.
   // We rely on the pointer-outside listener in ContextMenu itself.
@@ -528,16 +529,16 @@ function WatchlistRow({ item, isSelected, isPinned, onSelect, onRemove, onPin, o
       {/* LTP */}
       <span className={cn(
         'text-[13px] font-semibold tabular-nums w-[72px] text-right flex-shrink-0',
-        quote ? getChangeColor(quote.changePercent) : 'text-fw-text-secondary',
+        hasQuote ? getChangeColor(quote.changePercent) : 'text-fw-text-secondary',
         flash === 'green' && 'animate-[priceFlashGreen_0.6s_ease-out]',
         flash === 'red'   && 'animate-[priceFlashRed_0.6s_ease-out]',
       )}>
-        {quote ? formatPrice(quote.ltp) : '�'}
+        {hasQuote ? formatPrice(quote.ltp) : 'Unavailable'}
       </span>
 
       {/* Change pill */}
       <div className="w-[52px] flex-shrink-0 flex justify-end">
-        {quote ? (
+        {hasQuote ? (
           <span className={cn(
             'text-[10px] font-semibold px-1 py-0.5 rounded tabular-nums',
             (quote.changePercent || 0) >= 0 ? 'text-green bg-green/10' : 'text-red bg-red/10',
@@ -545,7 +546,7 @@ function WatchlistRow({ item, isSelected, isPinned, onSelect, onRemove, onPin, o
             {(quote.changePercent || 0) >= 0 ? '+' : ''}{(quote.changePercent || 0).toFixed(2)}%
           </span>
         ) : (
-          <span className="text-[10px] text-fw-text-muted/40">�</span>
+          <span className="text-[10px] text-fw-text-muted/60">—</span>
         )}
       </div>
 
