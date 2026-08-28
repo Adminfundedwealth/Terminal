@@ -73,6 +73,20 @@ export function TerminalReadiness() {
         </div>
       </div>
 
+      {statusKnown && (
+        <div className="grid grid-cols-3 gap-2 text-[10px] font-mono">
+          <span className={effectiveStatus.executionMode.isPaper ? 'text-emerald-400' : 'text-red-400'}>
+            MODE: {effectiveStatus.executionMode.mode.toUpperCase()}
+          </span>
+          <span className={effectiveStatus.executionMode.isLive ? 'text-red-400' : 'text-emerald-400'}>
+            LIVE: {effectiveStatus.executionMode.isLive ? 'YES' : 'NO'}
+          </span>
+          <span className="text-fw-text-secondary truncate" title={effectiveStatus.broker.provider}>
+            ROUTE: {effectiveStatus.broker.provider}
+          </span>
+        </div>
+      )}
+
       {/* Status Details Row */}
       {isLocked && (
         <div className="flex items-center gap-3 text-[13px]">

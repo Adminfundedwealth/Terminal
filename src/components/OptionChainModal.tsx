@@ -19,6 +19,7 @@ import { useTradingStore } from '@/store/tradingStore';
 import { wsService } from '@/services/websocket';
 import type { OptionChainEntry, Instrument } from '@/types';
 import { SymbolLogo } from '@/components/SymbolLogo';
+import { isCompleteOptionChain } from '@/utils/optionChainValidation';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -378,6 +379,7 @@ export function OptionChainModal() {
     | { type: 'idle' }
     | { type: 'loading'; label: string; attempt: number }
     | { type: 'error'; message: string }
+    | { type: 'stale'; message: string }
     | { type: 'unsupported'; instrument: string }
     | { type: 'ready' }
   >({ type: 'idle' });
@@ -523,7 +525,7 @@ export function OptionChainModal() {
       if (session !== sessionRef.current) return;
       if (budgetExpired()) return;
 
-      if (data && data.length > 0) {
+      if (data && isCompleteOptionChain(data)) {
         _chainCache.set(ck, { chain: data, cachedAt: Date.now() });
         setChain(data);
         setStatus({ type: 'ready' });
@@ -554,8 +556,12 @@ export function OptionChainModal() {
         return;
       }
 
-      // Empty → retryable (503 is handled via error path; empty means chain not yet ready)
+      // Never replace a valid chain with an incomplete broker snapshot.
+      // Empty or incomplete → retryable (503 is handled via error path)
       scheduleRetry(sym, expiry, attempt, session);
+      if (chain.length > 0) {
+        setStatus({ type: 'stale', message: 'Live option data is incomplete. Showing the last valid chain.' });
+      }
     } catch (err: any) {
       fetchInFlightRef.current = false;
       if (!isMountedRef.current) return;
@@ -823,7 +829,8 @@ export function OptionChainModal() {
   };
 
   // ── Render helpers ────────────────────────────────────────────────────────
-  const isLoading = status.type === 'loading' || status.type === 'idle';
+  // Keep the last valid rows visible while an incomplete refresh retries.
+  const isLoading = (status.type === 'loading' && chain.length === 0) || status.type === 'idle';
   const errorMessage = status.type === 'error' ? status.message : null;
   const attemptLabel = status.type === 'loading' && status.attempt > 0
     ? ` (${status.attempt}/${MAX_AUTO_RETRIES})`
@@ -880,7 +887,11 @@ export function OptionChainModal() {
     dot?: string;
   } => {
     if (status.type === 'unsupported') return { label: 'N/A', color: 'text-fw-text-muted', dot: 'bg-fw-border' };
-    if (status.type === 'loading' || status.type === 'idle') return { label: 'LOADING', color: 'text-amber-400', dot: 'bg-amber-400 animate-pulse' };
+    if (status.type === 'loading' || status.type === 'idle') {
+      return chain.length > 0
+        ? { label: 'STALE', color: 'text-amber-400', dot: 'bg-amber-400 animate-pulse' }
+        : { label: 'LOADING', color: 'text-amber-400', dot: 'bg-amber-400 animate-pulse' };
+    }
     if (status.type === 'error') {
       const msg = (status as any).message || '';
       if (msg.toLowerCase().includes('auth') || msg.toLowerCase().includes('token') || msg.toLowerCase().includes('401')) {
@@ -888,7 +899,7 @@ export function OptionChainModal() {
       }
       return { label: 'ERROR', color: 'text-red-400', dot: 'bg-red-400' };
     }
-    if (status.type === 'ready') {
+    if (status.type === 'ready' || status.type === 'stale') {
       if (spotPrice > 0) {
         const q = quotes[activeSymbol?.token || ''];
         const ageMs = q?.timestamp ? Date.now() - q.timestamp : Infinity;
@@ -899,7 +910,7 @@ export function OptionChainModal() {
       return { label: 'STALE', color: 'text-amber-400', dot: 'bg-amber-400' };
     }
     return { label: 'DISCONNECTED', color: 'text-fw-text-muted', dot: 'bg-fw-border' };
-  }, [status, spotPrice, quotes, activeSymbol?.token]);
+  }, [status, spotPrice, quotes, activeSymbol?.token, chain.length]);
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -944,7 +955,7 @@ export function OptionChainModal() {
         )}
 
         {/* Manual refresh button — always visible when chain is loaded */}
-        {(status.type === 'ready' || status.type === 'error') && (
+        {(status.type === 'ready' || status.type === 'stale' || status.type === 'error') && (
           <button
             onClick={handleManualRetry}
             className="p-1 rounded hover:bg-fw-hover text-fw-text-muted hover:text-fw-text transition-colors flex-shrink-0"
@@ -980,8 +991,11 @@ export function OptionChainModal() {
       )}
 
       {/* ── Controls ── */}
-      {status.type === 'ready' && (
+      {(status.type === 'ready' || status.type === 'stale' || (status.type === 'loading' && chain.length > 0)) && (
         <div className="flex items-center gap-2 px-3 py-1.5 border-b border-fw-border/30 flex-shrink-0">
+          {(status.type === 'stale' || (status.type === 'loading' && chain.length > 0)) && (
+            <span className="text-[10px] text-amber-400" title={status.type === 'stale' ? status.message : 'Live option data is refreshing'}>STALE DATA</span>
+          )}
           <div className="flex items-center rounded overflow-hidden border border-fw-border/50">
             {(['both', 'ce', 'pe'] as const).map((m) => (
               <button
