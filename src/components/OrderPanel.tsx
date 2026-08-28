@@ -567,11 +567,16 @@ export function OrderPanel() {
 
       {/* Submit Buttons — Premium institutional BUY/SELL */}
       <div className="px-3 py-3 border-t border-fw-border bg-fw-surface flex-shrink-0">
+        {isSpotIndex && (
+          <div className="mb-2 rounded border border-orange-800/40 bg-orange-900/20 px-2 py-1.5 text-[12px] text-orange-300">
+            {symbol} is a spot index — not tradable. Open {symbol.replace(/\s*50$/, '').trim() || symbol} in the FUTURES or OPTIONS tab to trade it.
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-2.5">
           {/* BUY */}
           <button
             onClick={() => handleSubmitRequest('BUY')}
-            disabled={isSubmitting || !symbol}
+            disabled={isSubmitting || !symbol || isSpotIndex}
             className={cn(
               'relative overflow-hidden group',
               'h-[50px] rounded-xl',
@@ -613,7 +618,7 @@ export function OrderPanel() {
           {/* SELL */}
           <button
             onClick={() => handleSubmitRequest('SELL')}
-            disabled={isSubmitting || !symbol}
+            disabled={isSubmitting || !symbol || isSpotIndex}
             className={cn(
               'relative overflow-hidden group',
               'h-[50px] rounded-xl',
