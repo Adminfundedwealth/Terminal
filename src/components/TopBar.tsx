@@ -52,10 +52,19 @@ export function TopBar() {
           'flex items-center gap-1.5 px-2.5 py-1 rounded text-[13px] font-semibold flex-shrink-0 border',
           marketStatus === 'OPEN'
             ? 'bg-fw-green/10 text-fw-green border-fw-green/20'
-            : 'bg-fw-red/10 text-fw-red border-fw-red/20'
+            : marketStatus === 'PRE_OPEN'
+              ? 'bg-yellow-400/10 text-yellow-300 border-yellow-400/20'
+              : marketStatus === 'POST_CLOSE'
+                ? 'bg-orange-400/10 text-orange-300 border-orange-400/20'
+                : 'bg-fw-red/10 text-fw-red border-fw-red/20'
         )}>
-          <div className={cn('w-2 h-2 rounded-full', marketStatus === 'OPEN' ? 'bg-fw-green animate-pulse' : 'bg-fw-red')} />
-          {marketStatus === 'OPEN' ? 'LIVE' : 'CLOSED'}
+          <div className={cn(
+            'w-2 h-2 rounded-full',
+            marketStatus === 'OPEN' ? 'bg-fw-green animate-pulse' :
+              marketStatus === 'PRE_OPEN' ? 'bg-yellow-300' :
+                marketStatus === 'POST_CLOSE' ? 'bg-orange-300' : 'bg-fw-red'
+          )} />
+          {marketStatus === 'OPEN' ? 'LIVE' : marketStatus === 'PRE_OPEN' ? 'PRE OPEN' : marketStatus === 'POST_CLOSE' ? 'POST CLOSE' : 'CLOSED'}
         </div>
 
         <div className="w-px h-5 bg-fw-border/50 mx-1 flex-shrink-0" />

@@ -90,9 +90,11 @@ export function Sidebar() {
       <div className="mb-1.5">
         <div className={cn(
           'w-8 h-8 flex items-center justify-center rounded-md transition-colors',
-          marketStatus === 'OPEN' ? 'text-emerald-400' : 'text-red-400/70'
-        )} title={marketStatus === 'OPEN' ? 'Connected — Market Open' : 'Market Closed'}>
-          {marketStatus === 'OPEN' ? <Wifi size={14} /> : <WifiOff size={14} />}
+          marketStatus === 'OPEN' ? 'text-emerald-400' :
+            marketStatus === 'PRE_OPEN' ? 'text-yellow-300' :
+              marketStatus === 'POST_CLOSE' ? 'text-orange-300' : 'text-red-400/70'
+        )} title={marketStatus === 'OPEN' ? 'Connected — Market Open' : marketStatus === 'PRE_OPEN' ? 'Connected — Pre Open' : marketStatus === 'POST_CLOSE' ? 'Connected — Post Close' : 'Market Closed'}>
+          {marketStatus === 'CLOSED' ? <WifiOff size={14} /> : <Wifi size={14} />}
         </div>
       </div>
 

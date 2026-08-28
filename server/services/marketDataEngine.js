@@ -38,6 +38,17 @@ export function resolveDhanSegment(segment) {
   return SEGMENT_MAP[segment] || 'NSE_EQ';
 }
 
+const LEGACY_CONTRACTS = {
+  '429604': { symbol: 'GOLD', segment: 'MCX_COMM' },
+  '429638': { symbol: 'SILVER', segment: 'MCX_COMM' },
+  '425475': { symbol: 'CRUDEOIL', segment: 'MCX_COMM' },
+  '431765': { symbol: 'NATURALGAS', segment: 'MCX_COMM' },
+  '430596': { symbol: 'COPPER', segment: 'MCX_COMM' },
+  '11091': { symbol: 'USDINR', segment: 'NSE_CURRENCY' },
+  '11363': { symbol: 'EURINR', segment: 'NSE_CURRENCY' },
+  '11096': { symbol: 'GBPINR', segment: 'NSE_CURRENCY' },
+  '11098': { symbol: 'JPYINR', segment: 'NSE_CURRENCY' },
+};
 export class MarketDataEngine {
   constructor() {
     this.subscribers = new Map();
@@ -352,8 +363,19 @@ export class MarketDataEngine {
           const cached = this.quotes.get(token);
           const rawSeg = cached?.segment || cached?.exchange || 'NSE_EQ';
           const dhanSeg = resolveDhanSegment(rawSeg);
-          if (!bySegment[dhanSeg]) bySegment[dhanSeg] = [];
-          bySegment[dhanSeg].push(token);
+          const legacy = LEGACY_CONTRACTS[token];
+          const contractSegment = legacy?.segment || dhanSeg;
+          const activeId = legacy && this._dhanAdapter.historical?.getActiveContract(
+            legacy.symbol,
+            contractSegment,
+          );
+          const requestSegment = legacy?.segment || contractSegment;
+          bySegment[requestSegment] ||= [];
+          bySegment[requestSegment].push({
+            frontendToken: token,
+            requestToken: activeId || token,
+            symbol: legacy?.symbol,
+          });
         }
 
         // Poll each segment separately — Dhan /marketfeed/ltp accepts one segment key per request
@@ -361,18 +383,23 @@ export class MarketDataEngine {
           const batch = tokens.slice(0, 100); // Dhan limit per request
           try {
             // Pass as { token, segment } pairs so getQuotes() can skip scrip master lookup
-            const instrumentList = batch.map(t => ({ token: t, segment }));
+            const instrumentList = batch.map(item => ({ token: item.requestToken, segment }));
             const quotes = await this._dhanAdapter.getQuotes(instrumentList);
             if (!quotes || quotes.length === 0) continue;
 
             for (const q of quotes) {
               if (q.ltp && q.ltp > 0 && q.token) {
-                const existing = this.quotes.get(q.token);
-                this.pushQuote(q.token, {
+                const item = batch.find(candidate => String(candidate.requestToken) === String(q.token));
+                const frontendToken = item?.frontendToken || q.token;
+                const existing = this.quotes.get(frontendToken);
+                this.pushQuote(frontendToken, {
                   ...existing,
                   ltp: q.ltp,
                   volume: q.volume || existing?.volume,
                   oi: q.oi || existing?.oi,
+                  symbol: item?.symbol || existing?.symbol,
+                  securityId: q.token,
+                  segment,
                   timestamp: Date.now(),
                 });
               }
