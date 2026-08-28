@@ -21,6 +21,7 @@
 
 import WebSocket from 'ws';
 import { EventEmitter } from 'events';
+import { resolveDhanInstrument } from './dhan.instrument.js';
 
 const DHAN_WS_URL = 'wss://api-feed.dhan.co/api/v2/ws';
 
@@ -131,14 +132,19 @@ export class DhanWebSocketFeed extends EventEmitter {
     if (!instruments || !instruments.length) return;
 
     const instrumentList = instruments.map(inst => {
-      const seg = SEGMENT_CODES[inst.segment || inst.exchange] || 'NSE_EQ';
-      const secId = String(inst.securityId || inst.token);
+      const canonical = resolveDhanInstrument({
+        ...inst,
+        exchangeSegment: SEGMENT_CODES[inst.exchangeSegment || inst.segment || inst.exchange],
+      });
+      if (!canonical) return null;
 
       // Track subscription
-      this._subscriptions.set(secId, { segment: seg, mode });
+      this._subscriptions.set(`${canonical.exchangeSegment}:${canonical.securityId}`, { ...canonical, mode });
 
-      return { ExchangeSegment: seg, SecurityId: secId };
-    });
+      return { ExchangeSegment: canonical.exchangeSegment, SecurityId: canonical.securityId };
+    }).filter(Boolean);
+
+    if (instrumentList.length === 0) return;
 
     const payload = {
       RequestCode: mode,
@@ -159,10 +165,12 @@ export class DhanWebSocketFeed extends EventEmitter {
     if (!instruments || !instruments.length) return;
 
     const instrumentList = instruments.map(inst => {
-      const secId = String(inst.securityId || inst.token);
-      const sub = this._subscriptions.get(secId);
-      this._subscriptions.delete(secId);
-      return { ExchangeSegment: sub?.segment || 'NSE_EQ', SecurityId: secId };
+      const canonical = resolveDhanInstrument(inst);
+      const secId = canonical?.securityId || String(inst.securityId || inst.token);
+      const key = canonical ? `${canonical.exchangeSegment}:${canonical.securityId}` : null;
+      const sub = key ? this._subscriptions.get(key) : null;
+      if (key) this._subscriptions.delete(key);
+      return { ExchangeSegment: sub?.exchangeSegment || canonical?.exchangeSegment || 'NSE_EQ', SecurityId: secId };
     });
 
     // Dhan uses RequestCode 15 with action "unsubscribe" or specific unsub code
@@ -246,32 +254,35 @@ export class DhanWebSocketFeed extends EventEmitter {
     if (buf.length < 8) return;
 
     const responseCode = buf.readUInt16LE(0);
-    // exchangeSeg = buf.readUInt16LE(2) — read but currently unused (segment tracked via subscription map)
+    const exchangeCode = buf.readUInt16LE(2);
     const securityId  = buf.readInt32LE(4);  // correct offset: after 2-byte code + 2-byte segment
+    const subscription = [...this._subscriptions.values()].find(item => item.securityId === String(securityId));
+    const identity = { securityId: String(securityId), exchangeSegment: subscription?.exchangeSegment || String(exchangeCode) };
 
     if (responseCode === 15) {
-      this._parseTickerPacket(buf, securityId);
+      this._parseTickerPacket(buf, securityId, identity);
     } else if (responseCode === 17) {
-      this._parseQuotePacket(buf, securityId);
+      this._parseQuotePacket(buf, securityId, identity);
     } else if (responseCode === 21) {
-      this._parseDepthPacket(buf, securityId);
+      this._parseDepthPacket(buf, securityId, identity);
     }
   }
 
-  _parseTickerPacket(buf, securityId) {
+  _parseTickerPacket(buf, securityId, identity) {
     if (buf.length < 16) return;
     try {
       const ltp = buf.readFloatLE(8);
       if (!ltp || ltp <= 0) return;
       this.emit('tick', {
         token: String(securityId),
+        ...identity,
         ltp,
         type: 'ticker',
       });
     } catch (_) {}
   }
 
-  _parseQuotePacket(buf, securityId) {
+  _parseQuotePacket(buf, securityId, identity) {
     if (buf.length < 32) return;
     try {
       const ltp    = buf.readFloatLE(8);
@@ -292,6 +303,7 @@ export class DhanWebSocketFeed extends EventEmitter {
       if (!ltp || ltp <= 0) return;
       this.emit('tick', {
         token: String(securityId),
+        ...identity,
         ltp, open, high, low, close, volume,
         oi, prevOi,
         type: 'quote',
@@ -299,7 +311,7 @@ export class DhanWebSocketFeed extends EventEmitter {
     } catch (_) {}
   }
 
-  _parseDepthPacket(buf, securityId) {
+  _parseDepthPacket(buf, securityId, identity) {
     // Depth packet: header (8) + 5 bid levels + 5 ask levels
     // Each level = qty(4 LE) + orders(2 LE) + price(4 LE) = 10 bytes
     // Total minimum: 8 + 100 = 108 bytes
@@ -332,6 +344,7 @@ export class DhanWebSocketFeed extends EventEmitter {
 
       this.emit('depth', {
         token: String(securityId),
+        ...identity,
         bids,
         asks,
         totalBuyQty,
@@ -345,9 +358,9 @@ export class DhanWebSocketFeed extends EventEmitter {
 
     // Group by mode
     const byMode = new Map();
-    for (const [secId, { segment, mode }] of this._subscriptions) {
+    for (const [, { exchangeSegment, securityId, mode }] of this._subscriptions) {
       if (!byMode.has(mode)) byMode.set(mode, []);
-      byMode.get(mode).push({ ExchangeSegment: segment, SecurityId: secId });
+      byMode.get(mode).push({ ExchangeSegment: exchangeSegment, SecurityId: securityId });
     }
 
     for (const [mode, list] of byMode) {

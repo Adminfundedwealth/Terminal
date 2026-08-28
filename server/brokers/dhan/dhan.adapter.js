@@ -22,6 +22,7 @@ import https from 'https';
 import { DhanAuthService } from './dhan.auth.js';
 import { DhanHistoricalService } from './dhan.historical.js';
 import { DhanOptionChainService } from './dhan.optionchain.js';
+import { resolveDhanInstrument } from './dhan.instrument.js';
 
 const DHAN_API_BASE = 'https://api.dhan.co/v2';
 const IPV4_AGENT = new https.Agent({ family: 4 });
@@ -151,6 +152,16 @@ export class DhanAdapter {
       const rawToken   = typeof input === 'string' ? input : input.token;
       const hintSeg    = typeof input === 'object'  ? input.segment : null;
 
+      const canonical = resolveDhanInstrument({
+        ...(typeof input === 'object' ? input : {}),
+        token: rawToken,
+        segment: hintSeg,
+      });
+      if (canonical) {
+        resolvedTokens.push({ original: rawToken, dhanId: canonical.securityId, segment: canonical.exchangeSegment });
+        continue;
+      }
+
       // If caller already provided a segment hint, use it directly — no scrip master needed
       if (hintSeg) {
         resolvedTokens.push({ original: rawToken, dhanId: rawToken, segment: hintSeg });
@@ -176,8 +187,10 @@ export class DhanAdapter {
           }
         }
       }
-      // Default: use token as-is with NSE_EQ (only safe for equity tokens)
-      resolvedTokens.push({ original: rawToken, dhanId: rawToken, segment: 'NSE_EQ' });
+      // Never send placeholders or unknown broker aliases to Dhan.
+      if (/^\d+$/.test(String(rawToken))) {
+        resolvedTokens.push({ original: rawToken, dhanId: rawToken, segment: 'NSE_EQ' });
+      }
     }
 
     const results = [];
@@ -197,20 +210,13 @@ export class DhanAdapter {
         const ids = batch.map(t => parseInt(t.dhanId));
 
         try {
-          const requestSegments = segment === 'NSE_CURRENCY' ? ['NSE_CURRENCY', 'CUR'] : [segment];
-          let data = null;
-          for (const requestSegment of requestSegments) {
-            const resp = await axios.post(
-              `${DHAN_API_BASE}/marketfeed/ltp`,
-              { [requestSegment]: ids },
-              { httpsAgent: IPV4_AGENT, timeout: 6000, headers: this.auth.getHeaders() }
-            );
-            data = resp.data?.data || resp.data;
-            if (data?.[requestSegment] && typeof data[requestSegment] === 'object') {
-              data = data[requestSegment];
-            }
-            if (data && Object.keys(data).length > 0) break;
-          }
+          const resp = await axios.post(
+            `${DHAN_API_BASE}/marketfeed/ltp`,
+            { [segment]: ids },
+            { httpsAgent: IPV4_AGENT, timeout: 6000, headers: this.auth.getHeaders() }
+          );
+
+          const data = resp.data?.data || resp.data;
           if (data && typeof data === 'object') {
             for (const [dhanId, quote] of Object.entries(data)) {
               // Find the original token for this dhanId
@@ -251,11 +257,14 @@ export class DhanAdapter {
       throw new Error('[Dhan] Token invalid for quote');
     }
 
+    const canonical = resolveDhanInstrument({ securityId, exchangeSegment });
+    if (!canonical) return null;
+
     try {
       const resp = await axios.post(
         `${DHAN_API_BASE}/marketfeed/quote`,
         {
-          [exchangeSegment]: [parseInt(securityId)],
+          [canonical.exchangeSegment]: [parseInt(canonical.securityId)],
         },
         {
           httpsAgent: IPV4_AGENT,
@@ -267,7 +276,7 @@ export class DhanAdapter {
       const data = resp.data?.data || resp.data;
       return data || null;
     } catch (err) {
-      console.error(`[Dhan] Quote error for ${securityId}:`, err.response?.data?.message || err.message);
+      console.error(`[Dhan] Quote error for ${canonical.securityId}:`, err.response?.data?.message || err.message);
       throw err;
     }
   }
@@ -289,11 +298,14 @@ export class DhanAdapter {
       throw new Error('[Dhan] Token invalid for depth');
     }
 
+    const canonical = resolveDhanInstrument({ securityId, exchangeSegment });
+    if (!canonical) return null;
+
     try {
       const resp = await axios.post(
         `${DHAN_API_BASE}/marketfeed/quote`,
         {
-          [exchangeSegment]: [parseInt(securityId)],
+          [canonical.exchangeSegment]: [parseInt(canonical.securityId)],
         },
         {
           httpsAgent: IPV4_AGENT,
@@ -305,11 +317,11 @@ export class DhanAdapter {
       const data = resp.data?.data || resp.data;
       // Transform Dhan depth into our MarketDepth format
       if (data) {
-        return this._transformDepth(securityId, data);
+        return this._transformDepth(canonical.securityId, data);
       }
       return null;
     } catch (err) {
-      console.error(`[Dhan] Depth error for ${securityId}:`, err.response?.data?.message || err.message);
+      console.error(`[Dhan] Depth error for ${canonical.securityId}:`, err.response?.data?.message || err.message);
       throw err;
     }
   }
