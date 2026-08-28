@@ -26,27 +26,22 @@ import { RiskEngine } from './riskEngine.js';
 import { FlashRiskEngine } from './flashRiskEngine.js';
 import { FlashRiskProfileService } from './flashRiskProfileService.js';
 import { BrokerFactory } from '../brokers/broker.factory.js';
-import { ProtectiveOrderService, PROTECTION_LEG } from './protectiveOrderService.js';
 import { PositionRepository } from '../repositories/position.repository.js';
 import { TradeRepository } from '../repositories/trade.repository.js';
-import { OrderRepository } from '../repositories/order.repository.js';
+import { OrderRepository, buildOrderCorrelationId } from '../repositories/order.repository.js';
 import { eventBus } from '../events/index.js';
 import { supabase } from '../db/client.js';
-import crypto from 'crypto';
-
-// ─── Broker-timeout recovery constants ───────────────────────────────────────
-// After adapter.placeOrder() throws/times out, retry recovery after this delay.
-const TIMEOUT_RECOVERY_DELAY_MS = 15_000; // 15 seconds
-// Maximum attempts to match a PENDING_RECONCILIATION order against Dhan order list
-const TIMEOUT_RECOVERY_MAX_ATTEMPTS = 4;
+import { PositionReconciliationService } from './positionReconciliationService.js';
 
 const positionRepo = new PositionRepository();
 const tradeRepo = new TradeRepository();
 const orderRepo = new OrderRepository();
+const recoveryStates = new Map();
 
 export class OrderExecutionService {
-  constructor(marketDataEngine) {
+  constructor(marketDataEngine, { positionReconciliationService = new PositionReconciliationService() } = {}) {
     this.marketDataEngine = marketDataEngine;
+    this.positionReconciliationService = positionReconciliationService;
     this._dataProviderSwitch = null;
     this._candleService = null;
     this._paperOrderMonitor = null;
@@ -54,26 +49,7 @@ export class OrderExecutionService {
     this._pendingPaperOrders = new Map();
     // Concurrency guard for exitPosition: positionId → Promise
     this._exitInFlight = new Map();
-    // P4.1: broker-side protective-order service (live mode only). Lazily built.
-    this._protectiveService = null;
     this._startPaperOrderMonitor();
-  }
-
-  /**
-   * P4.1: lazily construct the ProtectiveOrderService with live dependencies.
-   * Only used in the LIVE branch of attachStopLoss/attachTakeProfit. The paper
-   * path never touches this.
-   */
-  _getProtectiveService() {
-    if (!this._protectiveService) {
-      this._protectiveService = new ProtectiveOrderService({
-        orderRepo,
-        supabase,
-        eventBus,
-        getAdapter: (provider) => BrokerFactory.create(provider),
-      });
-    }
-    return this._protectiveService;
   }
 
   /**
@@ -83,6 +59,37 @@ export class OrderExecutionService {
   setFallbackServices(dataProviderSwitch, candleService) {
     this._dataProviderSwitch = dataProviderSwitch;
     this._candleService = candleService;
+  }
+
+  static isBrokerUncertainty(error) {
+    const code = String(error?.code || '').toUpperCase();
+    const message = String(error?.message || '').toLowerCase();
+    return ['ETIMEDOUT', 'ECONNABORTED', 'ECONNRESET', 'ENETUNREACH', 'EAI_AGAIN'].includes(code)
+      || message.includes('timeout')
+      || message.includes('timed out')
+      || message.includes('network error')
+      || message.includes('socket hang up');
+  }
+
+  async _markPendingReconciliation(accountId, orderId, correlationId, brokerProvider, reason) {
+    try {
+      await orderRepo.updateStatus(orderId, 'PENDING_RECONCILIATION', {
+        correlation_id: correlationId,
+        reject_reason: reason,
+      });
+    } catch (persistenceError) {
+      console.error(`[OrderExecution] Cannot persist PENDING_RECONCILIATION for ${orderId}:`, persistenceError.message);
+    }
+
+    eventBus.publish('order.updated', {
+      orderId,
+      status: 'PENDING_RECONCILIATION',
+      correlationId,
+      brokerProvider,
+      reason,
+    }, { accountId });
+
+    return { orderId, status: 'PENDING_RECONCILIATION', correlationId, message: reason };
   }
 
   /**
@@ -384,19 +391,6 @@ export class OrderExecutionService {
   }
 
   /**
-   * P4.1: reconcile broker-side SL/TP protection after a restart (LIVE mode).
-   * Delegates to ProtectiveOrderService.reconcileProtection, which flags any
-   * open position that desires protection but has no live broker order.
-   * Read-only against the broker; fails closed by flagging, never assumes safe.
-   *
-   * @param {string} brokerProvider
-   * @returns {Promise<{checked:number, unresolved:number, positions:Array}|null>}
-   */
-  async reconcileBrokerProtection(brokerProvider = 'dhan') {
-    return this._getProtectiveService().reconcileProtection(brokerProvider);
-  }
-
-  /**
    * Execute an order that has already been inserted into t_orders with PENDING status.
    * Full pipeline: risk check → broker → fill handling → position/trade update.
    * 
@@ -436,11 +430,7 @@ export class OrderExecutionService {
         if (FlashRiskProfileService.isFlashAccount(account)) {
           riskResult = await FlashRiskEngine.validateOrder(accountId, orderParams, quoteProvider, account);
         } else {
-          // Pass the challenge-joined account so RiskEngine can resolve the
-          // correct profile leverage/rules (1-Step/2-Step/Instant). Without
-          // this it re-loads the bare row via findById, losing the plan and
-          // falling back to a hardcoded 10x leverage.
-          riskResult = await RiskEngine.validateOrder(accountId, orderParams, quoteProvider, account);
+          riskResult = await RiskEngine.validateOrder(accountId, orderParams, quoteProvider);
         }
       } catch (riskErr) {
         // PRODUCTION: Risk engine failure = REJECT order. Never allow trading when risk checks fail.
@@ -502,16 +492,100 @@ export class OrderExecutionService {
         };
         console.log(`[OrderExecution] PAPER MODE: Simulated ${orderParams.orderType} ${orderParams.side} ${orderParams.qty}x${orderParams.symbol} @ ${ltp} [validity=${orderParams.validity||'DAY'}${orderParams.isAmo?' AMO':''}]`);
       } else {
+        let durableOrder;
         try {
-          const adapter = await BrokerFactory.create(brokerProvider);
+          durableOrder = await orderRepo.findById(orderId);
+        } catch (persistenceError) {
+          return await this._markPendingReconciliation(
+            accountId,
+            orderId,
+            orderParams.correlationId || buildOrderCorrelationId(accountId, orderId),
+            brokerProvider,
+            `Durable order lookup unavailable: ${persistenceError.message}`
+          );
+        }
 
-          // Generate a stable correlationId BEFORE calling Dhan so we can
-          // persist it to DB and use it for timeout-recovery scans.
-          // Dhan's own placeOrder() would generate a random one internally;
-          // we override it here so we control the value.
-          const stableCorrelationId = `FW_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+        if (durableOrder?.status === 'PENDING_RECONCILIATION') {
+          return {
+            orderId,
+            status: 'PENDING_RECONCILIATION',
+            correlationId: durableOrder.correlation_id || orderParams.correlationId,
+            message: 'Order is unresolved and cannot be resubmitted',
+          };
+        }
 
-          // Patch the correlation id onto the order params so the adapter uses it
+        const correlationId = durableOrder?.correlation_id;
+        if (!correlationId) {
+          return await this._markPendingReconciliation(
+            accountId,
+            orderId,
+            orderParams.correlationId || buildOrderCorrelationId(accountId, orderId),
+            brokerProvider,
+            'Durable correlation state unavailable; broker submission blocked'
+          );
+        }
+        orderParams.correlationId = correlationId;
+
+        const idempotencyKey = durableOrder?.idempotency_key;
+        if (!idempotencyKey) {
+          return await this._markPendingReconciliation(
+            accountId,
+            orderId,
+            correlationId,
+            brokerProvider,
+            'Durable idempotency state unavailable; broker submission blocked'
+          );
+        }
+        orderParams.idempotencyKey = idempotencyKey;
+
+        if (!durableOrder?.correlation_id) {
+          try {
+            await orderRepo.persistCorrelationState(orderId, accountId, correlationId);
+          } catch (persistenceError) {
+            return await this._markPendingReconciliation(
+              accountId,
+              orderId,
+              correlationId,
+              brokerProvider,
+              `Correlation persistence unavailable: ${persistenceError.message}`
+            );
+          }
+        }
+
+        recoveryStates.set(orderId, {
+          accountId,
+          orderParams: { ...orderParams },
+          brokerProvider,
+          correlationId,
+        });
+
+        // A cached reconciliation result must never authorize live trading.
+        // Refresh both broker and database positions immediately before adapter creation.
+        try {
+          const reconciliation = await this.positionReconciliationService.reconcile(accountId, account);
+          if (!reconciliation || reconciliation.status !== 'MATCH' || reconciliation.safe !== true) {
+            const status = reconciliation?.status || 'UNAVAILABLE';
+            throw new Error(`fresh position reconciliation returned ${status}`);
+          }
+        } catch (reconciliationError) {
+          const reason = `Position reconciliation safety check failed: ${reconciliationError.message}`;
+          try {
+            await orderRepo.markRejected(orderId, reason);
+          } catch (e) { /* best effort */ }
+          eventBus.publish('order.updated', {
+            orderId,
+            status: 'REJECTED',
+            rejectReason: reason,
+            reconciliationBlocked: true,
+            correlationId,
+          }, { accountId });
+          return { orderId, status: 'REJECTED', safety: 'POSITION_RECONCILIATION_BLOCKED', message: reason };
+        }
+
+        let adapter;
+        try {
+          adapter = await BrokerFactory.create(brokerProvider);
+
           brokerResponse = await adapter.placeOrder({
             symbol: orderParams.symbol,
             token: orderParams.token,
@@ -523,55 +597,21 @@ export class OrderExecutionService {
             qty: orderParams.qty,
             price: orderParams.price || 0,
             triggerPrice: orderParams.triggerPrice || 0,
-            correlationId: stableCorrelationId,
+            correlationId,
+            idempotencyKey: orderParams.idempotencyKey,
           });
-
-          // Store the stable correlation ID on the order for later recovery queries
-          try {
-            await orderRepo.updateStatus(orderId, 'PENDING', { correlation_id: stableCorrelationId });
-          } catch (_) { /* best-effort — column may not exist yet */ }
-
         } catch (brokerErr) {
-          // ── Timeout recovery path ─────────────────────────────────────────
-          // A network timeout means Dhan may or may not have accepted the order.
-          // Do NOT assume REJECTED. Do NOT retry immediately.
-          // Mark as PENDING_RECONCILIATION and schedule a background recovery attempt.
-          const isTimeout = (
-            brokerErr.code === 'ECONNABORTED' ||
-            brokerErr.code === 'ETIMEDOUT' ||
-            /timeout/i.test(brokerErr.message)
-          );
-
-          if (isTimeout) {
-            console.warn(`[OrderExecution] Broker timeout for order ${orderId} — marking PENDING_RECONCILIATION`);
-
-            // Persist reconciliation state so the zombie-PENDING scanner
-            // and the background recovery loop can find this order.
-            try {
-              await orderRepo.updateStatus(orderId, 'PENDING_RECONCILIATION', {
-                reject_reason: `Broker timeout at ${new Date().toISOString()} — pending reconciliation`,
-              });
-            } catch (e) { /* best effort */ }
-
-            eventBus.publish('order.updated', {
+          if (OrderExecutionService.isBrokerUncertainty(brokerErr)) {
+            return await this._markPendingReconciliation(
+              accountId,
               orderId,
-              status: 'PENDING_RECONCILIATION',
-              symbol: orderParams.symbol,
-              token: orderParams.token,
-              segment: orderParams.segment,
-              side: orderParams.side,
+              correlationId,
               brokerProvider,
-            }, { accountId });
-
-            // Background recovery: wait 15s, then scan Dhan order list for
-            // a matching correlationId to recover broker_order_id.
-            // This runs non-blocking — the placeOrder call returns immediately.
-            this._scheduleTimeoutRecovery(accountId, orderId, brokerProvider, 1);
-
-            return { orderId, status: 'PENDING_RECONCILIATION', message: 'Broker timeout — order state is uncertain, reconciliation in progress' };
+              `Broker response uncertain: ${brokerErr.message}`
+            );
           }
 
-          // Non-timeout broker error (auth, validation, etc.) → genuine REJECTED
+          // Adapter creation or an explicit broker rejection is not retried.
           const reason = `Broker error: ${brokerErr.message}`;
           try {
             await orderRepo.markRejected(orderId, reason);
@@ -596,8 +636,18 @@ export class OrderExecutionService {
       const brokerOrderId = brokerResponse.brokerOrderId || brokerResponse.orderId;
       const brokerStatus = (brokerResponse.status || '').toUpperCase();
 
+      if (['TIMEOUT', 'UNKNOWN', 'API_ERROR'].includes(brokerStatus) || !brokerStatus) {
+        return await this._markPendingReconciliation(
+          accountId,
+          orderId,
+          brokerResponse.correlationId || orderParams.correlationId,
+          brokerProvider,
+          brokerResponse.message || 'Broker response uncertain'
+        );
+      }
+
       // ── Step 3: Handle Broker Response ────────────────────────
-      if (brokerStatus === 'REJECTED' || brokerStatus === 'FAILED') {
+      if (brokerStatus === 'REJECTED' || brokerStatus === 'FAILED' || brokerStatus === 'API_ERROR') {
         const reason = brokerResponse.message || 'Order rejected by broker';
         try {
           await orderRepo.markRejected(orderId, reason);
@@ -621,10 +671,12 @@ export class OrderExecutionService {
 
       // For MARKET orders, assume immediate fill at LTP (broker returns quickly)
       // For LIMIT/SL orders, set to OPEN (awaiting fill)
-      if (orderParams.orderType === 'MARKET') {
+      const confirmedFill = ['FILLED', 'TRADED', 'COMPLETE', 'COMPLETED'].includes(brokerStatus);
+      if (orderParams.orderType === 'MARKET' && confirmedFill) {
         return await this._handleMarketFill(accountId, orderId, orderParams, brokerOrderId, brokerProvider, latencyMs, account);
       } else {
-        // LIMIT, SL, SL-M → mark as OPEN
+        // Unfilled accepted orders, including MARKET orders without a confirmed
+        // fill, remain broker-linked and are resolved by status recovery.
         try {
           await orderRepo.updateStatus(orderId, 'OPEN', { broker_order_id: brokerOrderId });
         } catch (e) { /* best effort */ }
@@ -669,10 +721,115 @@ export class OrderExecutionService {
     }
   }
 
+  async recoverTimedOutOrder(orderId, account = {}) {
+    let state = recoveryStates.get(orderId);
+    if (!state) {
+      let order;
+      try {
+        order = await orderRepo.findById(orderId);
+      } catch (error) {
+        return { orderId, status: 'PENDING_RECONCILIATION', recoverable: false, reason: error.message };
+      }
+
+      if (!order?.correlation_id || !order.trading_account_id) {
+        return { orderId, status: 'PENDING_RECONCILIATION', recoverable: false, reason: 'Persisted correlation state unavailable' };
+      }
+
+      let correlatedOrder;
+      try {
+        correlatedOrder = await orderRepo.findByCorrelationId(order.trading_account_id, order.correlation_id);
+      } catch (error) {
+        return { orderId, status: 'PENDING_RECONCILIATION', recoverable: false, reason: `correlation lookup ambiguous or unavailable: ${error.message}` };
+      }
+      if (!correlatedOrder || correlatedOrder.id !== orderId) {
+        return { orderId, status: 'PENDING_RECONCILIATION', recoverable: false, reason: 'Persisted correlation state unavailable' };
+      }
+
+      state = {
+        accountId: order.trading_account_id,
+        orderParams: {
+          symbol: order.symbol,
+          token: order.token,
+          segment: order.segment,
+          side: order.side,
+          qty: order.qty,
+          orderType: order.order_type,
+          productType: order.product_type,
+          price: order.price,
+          triggerPrice: order.trigger_price,
+        },
+        brokerProvider: account.broker_provider || account.brokerProvider || 'dhan',
+        correlationId: order.correlation_id,
+      };
+      recoveryStates.set(orderId, state);
+    }
+
+    if (state.recoveryPromise) return state.recoveryPromise;
+
+    state.recoveryPromise = (async () => {
+      let adapter;
+      try {
+        adapter = await BrokerFactory.create(state.brokerProvider);
+      } catch (error) {
+        return { orderId, status: 'PENDING_RECONCILIATION', correlationId: state.correlationId, recoverable: false, recoveryError: error.message };
+      }
+
+      let brokerOrders;
+      try {
+        brokerOrders = await adapter.getOrders({ correlationId: state.correlationId });
+      } catch (error) {
+        return { orderId, status: 'PENDING_RECONCILIATION', correlationId: state.correlationId, recoverable: false, recoveryError: error.message };
+      }
+
+      const matchingBrokerOrders = (brokerOrders || []).filter((candidate) => {
+        const candidateCorrelation = candidate.correlationId || candidate.correlationID || candidate.correlation_id;
+        return candidateCorrelation === state.correlationId;
+      });
+
+      if (matchingBrokerOrders.length !== 1) {
+        return {
+          orderId,
+          status: 'PENDING_RECONCILIATION',
+          correlationId: state.correlationId,
+          recoverable: false,
+          reason: matchingBrokerOrders.length > 1 ? 'ambiguous broker correlation' : 'broker order not found',
+        };
+      }
+
+      const brokerOrder = matchingBrokerOrders[0];
+      const brokerOrderId = brokerOrder.brokerOrderId || brokerOrder.orderId || brokerOrder.id;
+      const brokerStatus = String(brokerOrder.status || '').toUpperCase();
+
+      if (['REJECTED', 'FAILED'].includes(brokerStatus)) {
+        await orderRepo.markRejected(orderId, brokerOrder.message || 'Explicit broker rejection');
+        return { orderId, brokerOrderId, correlationId: state.correlationId, status: 'REJECTED' };
+      }
+
+      const filledQty = Number(brokerOrder.filledQty ?? brokerOrder.filledQuantity ?? 0);
+      if (brokerStatus === 'FILLED' || brokerStatus === 'TRADED' || filledQty > 0) {
+        await this.handleBrokerFill(state.accountId, orderId, {
+          filledQty: filledQty || state.orderParams.qty,
+          avgPrice: brokerOrder.avgPrice ?? brokerOrder.averagePrice ?? state.orderParams.price,
+          brokerOrderId,
+        });
+        return { orderId, brokerOrderId, correlationId: state.correlationId, status: 'FILLED' };
+      }
+
+      await orderRepo.updateStatus(orderId, 'OPEN', { broker_order_id: brokerOrderId });
+      return { orderId, brokerOrderId, correlationId: state.correlationId, status: brokerStatus || 'OPEN' };
+    })();
+
+    try {
+      return await state.recoveryPromise;
+    } finally {
+      state.recoveryPromise = null;
+    }
+  }
+
   /**
    * Handle market order fill — INSTANT execution (<50ms).
    * Uses synchronous cache LTP only. No blocking network calls in the hot path.
-   * DB writes happen in parallel AFTER the position event is emitted.
+    * Confirmed-fill persistence completes before final lifecycle events are emitted.
    */
   async _handleMarketFill(accountId, orderId, orderParams, brokerOrderId, brokerProvider, latencyMs, account = null) {
     // Safe resolution: ensure account is available for post-trade risk checks
@@ -747,9 +904,30 @@ export class OrderExecutionService {
 
     const filledQty = orderParams.qty;
 
-    // ── OPTIMISTIC: Emit position + order events IMMEDIATELY ──
-    // This reaches the UI in <5ms via EventBridge → Socket.IO.
-    // DB persistence happens in parallel afterwards.
+    // Persist the confirmed fill before publishing final lifecycle events.
+    try {
+      await orderRepo.markFilled(orderId, filledQty, fillPrice, brokerOrderId);
+      await positionRepo.upsertPosition(accountId, {
+        symbol: orderParams.symbol, token: orderParams.token,
+        segment: orderParams.segment, exchange: orderParams.exchange || orderParams.segment,
+        productType: orderParams.productType, side: orderParams.side,
+        qty: filledQty, price: fillPrice,
+      });
+      await tradeRepo.recordTrade(accountId, orderId, {
+        symbol: orderParams.symbol, token: orderParams.token,
+        segment: orderParams.segment, exchange: orderParams.exchange || orderParams.segment,
+        side: orderParams.side, qty: filledQty, price: fillPrice,
+      });
+    } catch (persistenceError) {
+      return await this._markPendingReconciliation(
+        accountId,
+        orderId,
+        orderParams.correlationId,
+        brokerProvider,
+        `Confirmed broker fill persistence failed: ${persistenceError.message}`
+      );
+    }
+
     eventBus.publish('order.updated', {
       orderId, status: 'FILLED',
       symbol: orderParams.symbol, token: orderParams.token,
@@ -759,7 +937,6 @@ export class OrderExecutionService {
       qty: orderParams.qty,
     }, { accountId });
 
-    // Emit position update optimistically (before DB write)
     eventBus.publish('position.updated', {
       symbol: orderParams.symbol,
       token: orderParams.token,
@@ -773,7 +950,6 @@ export class OrderExecutionService {
       pnl: 0,
     }, { accountId });
 
-    // Emit trade event optimistically
     eventBus.publish('trade.executed', {
       orderId, symbol: orderParams.symbol, token: orderParams.token,
       segment: orderParams.segment, side: orderParams.side,
@@ -781,42 +957,9 @@ export class OrderExecutionService {
       executedAt: new Date().toISOString(),
     }, { accountId });
 
-    // ── NON-BLOCKING: Persist to DB in parallel (fire-and-forget) ──
-    // These writes happen AFTER the UI has already updated.
-    const persistPromises = [];
-
-    // Mark order as FILLED
-    persistPromises.push(
-      orderRepo.markFilled(orderId, filledQty, fillPrice, brokerOrderId)
-        .catch(err => { if (!err.message?.includes('schema cache')) console.error(`[OrderExecution] DB order fill write failed:`, err.message); })
-    );
-
-    // Upsert position
-    persistPromises.push(
-      positionRepo.upsertPosition(accountId, {
-        symbol: orderParams.symbol, token: orderParams.token,
-        segment: orderParams.segment, exchange: orderParams.exchange || orderParams.segment,
-        productType: orderParams.productType, side: orderParams.side,
-        qty: filledQty, price: fillPrice,
-      }).catch(err => { if (!err.message?.includes('schema cache')) console.error(`[OrderExecution] DB position write failed:`, err.message); })
-    );
-
-    // Record trade
-    persistPromises.push(
-      tradeRepo.recordTrade(accountId, orderId, {
-        symbol: orderParams.symbol, token: orderParams.token,
-        segment: orderParams.segment, exchange: orderParams.exchange || orderParams.segment,
-        side: orderParams.side, qty: filledQty, price: fillPrice,
-      }).catch(err => { if (!err.message?.includes('schema cache')) console.error(`[OrderExecution] DB trade write failed:`, err.message); })
-    );
-
-    // Run all DB writes in parallel — don't block the response
-    Promise.all(persistPromises).then(() => {
-      // Post-trade risk check (non-blocking, after persistence)
-      if (account) {
-        this._postTradeRiskCheck(accountId, orderParams, account).catch(() => {});
-      }
-    }).catch(() => {});
+    if (account) {
+      this._postTradeRiskCheck(accountId, orderParams, account).catch(() => {});
+    }
 
     // Flash 24h timer (non-blocking)
     if (account && FlashRiskProfileService.isFlashAccount(account)) {
@@ -1186,31 +1329,8 @@ export class OrderExecutionService {
       return { orderId: order.id, status: 'OPEN', type: 'SL-M', triggerPrice };
     }
 
-    // ── LIVE mode (P4.1): submit a broker-side protective SL-M order ──────────
-    // The DB order row created above (`order`) was a placeholder for the paper
-    // path; in live mode we route through the ProtectiveOrderService which
-    // creates its own correlated order row, submits to the broker, and is
-    // fail-closed. Cancel the placeholder so it does not linger as PENDING.
-    try { await orderRepo.updateStatus(order.id, 'CANCELLED', { reject_reason: 'Superseded by broker-side protection (P4.1)' }); } catch (_) {}
-
-    const brokerProvider = account?.broker_provider || account?.brokerProvider || 'dhan';
-    const protectiveResult = await this._getProtectiveService().submitProtection({
-      accountId,
-      position,
-      leg: PROTECTION_LEG.SL,
-      price: triggerPrice,
-      brokerProvider,
-    });
-
-    return {
-      orderId: protectiveResult.orderId,
-      status: protectiveResult.status === 'PROTECTED' ? 'OPEN' : 'FAILED',
-      type: 'SL-M',
-      triggerPrice,
-      protection: protectiveResult.status,
-      brokerOrderId: protectiveResult.brokerOrderId,
-      reason: protectiveResult.reason,
-    };
+    const result = await this.executeOrder(accountId, order.id, orderParams, account);
+    return result;
   }
 
   /**
@@ -1254,29 +1374,8 @@ export class OrderExecutionService {
       return { orderId: order.id, status: 'OPEN', type: 'LIMIT', price: targetPrice };
     }
 
-    // ── LIVE mode (P4.1): submit a broker-side protective LIMIT (TP) order ────
-    // See attachStopLoss for rationale. Cancel the placeholder row and route
-    // through the fail-closed ProtectiveOrderService.
-    try { await orderRepo.updateStatus(order.id, 'CANCELLED', { reject_reason: 'Superseded by broker-side protection (P4.1)' }); } catch (_) {}
-
-    const brokerProvider = account?.broker_provider || account?.brokerProvider || 'dhan';
-    const protectiveResult = await this._getProtectiveService().submitProtection({
-      accountId,
-      position,
-      leg: PROTECTION_LEG.TP,
-      price: targetPrice,
-      brokerProvider,
-    });
-
-    return {
-      orderId: protectiveResult.orderId,
-      status: protectiveResult.status === 'PROTECTED' ? 'OPEN' : 'FAILED',
-      type: 'LIMIT',
-      price: targetPrice,
-      protection: protectiveResult.status,
-      brokerOrderId: protectiveResult.brokerOrderId,
-      reason: protectiveResult.reason,
-    };
+    const result = await this.executeOrder(accountId, order.id, orderParams, account);
+    return result;
   }
 
   /**
@@ -1336,108 +1435,6 @@ export class OrderExecutionService {
       .single();
     if (error) return null;
     return data;
-  }
-
-  /**
-   * TIMEOUT RECOVERY — Fix 2
-   *
-   * After a broker call times out, schedule a background attempt to recover
-   * the broker_order_id by scanning GET /v2/orders for a matching correlationId.
-   *
-   * If a match is found: update order to OPEN/PENDING with the broker_order_id
-   * so the DhanOrderPoller can pick it up on the next cycle.
-   *
-   * If max attempts are exhausted without a match: mark order FAILED and emit
-   * an alert — never silently leave it as PENDING_RECONCILIATION forever.
-   *
-   * @param {string} accountId
-   * @param {string} orderId  FW internal order id
-   * @param {string} brokerProvider
-   * @param {number} attempt  1-based attempt counter
-   */
-  _scheduleTimeoutRecovery(accountId, orderId, brokerProvider, attempt) {
-    if (attempt > TIMEOUT_RECOVERY_MAX_ATTEMPTS) {
-      // Give up — permanently mark as FAILED so it surfaces in UI
-      orderRepo.updateStatus(orderId, 'FAILED', {
-        reject_reason: `Broker timeout: recovery exhausted after ${TIMEOUT_RECOVERY_MAX_ATTEMPTS} attempts`,
-      }).catch(() => {});
-      eventBus.publish('order.updated', {
-        orderId,
-        status: 'FAILED',
-        rejectReason: 'Broker timeout: could not recover broker_order_id',
-      }, { accountId });
-      console.error(`[OrderExecution] Timeout recovery: giving up on order ${orderId} after ${TIMEOUT_RECOVERY_MAX_ATTEMPTS} attempts`);
-      return;
-    }
-
-    const delay = TIMEOUT_RECOVERY_DELAY_MS * attempt; // back-off: 15s, 30s, 45s, 60s
-    console.log(`[OrderExecution] Timeout recovery: scheduling attempt ${attempt}/${TIMEOUT_RECOVERY_MAX_ATTEMPTS} for order ${orderId} in ${delay / 1000}s`);
-
-    setTimeout(async () => {
-      try {
-        // Re-read the order — if it recovered another way (e.g. manual fix), stop
-        const order = await this._findOrder(orderId);
-        if (!order) return;
-        if (!['PENDING', 'PENDING_RECONCILIATION'].includes(order.status)) {
-          console.log(`[OrderExecution] Timeout recovery: order ${orderId} already resolved (status=${order.status})`);
-          return;
-        }
-
-        const correlationId = order.correlation_id;
-        if (!correlationId) {
-          console.warn(`[OrderExecution] Timeout recovery: order ${orderId} has no correlation_id — cannot match broker order`);
-          this._scheduleTimeoutRecovery(accountId, orderId, brokerProvider, attempt + 1);
-          return;
-        }
-
-        // Query Dhan order list — scan for matching correlationId
-        const adapter = await BrokerFactory.create(brokerProvider).catch(() => null);
-        if (!adapter || !adapter.auth?.isTokenValid) {
-          console.warn(`[OrderExecution] Timeout recovery: broker adapter unavailable — will retry`);
-          this._scheduleTimeoutRecovery(accountId, orderId, brokerProvider, attempt + 1);
-          return;
-        }
-
-        const brokerOrders = await adapter.getOrders().catch(() => []);
-        // Dhan returns correlationId in the raw response — not mapped in our adapter
-        // so we must fetch the raw list ourselves via getOrders and check .raw if available,
-        // OR rely on the fact that we stored the correlationId in the order row.
-        // Since our getOrders() doesn't expose correlationId, we match by approximate
-        // time + symbol + side + qty as a secondary heuristic.
-        const placedAt = new Date(order.placed_at).getTime();
-        const WINDOW_MS = 5 * 60 * 1000; // 5-minute window around the timeout
-
-        const matched = brokerOrders.find(bo => {
-          const boTime = bo.placedAt ? new Date(bo.placedAt).getTime() : 0;
-          return (
-            (bo.symbol === order.symbol || bo.token === order.token) &&
-            bo.side === order.side &&
-            bo.qty === order.qty &&
-            Math.abs(boTime - placedAt) < WINDOW_MS
-          );
-        });
-
-        if (matched) {
-          console.log(`[OrderExecution] Timeout recovery: matched broker order ${matched.brokerOrderId} for FW order ${orderId}`);
-          await orderRepo.updateStatus(orderId, 'OPEN', {
-            broker_order_id: matched.brokerOrderId,
-            reject_reason: null,
-          }).catch(() => {});
-          eventBus.publish('order.updated', {
-            orderId,
-            status: 'OPEN',
-            brokerOrderId: matched.brokerOrderId,
-            symbol: order.symbol,
-          }, { accountId });
-        } else {
-          console.warn(`[OrderExecution] Timeout recovery: no match found for order ${orderId} (attempt ${attempt})`);
-          this._scheduleTimeoutRecovery(accountId, orderId, brokerProvider, attempt + 1);
-        }
-      } catch (err) {
-        console.error(`[OrderExecution] Timeout recovery error for order ${orderId}:`, err.message);
-        this._scheduleTimeoutRecovery(accountId, orderId, brokerProvider, attempt + 1);
-      }
-    }, delay);
   }
 
   async _getAccount(accountId) {

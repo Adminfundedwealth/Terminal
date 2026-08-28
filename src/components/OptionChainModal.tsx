@@ -11,7 +11,6 @@
  * - Module-level caches reduce repeat latency without persisting stale data.
  */
 import { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react';
-import type { Ref } from 'react';
 import { useAppStore } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
 import { getOptionChain, getExpiries, getLotSize } from '@/services/api';
@@ -170,60 +169,6 @@ interface StrikeRowProps {
   // IV from optionsWorker (0 = not yet computed or unavailable)
   callIv: number;
   putIv: number;
-  // P5.3: tick direction for LTP flash (1 = up, -1 = down, 0 = unchanged)
-  callTickDir: number;
-  putTickDir: number;
-  // P5: ref attached to the ATM row's <tr> so the parent can scroll to it.
-  atmRef?: Ref<HTMLTableRowElement>;
-  // P5: when true, show inline Greeks (delta) next to IV.
-  showGreeks: boolean;
-}
-
-// ─── P5.3 formatting helpers (module-level, pure) ───────────────────────────
-/** Format a signed change value with sign; '—' when unavailable. */
-function formatChange(value: number, has: boolean | undefined): string {
-  if (!has) return '—';
-  const s = value > 0 ? '+' : '';
-  return `${s}${value.toFixed(2)}`;
-}
-/** Format a signed change percentage; '—' when unavailable. */
-function formatChangePct(value: number, has: boolean | undefined): string {
-  if (!has) return '—';
-  const s = value > 0 ? '+' : '';
-  return `${s}${value.toFixed(2)}%`;
-}
-/** Bid/Ask display — '—' when not a positive number (never fabricated). */
-function formatQuote(value: number | undefined): string {
-  return value && value > 0 ? formatPrice(value) : '—';
-}
-/** Spread display — only when hasSpread; else '—'. */
-function formatSpread(value: number | undefined, has: boolean | undefined): string {
-  return has && value && value > 0 ? value.toFixed(2) : '—';
-}
-
-/**
- * P5.3 — Compute tick direction for a strike's CE/PE LTP vs the previous render.
- * Returns 1 (up), -1 (down), or 0 (unchanged / no prior value). Only a genuine
- * change from a positive previous value produces a nonzero direction, so the
- * first render and market-closed static data do not flash.
- */
-function computeTickDirs(
-  e: OptionChainEntry,
-  prev: Map<string, { c: number; p: number }>,
-): { callTickDir: number; putTickDir: number } {
-  const key = String(e.strike);
-  const prevVals = prev.get(key);
-  let callTickDir = 0;
-  let putTickDir = 0;
-  if (prevVals) {
-    if (prevVals.c > 0 && e.callLtp > 0 && e.callLtp !== prevVals.c) {
-      callTickDir = e.callLtp > prevVals.c ? 1 : -1;
-    }
-    if (prevVals.p > 0 && e.putLtp > 0 && e.putLtp !== prevVals.p) {
-      putTickDir = e.putLtp > prevVals.p ? 1 : -1;
-    }
-  }
-  return { callTickDir, putTickDir };
 }
 
 const StrikeRow = memo(function StrikeRow({
@@ -242,10 +187,6 @@ const StrikeRow = memo(function StrikeRow({
   setOrderForm,
   callIv,
   putIv,
-  callTickDir,
-  putTickDir,
-  atmRef,
-  showGreeks,
 }: StrikeRowProps) {
   const callOiChg = e.callOiChange || 0;
   const putOiChg  = e.putOiChange  || 0;
@@ -254,15 +195,8 @@ const StrikeRow = memo(function StrikeRow({
   const displayCallIv = e.callIv > 0 ? e.callIv : callIv;
   const displayPutIv  = e.putIv  > 0 ? e.putIv  : putIv;
 
-  // P5.3: LTP flash class — brief bg tint on tick up/down. The `key`-less
-  // approach relies on callTickDir changing; reduced-motion users get the
-  // static color only (animation is defined with motion-safe in index.css).
-  const callFlash = callTickDir > 0 ? 'fw-tick-up' : callTickDir < 0 ? 'fw-tick-down' : '';
-  const putFlash  = putTickDir  > 0 ? 'fw-tick-up' : putTickDir  < 0 ? 'fw-tick-down' : '';
-
   return (
     <tr
-      ref={atmRef}
       className={cn(
         'border-b border-fw-border/20 transition-colors group',
         isAtm
@@ -318,40 +252,19 @@ const StrikeRow = memo(function StrikeRow({
           >
             {formatNumber(e.callVolume || 0)}
           </td>
-          {/* CALL IV (+ delta when Greeks enabled) */}
-          <td className="px-1 py-1 text-right font-mono tabular-nums text-fw-text-secondary leading-tight">
-            <span className="block">{displayCallIv > 0 ? displayCallIv.toFixed(1) + '%' : '—'}</span>
-            {showGreeks && (
-              <span className="block text-[8px] text-fw-text-muted" title="Delta">
-                Δ {e.callDelta ? e.callDelta.toFixed(2) : '—'}
-              </span>
-            )}
+          {/* CALL IV */}
+          <td className="px-1 py-1 text-right font-mono tabular-nums text-fw-text-secondary">
+            {displayCallIv > 0 ? displayCallIv.toFixed(1) + '%' : '—'}
           </td>
-          {/* CALL BID / ASK (qty + spread in tooltip) */}
-          <td
-            className="px-1 py-1 text-right font-mono tabular-nums text-fw-text-secondary leading-tight"
-            title={`Bid ${formatQuote(e.callBidPrice)} (qty ${formatNumber(e.callBidQty || 0)}) · Ask ${formatQuote(e.callAskPrice)} (qty ${formatNumber(e.callAskQty || 0)}) · Spread ${formatSpread(e.callSpread, e.callHasSpread)}`}
-          >
-            <span className="block text-emerald-400/80">{formatQuote(e.callBidPrice)}</span>
-            <span className="block text-red-400/80">{formatQuote(e.callAskPrice)}</span>
-          </td>
-          {/* CALL LTP + change% */}
+          {/* CALL LTP */}
           <td
             className={cn(
-              'px-1 py-1 text-right font-mono tabular-nums font-bold cursor-pointer hover:underline leading-tight',
-              callFlash,
+              'px-1 py-1 text-right font-mono tabular-nums font-bold cursor-pointer hover:underline',
               isSelCE ? 'text-fw-accent' : e.callLtp > 0 ? 'text-emerald-400' : 'text-fw-text-muted',
             )}
             onClick={() => onStrikeClick(e.strike, 'CE', e.callLtp, e.callToken)}
-            title={e.callHasChange ? `Change: ${formatChange(e.callChange || 0, e.callHasChange)}` : undefined}
           >
-            <span className="block">{e.callLtp > 0 ? formatPrice(e.callLtp) : '—'}</span>
-            <span className={cn(
-              'block text-[8px] font-semibold',
-              !e.callHasChange ? 'text-fw-text-muted' : (e.callChangePct || 0) > 0 ? 'text-emerald-400/80' : (e.callChangePct || 0) < 0 ? 'text-red-400/80' : 'text-fw-text-muted',
-            )}>
-              {formatChangePct(e.callChangePct || 0, e.callHasChange)}
-            </span>
+            {e.callLtp > 0 ? formatPrice(e.callLtp) : '—'}
           </td>
         </>
       )}
@@ -370,40 +283,19 @@ const StrikeRow = memo(function StrikeRow({
       {/* ── PUT SIDE ── */}
       {viewMode !== 'ce' && (
         <>
-          {/* PUT LTP + change% */}
+          {/* PUT LTP */}
           <td
             className={cn(
-              'px-1 py-1 text-left font-mono tabular-nums font-bold cursor-pointer hover:underline leading-tight',
-              putFlash,
+              'px-1 py-1 text-left font-mono tabular-nums font-bold cursor-pointer hover:underline',
               isSelPE ? 'text-fw-accent' : e.putLtp > 0 ? 'text-red-400' : 'text-fw-text-muted',
             )}
             onClick={() => onStrikeClick(e.strike, 'PE', e.putLtp, e.putToken)}
-            title={e.putHasChange ? `Change: ${formatChange(e.putChange || 0, e.putHasChange)}` : undefined}
           >
-            <span className="block">{e.putLtp > 0 ? formatPrice(e.putLtp) : '—'}</span>
-            <span className={cn(
-              'block text-[8px] font-semibold',
-              !e.putHasChange ? 'text-fw-text-muted' : (e.putChangePct || 0) > 0 ? 'text-emerald-400/80' : (e.putChangePct || 0) < 0 ? 'text-red-400/80' : 'text-fw-text-muted',
-            )}>
-              {formatChangePct(e.putChangePct || 0, e.putHasChange)}
-            </span>
+            {e.putLtp > 0 ? formatPrice(e.putLtp) : '—'}
           </td>
-          {/* PUT BID / ASK (qty + spread in tooltip) */}
-          <td
-            className="px-1 py-1 text-left font-mono tabular-nums text-fw-text-secondary leading-tight"
-            title={`Bid ${formatQuote(e.putBidPrice)} (qty ${formatNumber(e.putBidQty || 0)}) · Ask ${formatQuote(e.putAskPrice)} (qty ${formatNumber(e.putAskQty || 0)}) · Spread ${formatSpread(e.putSpread, e.putHasSpread)}`}
-          >
-            <span className="block text-emerald-400/80">{formatQuote(e.putBidPrice)}</span>
-            <span className="block text-red-400/80">{formatQuote(e.putAskPrice)}</span>
-          </td>
-          {/* PUT IV (+ delta when Greeks enabled) */}
-          <td className="px-1 py-1 text-left font-mono tabular-nums text-fw-text-secondary leading-tight">
-            <span className="block">{displayPutIv > 0 ? displayPutIv.toFixed(1) + '%' : '—'}</span>
-            {showGreeks && (
-              <span className="block text-[8px] text-fw-text-muted" title="Delta">
-                Δ {e.putDelta ? e.putDelta.toFixed(2) : '—'}
-              </span>
-            )}
+          {/* PUT IV */}
+          <td className="px-1 py-1 text-left font-mono tabular-nums text-fw-text-secondary">
+            {displayPutIv > 0 ? displayPutIv.toFixed(1) + '%' : '—'}
           </td>
           {/* Volume — red bar */}
           <td
@@ -455,7 +347,7 @@ const StrikeRow = memo(function StrikeRow({
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function OptionChainModal() {
-  const { activeSymbol, setActiveSymbol, watchlists } = useAppStore();
+  const { activeSymbol, setActiveSymbol } = useAppStore();
   const { setOrderForm, setSelectedContract, selectedContract } = useTradingStore();
   const quotes = useMarketStore((s) => s.quotes);
 
@@ -490,15 +382,6 @@ export function OptionChainModal() {
     | { type: 'ready' }
   >({ type: 'idle' });
 
-  // ── P5 UI state (declared early so render-time memos can read it) ──────────
-  // Number of strikes shown on each side of ATM (expandable). Default 20.
-  const [strikeWindow, setStrikeWindow] = useState<number>(STRIKES_AROUND_ATM);
-  // Show Greeks (delta) inline. Data is already present; off by default to keep
-  // the default desktop view uncluttered.
-  const [showGreeks, setShowGreeks] = useState<boolean>(false);
-  // Ref to the ATM row so "Jump to ATM" can scroll it into view.
-  const atmRowRef = useRef<HTMLTableRowElement | null>(null);
-
   // ── Control refs ──────────────────────────────────────────────────────────
   const isMountedRef     = useRef(true);
   // Monotonic session counter — incremented on every underlying change.
@@ -523,10 +406,6 @@ export function OptionChainModal() {
   // Track the currently WS-subscribed option token so we can unsubscribe
   // when the trader picks a different strike (prevents subscription leaks).
   const activeOptionTokenRef = useRef<string | null>(null);
-
-  // P5.3: previous LTP per strike (keyed by strike string) for tick-direction
-  // flash. A ref (not state) so updating it never causes a re-render.
-  const prevLtpRef = useRef<Map<string, { c: number; p: number }>>(new Map());
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -584,13 +463,10 @@ export function OptionChainModal() {
       const d = Math.abs(chain[i].strike - spotPrice);
       if (d < minDiff) { minDiff = d; atmIdx = i; }
     }
-    const s = Math.max(0, atmIdx - strikeWindow);
-    const e = Math.min(chain.length, atmIdx + strikeWindow + 1);
+    const s = Math.max(0, atmIdx - STRIKES_AROUND_ATM);
+    const e = Math.min(chain.length, atmIdx + STRIKES_AROUND_ATM + 1);
     return chain.slice(s, e);
-  }, [chain, spotPrice, strikeWindow]);
-
-  // P5: whether more strikes exist beyond the current window (drives "Expand").
-  const canExpandStrikes = chain.length > filteredChain.length;
+  }, [chain, spotPrice]);
 
   // ── Timer management ──────────────────────────────────────────────────────
   const clearAll = useCallback(() => {
@@ -791,8 +667,6 @@ export function OptionChainModal() {
     setWorkerIv(new Map());
     setMaxPainStrike(0);
     setResolvedLotSize(0); // will be refetched below
-    prevLtpRef.current.clear(); // P5.3: reset tick baseline on underlying change
-    setStrikeWindow(STRIKES_AROUND_ATM); // P5: reset expanded strike window
 
     // Unsubscribe previous option token when underlying changes
     if (activeOptionTokenRef.current) {
@@ -840,18 +714,6 @@ export function OptionChainModal() {
     };
   }, [status.type, underlying, selectedExpiry, loadChain]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── P5.3: snapshot LTPs after each chain update for next-render tick flash ──
-  // Runs after the DOM commits, so StrikeRow rendered with the OLD baseline
-  // (the flash) and the NEXT chain update compares against these fresh values.
-  useEffect(() => {
-    if (chain.length === 0) return;
-    const next = new Map<string, { c: number; p: number }>();
-    for (const e of chain) {
-      next.set(String(e.strike), { c: e.callLtp || 0, p: e.putLtp || 0 });
-    }
-    prevLtpRef.current = next;
-  }, [chain]);
-
   // ── User actions ──────────────────────────────────────────────────────────
   const handleExpiryChange = useCallback((expiry: string) => {
     if (!activeSymbol || segmentUnsupported) return;
@@ -861,8 +723,6 @@ export function OptionChainModal() {
     setSelectedExpiry(expiry);
     setWorkerIv(new Map());
     setMaxPainStrike(0);
-    prevLtpRef.current.clear(); // P5.3: reset tick baseline on expiry change
-    setStrikeWindow(STRIKES_AROUND_ATM); // P5: reset expanded strike window
     setStatus({ type: 'loading', label: `${underlying} · ${expiry}`, attempt: 0 });
     startBudget(session);
     loadChain(underlying, expiry, 0, session);
@@ -972,47 +832,6 @@ export function OptionChainModal() {
   // View mode: CE only, PE only, or both
   const [viewMode, setViewMode] = useState<'both' | 'ce' | 'pe'>('both');
 
-  // P5: dynamic underlying selector list, sourced from the OPTIONS watchlist
-  // (never hardcoded). Falls back to the INDEX watchlist if OPTIONS is empty.
-  const underlyingOptions = useMemo(() => {
-    const optionsWl = watchlists.find((w) => w.id === 'options')
-      || watchlists.find((w) => w.id === 'index');
-    const items = optionsWl?.items || [];
-    // De-duplicate by canonical underlying symbol so "NIFTY 50" and "NIFTY"
-    // don't both appear. Preserve first occurrence order.
-    const seen = new Set<string>();
-    const out: { token: string; symbol: string; segment: string }[] = [];
-    for (const it of items) {
-      const canon = it.symbol.replace(/\s+\d+$/, '').trim().toUpperCase();
-      if (seen.has(canon)) continue;
-      seen.add(canon);
-      out.push({ token: it.token, symbol: it.symbol, segment: it.segment as string });
-    }
-    return out;
-  }, [watchlists]);
-
-  // P5: switching the underlying reuses the SAME activeSymbol flow the watchlist
-  // uses — no new selection path. The underlying-change effect handles the rest.
-  const handleUnderlyingChange = useCallback((token: string) => {
-    const item = underlyingOptions.find((o) => o.token === token);
-    if (!item) return;
-    setActiveSymbol({
-      token: item.token,
-      symbol: item.symbol,
-      name: item.symbol,
-      segment: item.segment as any,
-      exchange: item.segment as any,
-      instrumentType: 'EQ',
-      lotSize: 1,
-      tickSize: 0.05,
-    });
-  }, [underlyingOptions, setActiveSymbol]);
-
-  // P5: jump the ATM row into the center of the scroll viewport.
-  const jumpToAtm = useCallback(() => {
-    atmRowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }, []);
-
   // OI + Volume max for proportional bars
   const { maxOi, maxVol } = useMemo(() => {
     let maxOi = 0, maxVol = 0;
@@ -1024,30 +843,6 @@ export function OptionChainModal() {
     }
     return { maxOi: maxOi || 1, maxVol: maxVol || 1 };
   }, [filteredChain]);
-
-  // ── P5: OI / market analysis (from ACTUAL chain data, never fabricated) ─────
-  // Highest CE OI strike (resistance), highest PE OI strike (support), and PCR
-  // (total put OI / total call OI). Uses the full chain, not the ATM window, so
-  // the numbers reflect the whole option chain. Returns 0 when data is absent.
-  const oiAnalysis = useMemo(() => {
-    let maxCeOi = 0, maxPeOi = 0, maxCeOiStrike = 0, maxPeOiStrike = 0;
-    let totalCeOi = 0, totalPeOi = 0;
-    for (const e of chain) {
-      const ce = e.callOi || 0;
-      const pe = e.putOi || 0;
-      totalCeOi += ce;
-      totalPeOi += pe;
-      if (ce > maxCeOi) { maxCeOi = ce; maxCeOiStrike = e.strike; }
-      if (pe > maxPeOi) { maxPeOi = pe; maxPeOiStrike = e.strike; }
-    }
-    const pcr = totalCeOi > 0 ? totalPeOi / totalCeOi : 0;
-    return {
-      maxCeOiStrike, maxPeOiStrike,
-      hasOi: totalCeOi > 0 || totalPeOi > 0,
-      pcr: Math.round(pcr * 100) / 100,
-      hasPcr: totalCeOi > 0,
-    };
-  }, [chain]);
 
   // ATM strike value
   const atmStrike = useMemo(() => {
@@ -1068,29 +863,6 @@ export function OptionChainModal() {
       return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }).toUpperCase();
     } catch { return exp; }
   };
-
-  // ── P5: spot movement (honest — from the quote's own change fields) ─────────
-  // Uses MarketQuote.change / changePercent for the underlying's token. Shown
-  // only when a positive spot exists; never fabricated.
-  const spotMove = useMemo(() => {
-    if (!activeSymbol || spotPrice <= 0) return null;
-    const q = quotes[activeSymbol.token];
-    if (!q) return null;
-    const change = Number.isFinite(q.change) ? q.change : 0;
-    const changePercent = Number.isFinite(q.changePercent) ? q.changePercent : 0;
-    if (change === 0 && changePercent === 0) return null;
-    return { change, changePercent };
-  }, [activeSymbol?.token, quotes, spotPrice]);
-
-  // ── P5: days to expiry (from the selected expiry date, IST-safe enough) ─────
-  // Whole calendar days from now to the selected expiry; null when unavailable.
-  const daysToExpiry = useMemo(() => {
-    if (!selectedExpiry) return null;
-    const t = new Date(selectedExpiry).getTime();
-    if (Number.isNaN(t)) return null;
-    const d = Math.ceil((t - Date.now()) / 86_400_000);
-    return d >= 0 ? d : null;
-  }, [selectedExpiry]);
 
   // ── Data-state pill ───────────────────────────────────────────────────────
   // Derives the canonical feed state to display in the header.
@@ -1136,25 +908,11 @@ export function OptionChainModal() {
       {/* ── Header ── */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-fw-border flex-shrink-0 bg-fw-surface">
         <span className="text-[13px] font-bold text-fw-text tracking-wide flex-shrink-0">OPT CHAIN</span>
-        {underlying && <SymbolLogo symbol={underlying} size={18} className="flex-shrink-0" />}
-        {/* P5: dynamic underlying selector (sourced from the OPTIONS watchlist). */}
-        {underlyingOptions.length > 0 ? (
-          <select
-            value={activeSymbol?.token || ''}
-            onChange={(e) => handleUnderlyingChange(e.target.value)}
-            className="bg-fw-bg text-fw-accent text-[13px] font-bold border border-fw-border rounded px-1.5 py-0.5 cursor-pointer hover:border-fw-accent/50 transition-colors max-w-[130px]"
-            title="Select underlying"
-          >
-            {/* Keep the current underlying selectable even if it isn't a listed option */}
-            {activeSymbol && !underlyingOptions.some((o) => o.token === activeSymbol.token) && (
-              <option value={activeSymbol.token}>{underlying}</option>
-            )}
-            {underlyingOptions.map((o) => (
-              <option key={o.token} value={o.token}>{o.symbol}</option>
-            ))}
-          </select>
-        ) : (
-          underlying && <span className="text-[13px] font-bold text-fw-accent">{underlying}</span>
+        {underlying && (
+          <>
+            <SymbolLogo symbol={underlying} size={18} className="flex-shrink-0" />
+            <span className="text-[13px] font-bold text-fw-accent">{underlying}</span>
+          </>
         )}
         {expiries.length > 0 && (
           <select
@@ -1164,15 +922,6 @@ export function OptionChainModal() {
           >
             {expiries.map((e) => <option key={e} value={e}>{e}</option>)}
           </select>
-        )}
-        {/* P5: days to expiry */}
-        {daysToExpiry !== null && (
-          <span
-            className="text-[10px] font-mono text-fw-text-muted flex-shrink-0"
-            title="Days to expiry"
-          >
-            {daysToExpiry}d
-          </span>
         )}
 
         {/* ── Data-state pill ── */}
@@ -1187,23 +936,10 @@ export function OptionChainModal() {
 
         <div className="flex-1" />
 
-        {/* Spot price + movement (P5) */}
+        {/* Spot price */}
         {spotPrice > 0 && (
-          <span className="flex items-baseline gap-1 flex-shrink-0">
-            <span className="text-[12px] font-mono font-bold text-emerald-400 tabular-nums">
-              {formatPrice(spotPrice)}
-            </span>
-            {spotMove && (
-              <span
-                className={cn(
-                  'text-[10px] font-mono font-semibold tabular-nums',
-                  spotMove.change > 0 ? 'text-emerald-400' : spotMove.change < 0 ? 'text-red-400' : 'text-fw-text-muted',
-                )}
-                title="Underlying change today"
-              >
-                {spotMove.change > 0 ? '+' : ''}{spotMove.change.toFixed(2)} ({spotMove.change > 0 ? '+' : ''}{spotMove.changePercent.toFixed(2)}%)
-              </span>
-            )}
+          <span className="text-[12px] font-mono font-bold text-emerald-400 tabular-nums flex-shrink-0">
+            {formatPrice(spotPrice)}
           </span>
         )}
 
@@ -1262,60 +998,11 @@ export function OptionChainModal() {
               </button>
             ))}
           </div>
-          {/* P5: Greeks toggle — reveals delta inline (data already present) */}
-          <button
-            onClick={() => setShowGreeks((v) => !v)}
-            className={cn(
-              'px-2 py-0.5 text-[10px] font-bold uppercase rounded border transition-colors',
-              showGreeks
-                ? 'bg-fw-accent/20 text-fw-accent border-fw-accent/40'
-                : 'text-fw-text-muted border-fw-border/50 hover:text-fw-text hover:bg-fw-hover/30',
-            )}
-            title="Toggle Greeks (Δ delta)"
-          >Δ</button>
-
-          {/* P5: Jump to ATM */}
-          {atmStrike > 0 && (
-            <button
-              onClick={jumpToAtm}
-              className="px-2 py-0.5 text-[10px] font-bold uppercase rounded border border-fw-border/50 text-fw-text-muted hover:text-fw-accent hover:border-fw-accent/40 transition-colors"
-              title="Scroll the ATM strike into view"
-            >ATM</button>
-          )}
-
-          {/* P5: Expand strikes (loads more above + below from the real chain) */}
-          {canExpandStrikes && (
-            <button
-              onClick={() => setStrikeWindow((w) => w + STRIKES_AROUND_ATM)}
-              className="px-2 py-0.5 text-[10px] font-bold uppercase rounded border border-fw-border/50 text-fw-text-muted hover:text-fw-text hover:bg-fw-hover/30 transition-colors"
-              title="Show more strikes above and below"
-            >+ Strikes</button>
-          )}
-
           <span className="text-[11px] text-fw-text-muted ml-2">
             {filteredChain.length} strikes
           </span>
-
-          <div className="flex-1" />
-
-          {/* P5: OI analysis (from actual chain data) */}
-          {oiAnalysis.hasOi && (
-            <>
-              <span className="text-[10px] text-emerald-400/90 font-mono" title="Strike with the highest Call OI (typical resistance)">
-                CE OI↑ {oiAnalysis.maxCeOiStrike}
-              </span>
-              <span className="text-[10px] text-red-400/90 font-mono" title="Strike with the highest Put OI (typical support)">
-                PE OI↑ {oiAnalysis.maxPeOiStrike}
-              </span>
-            </>
-          )}
-          {oiAnalysis.hasPcr && (
-            <span className="text-[10px] text-fw-text-secondary font-mono" title="Put/Call Ratio = total Put OI ÷ total Call OI">
-              PCR {oiAnalysis.pcr.toFixed(2)}
-            </span>
-          )}
           {atmStrike > 0 && (
-            <span className="text-[11px] text-fw-accent font-mono">
+            <span className="text-[11px] text-fw-accent font-mono ml-auto">
               ATM: {atmStrike}
             </span>
           )}
@@ -1376,32 +1063,30 @@ export function OptionChainModal() {
             <colgroup>
               {viewMode !== 'pe' && (
                 <>
-                  <col style={{ width: '5%' }} />   {/* B/S */}
-                  <col style={{ width: '8%' }} />   {/* OI */}
-                  <col style={{ width: '7%' }} />   {/* OI Chg */}
-                  <col style={{ width: '7%' }} />   {/* Vol */}
-                  <col style={{ width: '6%' }} />   {/* IV */}
-                  <col style={{ width: '8%' }} />   {/* Bid/Ask */}
-                  <col style={{ width: '9%' }} />   {/* LTP + chg% */}
+                  <col style={{ width: '6%' }} />   {/* B/S */}
+                  <col style={{ width: '9%' }} />   {/* OI */}
+                  <col style={{ width: '8%' }} />   {/* OI Chg */}
+                  <col style={{ width: '8%' }} />   {/* Vol */}
+                  <col style={{ width: '7%' }} />   {/* IV */}
+                  <col style={{ width: '9%' }} />   {/* LTP */}
                 </>
               )}
               <col style={{ width: '10%' }} />       {/* STRIKE */}
               {viewMode !== 'ce' && (
                 <>
-                  <col style={{ width: '9%' }} />   {/* LTP + chg% */}
-                  <col style={{ width: '8%' }} />   {/* Bid/Ask */}
-                  <col style={{ width: '6%' }} />   {/* IV */}
-                  <col style={{ width: '7%' }} />   {/* Vol */}
-                  <col style={{ width: '7%' }} />   {/* OI Chg */}
-                  <col style={{ width: '8%' }} />   {/* OI */}
-                  <col style={{ width: '5%' }} />   {/* B/S */}
+                  <col style={{ width: '9%' }} />   {/* LTP */}
+                  <col style={{ width: '7%' }} />   {/* IV */}
+                  <col style={{ width: '8%' }} />   {/* Vol */}
+                  <col style={{ width: '8%' }} />   {/* OI Chg */}
+                  <col style={{ width: '9%' }} />   {/* OI */}
+                  <col style={{ width: '6%' }} />   {/* B/S */}
                 </>
               )}
             </colgroup>
             <thead className="sticky top-0 z-10">
               <tr className="bg-fw-surface">
                 {viewMode !== 'pe' && (
-                  <th colSpan={7} className="py-2 text-center text-[11px] font-bold text-emerald-400 uppercase tracking-widest border-b border-emerald-500/20 bg-emerald-500/[0.04]">
+                  <th colSpan={6} className="py-2 text-center text-[11px] font-bold text-emerald-400 uppercase tracking-widest border-b border-emerald-500/20 bg-emerald-500/[0.04]">
                     CALLS
                   </th>
                 )}
@@ -1409,7 +1094,7 @@ export function OptionChainModal() {
                   STRIKE
                 </th>
                 {viewMode !== 'ce' && (
-                  <th colSpan={7} className="py-2 text-center text-[11px] font-bold text-red-400 uppercase tracking-widest border-b border-red-500/20 bg-red-500/[0.04]">
+                  <th colSpan={6} className="py-2 text-center text-[11px] font-bold text-red-400 uppercase tracking-widest border-b border-red-500/20 bg-red-500/[0.04]">
                     PUTS
                   </th>
                 )}
@@ -1422,15 +1107,13 @@ export function OptionChainModal() {
                     <th className="px-1 py-1 text-right">OI Chg</th>
                     <th className="px-1 py-1 text-right">Vol</th>
                     <th className="px-1 py-1 text-right">IV</th>
-                    <th className="px-1 py-1 text-right" title="Bid (top) / Ask (bottom)">Bid/Ask</th>
-                    <th className="px-1 py-1 text-right" title="LTP (top) / Change % (bottom)">LTP</th>
+                    <th className="px-1 py-1 text-right">LTP</th>
                   </>
                 )}
                 <th className="px-1 py-1 text-center bg-fw-surface-2 border-x border-fw-border/60 text-fw-text">Strike</th>
                 {viewMode !== 'ce' && (
                   <>
-                    <th className="px-1 py-1 text-left" title="LTP (top) / Change % (bottom)">LTP</th>
-                    <th className="px-1 py-1 text-left" title="Bid (top) / Ask (bottom)">Bid/Ask</th>
+                    <th className="px-1 py-1 text-left">LTP</th>
                     <th className="px-1 py-1 text-left">IV</th>
                     <th className="px-1 py-1 text-left">Vol</th>
                     <th className="px-1 py-1 text-left">OI Chg</th>
@@ -1451,16 +1134,10 @@ export function OptionChainModal() {
                 const putOiPct   = maxOi  > 0 ? (e.putOi      / maxOi)  * 100 : 0;
                 const callVolPct = maxVol > 0 ? (e.callVolume / maxVol) * 100 : 0;
                 const putVolPct  = maxVol > 0 ? (e.putVolume  / maxVol) * 100 : 0;
-                // P5.3: tick direction vs the previously rendered LTP for this strike.
-                // Computed from a ref map so it never triggers extra renders; only
-                // meaningful ticks (nonzero prev + prev !== current) produce a flash.
-                const { callTickDir, putTickDir } = computeTickDirs(e, prevLtpRef.current);
                 return (
                   <StrikeRow
                     key={e.strike}
                     e={e}
-                    atmRef={isAtm ? atmRowRef : undefined}
-                    showGreeks={showGreeks}
                     isAtm={isAtm}
                     isItmCall={isItmCall}
                     isItmPut={isItmPut}
@@ -1475,8 +1152,6 @@ export function OptionChainModal() {
                     setOrderForm={setOrderForm}
                     callIv={workerIv.get(`${e.strike}:CE`) ?? 0}
                     putIv={workerIv.get(`${e.strike}:PE`) ?? 0}
-                    callTickDir={callTickDir}
-                    putTickDir={putTickDir}
                   />
                 );
               })}

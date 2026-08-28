@@ -6,6 +6,35 @@
  */
 
 import { BaseRepository } from './base.repository.js';
+import crypto from 'crypto';
+
+export function buildOrderIdempotencyKey(accountId, params, now = new Date()) {
+  const session = params.tradingSession || params.sessionId || now.toISOString().slice(0, 10);
+  const request = {
+    accountId,
+    securityId: params.securityId ?? params.token ?? null,
+    exchange: params.exchange ?? params.segment ?? null,
+    segment: params.segment ?? null,
+    side: params.side ?? null,
+    qty: params.qty ?? null,
+    orderType: params.orderType ?? null,
+    productType: params.productType ?? 'MIS',
+    price: params.price ?? null,
+    triggerPrice: params.triggerPrice ?? null,
+    validity: params.validity ?? 'DAY',
+    isAmo: params.isAmo ?? false,
+    session,
+  };
+
+  return crypto.createHash('sha256').update(JSON.stringify(request)).digest('hex');
+}
+
+export function buildOrderCorrelationId(accountId, idempotencyKey) {
+  const digest = crypto.createHash('sha256')
+    .update(`${accountId}:${idempotencyKey}`)
+    .digest('hex');
+  return `fw_order_${digest}`;
+}
 
 export class OrderRepository extends BaseRepository {
   constructor() {
@@ -58,6 +87,43 @@ export class OrderRepository extends BaseRepository {
     return data || [];
   }
 
+  async findByIdempotencyKey(accountId, idempotencyKey) {
+    const { data, error } = await this.db
+      .from(this.tableName)
+      .select('*')
+      .eq('trading_account_id', accountId)
+      .eq('idempotency_key', idempotencyKey)
+      .maybeSingle();
+
+    if (error) throw new Error(`[trading_orders] findByIdempotencyKey failed: ${error.message}`);
+    return data || null;
+  }
+
+  async findByCorrelationId(accountId, correlationId) {
+    const { data, error } = await this.db
+      .from(this.tableName)
+      .select('*')
+      .eq('trading_account_id', accountId)
+      .eq('correlation_id', correlationId)
+      .maybeSingle();
+
+    if (error) throw new Error(`[trading_orders] findByCorrelationId failed: ${error.message}`);
+    return data || null;
+  }
+
+  async persistCorrelationState(orderId, accountId, correlationId, updates = {}) {
+    const { data, error } = await this.db
+      .from(this.tableName)
+      .update({ correlation_id: correlationId, ...updates, updated_at: new Date().toISOString() })
+      .eq('id', orderId)
+      .eq('trading_account_id', accountId)
+      .select()
+      .single();
+
+    if (error) throw new Error(`[trading_orders] persistCorrelationState failed: ${error.message}`);
+    return data;
+  }
+
   async findByGroupId(groupId) {
     const { data, error } = await this.db
       .from(this.tableName)
@@ -70,8 +136,13 @@ export class OrderRepository extends BaseRepository {
   }
 
   async createOrder(accountId, params) {
+    const idempotencyKey = params.idempotencyKey || buildOrderIdempotencyKey(accountId, params);
+    const correlationId = params.correlationId || buildOrderCorrelationId(accountId, idempotencyKey);
+
     return this.insert({
       trading_account_id: accountId,
+      idempotency_key: idempotencyKey,
+      correlation_id: correlationId,
       symbol: params.symbol,
       token: params.token,
       segment: params.segment,
