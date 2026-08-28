@@ -197,13 +197,20 @@ export class DhanAdapter {
         const ids = batch.map(t => parseInt(t.dhanId));
 
         try {
-          const resp = await axios.post(
-            `${DHAN_API_BASE}/marketfeed/ltp`,
-            { [segment]: ids },
-            { httpsAgent: IPV4_AGENT, timeout: 6000, headers: this.auth.getHeaders() }
-          );
-
-          const data = resp.data?.data || resp.data;
+          const requestSegments = segment === 'NSE_CURRENCY' ? ['NSE_CURRENCY', 'CUR'] : [segment];
+          let data = null;
+          for (const requestSegment of requestSegments) {
+            const resp = await axios.post(
+              `${DHAN_API_BASE}/marketfeed/ltp`,
+              { [requestSegment]: ids },
+              { httpsAgent: IPV4_AGENT, timeout: 6000, headers: this.auth.getHeaders() }
+            );
+            data = resp.data?.data || resp.data;
+            if (data?.[requestSegment] && typeof data[requestSegment] === 'object') {
+              data = data[requestSegment];
+            }
+            if (data && Object.keys(data).length > 0) break;
+          }
           if (data && typeof data === 'object') {
             for (const [dhanId, quote] of Object.entries(data)) {
               // Find the original token for this dhanId
@@ -323,6 +330,20 @@ export class DhanAdapter {
 
   // ─── Trading ────────────────────────────────────────────────
 
+  _normalizeBrokerOrderId(payload) {
+    const value = payload?.orderId || payload?.brokerOrderId || payload?.id || payload?.order_id || null;
+    return value ? String(value) : null;
+  }
+
+  _normalizeBrokerWriteStatus(payload, fallback = 'SUBMITTED') {
+    const status = String(payload?.orderStatus || payload?.status || fallback).toUpperCase();
+    if (['TRADED', 'FILLED', 'COMPLETE', 'COMPLETED'].includes(status)) return 'FILLED';
+    if (['REJECTED', 'FAILED', 'CANCELLED_REJECTED'].includes(status)) return 'REJECTED';
+    if (['SUBMITTED', 'PENDING', 'OPEN', 'TRANSIT', 'ACCEPTED', 'VALIDATED'].includes(status)) return 'SUBMITTED';
+    if (status === 'CANCELLED') return 'CANCELLED';
+    return fallback;
+  }
+
   async placeOrder(order) {
     if (!this.auth.isTokenValid) {
       throw new Error('[Dhan] Token invalid for order placement');
@@ -330,9 +351,7 @@ export class DhanAdapter {
 
     const payload = {
       dhanClientId: this.auth.clientId,
-      // Use caller-supplied correlationId when provided (timeout recovery requires
-      // a stable, pre-known value). Fall back to a generated one.
-      correlationId: order.correlationId || `ORD_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+      correlationId: order.correlationId || null,
       transactionType: (order.side || order.transactionType || 'BUY').toUpperCase(),
       exchangeSegment: this._mapExchange(order.exchange || order.segment),
       productType: this._mapProduct(order.productType),
@@ -343,6 +362,7 @@ export class DhanAdapter {
       price: (order.orderType === 'LIMIT' || order.orderType === 'SL') ? Number(order.price || 0) : 0,
       triggerPrice: (order.orderType === 'SL' || order.orderType === 'SL-M') ? Number(order.triggerPrice || 0) : 0,
       afterMarketOrder: !!order.isAmo,
+      orderReference: order.idempotencyKey || order.correlationId || null,
     };
 
     try {
@@ -353,20 +373,46 @@ export class DhanAdapter {
       });
 
       const data = resp.data?.data || resp.data || {};
+      const orderStatus = this._normalizeBrokerWriteStatus(data, 'SUBMITTED');
+      const brokerOrderId = this._normalizeBrokerOrderId(data);
+      const message = data.message || data.omsErrorDescription || data.remarks || 'Order accepted by Dhan';
+
       return {
-        orderId: data.orderId || '',
-        brokerOrderId: data.orderId || '',
-        status: data.orderStatus || 'PENDING',
-        message: resp.data?.message || 'Order placed via Dhan',
+        orderId: brokerOrderId || data.orderId || null,
+        brokerOrderId,
+        status: orderStatus,
+        message,
+        correlationId: payload.correlationId,
+        orderReference: payload.orderReference,
         raw: resp.data,
       };
     } catch (err) {
-      const errMsg = err.response?.data?.message || err.response?.data?.remarks || err.message;
-      throw new Error(`[Dhan] Order failed: ${errMsg}`);
+      const code = String(err?.code || '').toUpperCase();
+      const msg = err.response?.data?.message || err.response?.data?.remarks || err.message || 'Dhan order request failed';
+      if (['ETIMEDOUT', 'ECONNABORTED', 'ECONNRESET', 'ENETUNREACH', 'EAI_AGAIN'].includes(code) || String(msg).toLowerCase().includes('timeout')) {
+        return {
+          orderId: null,
+          brokerOrderId: null,
+          status: 'TIMEOUT',
+          message: msg,
+          correlationId: order.correlationId || null,
+          orderReference: order.idempotencyKey || null,
+          error: err,
+        };
+      }
+      return {
+        orderId: null,
+        brokerOrderId: null,
+        status: 'API_ERROR',
+        message: msg,
+        correlationId: order.correlationId || null,
+        orderReference: order.idempotencyKey || null,
+        error: err,
+      };
     }
   }
 
-  async modifyOrder(orderId, params) {
+  async modifyOrder(orderId, params = {}) {
     if (!this.auth.isTokenValid) {
       throw new Error('[Dhan] Token invalid for order modification');
     }
@@ -374,15 +420,16 @@ export class DhanAdapter {
     const payload = {
       dhanClientId: this.auth.clientId,
       orderId: String(orderId),
+      correlationId: params.correlationId || null,
+      orderReference: params.idempotencyKey || params.correlationId || null,
       orderType: params.orderType ? this._mapOrderType(params.orderType) : undefined,
-      quantity: params.qty || params.quantity,
+      quantity: params.qty ?? params.quantity,
       price: params.price,
       triggerPrice: params.triggerPrice,
       validity: params.validity || 'DAY',
     };
 
-    // Remove undefined fields
-    Object.keys(payload).forEach(k => payload[k] === undefined && delete payload[k]);
+    Object.keys(payload).forEach(k => payload[k] === undefined || payload[k] === null ? delete payload[k] : null);
 
     try {
       const resp = await axios.put(`${DHAN_API_BASE}/orders/${orderId}`, payload, {
@@ -391,16 +438,24 @@ export class DhanAdapter {
         headers: this.auth.getHeaders(),
       });
 
+      const data = resp.data?.data || resp.data || {};
+      const status = this._normalizeBrokerWriteStatus(data, 'SUBMITTED');
+      const brokerOrderId = this._normalizeBrokerOrderId(data) || String(orderId);
       return {
         orderId: String(orderId),
-        brokerOrderId: String(orderId),
-        status: 'PENDING',
-        message: resp.data?.message || 'Order modified',
+        brokerOrderId,
+        status,
+        message: data.message || data.omsErrorDescription || data.remarks || 'Order modified',
+        correlationId: params.correlationId || null,
         raw: resp.data,
       };
     } catch (err) {
-      const errMsg = err.response?.data?.message || err.response?.data?.remarks || err.message;
-      throw new Error(`[Dhan] Modify failed: ${errMsg}`);
+      const code = String(err?.code || '').toUpperCase();
+      const msg = err.response?.data?.message || err.response?.data?.remarks || err.message || 'Dhan modify request failed';
+      if (['ETIMEDOUT', 'ECONNABORTED', 'ECONNRESET', 'ENETUNREACH', 'EAI_AGAIN'].includes(code) || String(msg).toLowerCase().includes('timeout')) {
+        return { orderId: String(orderId), brokerOrderId: String(orderId), status: 'TIMEOUT', message: msg, correlationId: params.correlationId || null, error: err };
+      }
+      return { orderId: String(orderId), brokerOrderId: String(orderId), status: 'API_ERROR', message: msg, correlationId: params.correlationId || null, error: err };
     }
   }
 
@@ -416,16 +471,23 @@ export class DhanAdapter {
         headers: this.auth.getHeaders(),
       });
 
+      const data = resp.data?.data || resp.data || {};
+      const status = this._normalizeBrokerWriteStatus(data, 'CANCELLED');
+      const brokerOrderId = this._normalizeBrokerOrderId(data) || String(orderId);
       return {
         orderId: String(orderId),
-        brokerOrderId: String(orderId),
-        status: 'CANCELLED',
-        message: resp.data?.message || 'Order cancelled',
+        brokerOrderId,
+        status: status === 'REJECTED' ? 'REJECTED' : 'CANCELLED',
+        message: data.message || data.omsErrorDescription || data.remarks || 'Order cancelled',
         raw: resp.data,
       };
     } catch (err) {
-      const errMsg = err.response?.data?.message || err.response?.data?.remarks || err.message;
-      throw new Error(`[Dhan] Cancel failed: ${errMsg}`);
+      const code = String(err?.code || '').toUpperCase();
+      const msg = err.response?.data?.message || err.response?.data?.remarks || err.message || 'Dhan cancel request failed';
+      if (['ETIMEDOUT', 'ECONNABORTED', 'ECONNRESET', 'ENETUNREACH', 'EAI_AGAIN'].includes(code) || String(msg).toLowerCase().includes('timeout')) {
+        return { orderId: String(orderId), brokerOrderId: String(orderId), status: 'TIMEOUT', message: msg, error: err };
+      }
+      return { orderId: String(orderId), brokerOrderId: String(orderId), status: 'API_ERROR', message: msg, error: err };
     }
   }
 
@@ -457,7 +519,7 @@ export class DhanAdapter {
     }));
   }
 
-  async getOrders() {
+  async getOrders(params = {}) {
     if (!this.auth.isTokenValid) throw new Error('[Dhan] Token invalid');
 
     const resp = await axios.get(`${DHAN_API_BASE}/orders`, {
@@ -482,6 +544,8 @@ export class DhanAdapter {
       status: this._mapStatus(o.orderStatus),
       placedAt: o.createTime || o.orderTimestamp || '',
       updatedAt: o.updateTime || '',
+      correlationId: o.correlationId || o.correlationID || o.correlation_id || null,
+      orderReference: o.orderReference || o.orderreference || null,
     }));
   }
 
