@@ -5,7 +5,7 @@ import { useMarketStore } from '@/store/marketStore';
 import { getHistoricalData } from '@/services/api';
 import { wsService } from '@/services/websocket';
 import { cn, timeframeToLabel, formatPrice } from '@/utils/helpers';
-import type { ChartType, Timeframe, OHLC } from '@/types';
+import type { ChartType, Timeframe, OHLC, Instrument } from '@/types';
 import { Maximize2 } from 'lucide-react';
 import { IndicatorPanel, DEFAULT_INDICATORS, type IndicatorConfig, type IndicatorType } from './IndicatorPanel';
 import { type DrawingMode } from './DrawingTools';
@@ -97,8 +97,15 @@ function getSubChartThemeOptions(container: HTMLElement) {
 }
 
 
-export function ChartPanel() {
-  const { activeSymbol, timeframe, setTimeframe, chartType, setChartType } = useAppStore();
+export function ChartPanel({ symbolOverride, timeframeOverride, onTimeframeChange }: {
+  symbolOverride?: Instrument | null;
+  timeframeOverride?: Timeframe;
+  onTimeframeChange?: (timeframe: Timeframe) => void;
+} = {}) {
+  const { activeSymbol: storeActiveSymbol, timeframe: storeTimeframe, setTimeframe, chartType, setChartType } = useAppStore();
+  const activeSymbol = symbolOverride === undefined ? storeActiveSymbol : symbolOverride;
+  const timeframe = timeframeOverride || storeTimeframe;
+  const updateTimeframe = onTimeframeChange || setTimeframe;
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | ISeriesApi<'Line'> | ISeriesApi<'Area'> | null>(null);
@@ -1662,7 +1669,7 @@ export function ChartPanel() {
       {/* Toolbar */}
       <div className="h-[30px] min-h-[30px] flex items-center px-2 gap-0.5 border-b border-fw-border/40 bg-fw-surface">
         {TIMEFRAMES.map((tf) => (
-          <button key={tf} onClick={() => setTimeframe(tf)}
+          <button key={tf} onClick={() => updateTimeframe(tf)}
             className={cn('px-1.5 py-0.5 text-[12px] font-semibold rounded transition-all', timeframe === tf ? 'bg-fw-accent text-white' : 'text-fw-text-muted hover:text-fw-text hover:bg-fw-hover')}>
             {timeframeToLabel(tf)}
           </button>

@@ -3,6 +3,7 @@ import { Sidebar } from '@/components/Sidebar';
 import { TopBar } from '@/components/TopBar';
 import { Watchlist } from '@/components/Watchlist';
 import { ChartPanel } from '@/components/ChartPanel';
+import { MultiChartPanel } from '@/components/MultiChartPanel';
 import { OrderPanelTabs } from '@/components/OrderPanelTabs';
 import { BottomPanel } from '@/components/BottomPanel';
 import { SearchModal } from '@/components/SearchModal';
@@ -121,7 +122,7 @@ function HDivider({ onDrag }: { onDrag: (dy: number) => void }) {
 }
 
 export default function App() {
-  const { theme, showOptionChain, panels, activeWorkspace } = useAppStore();
+  const { theme, showOptionChain, panels, activeWorkspace, chartLayout } = useAppStore();
   const { isAuthenticated, isLoading, error } = useAuth();
 
   // Sync watchlists with backend
@@ -347,7 +348,7 @@ export default function App() {
               <div className="flex-1 flex flex-col overflow-hidden min-w-0">
                 <div className="flex flex-1 overflow-hidden">
                   <div className={showOC ? 'w-[55%] min-w-[300px] flex-shrink-0' : 'flex-1'}>
-                    <ErrorBoundary fallbackTitle="Chart Error"><ChartPanel /></ErrorBoundary>
+                    <ErrorBoundary fallbackTitle="Chart Error">{chartLayout === 'single' ? <ChartPanel /> : <MultiChartPanel />}</ErrorBoundary>
                   </div>
                   {showOC && (
                     <>
