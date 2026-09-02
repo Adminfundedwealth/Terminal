@@ -185,6 +185,7 @@ export interface PlaceOrderParams {
   triggerPrice?: number;
   validity?: 'DAY' | 'IOC' | 'GTC';
   isAmo?: boolean;
+  isGtt?: boolean;
   slPrice?: number;   // optional bracket stop-loss trigger price
   tpPrice?: number;   // optional bracket take-profit limit price
 }

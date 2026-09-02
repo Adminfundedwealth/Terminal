@@ -228,6 +228,7 @@ export function OrderPanel() {
         price: orderForm.orderType === 'LIMIT' || orderForm.orderType === 'SL' ? orderForm.price : undefined,
         validity: orderForm.validity === 'GTD' ? 'GTC' : orderForm.validity,
         isAmo: orderForm.isAmo,
+        isGtt: gttEnabled,
         triggerPrice: gttEnabled && gttTriggerPrice > 0 ? gttTriggerPrice : (orderForm.orderType === 'SL' || orderForm.orderType === 'SL-M' ? orderForm.triggerPrice : undefined),
         slPrice: slPrice > 0 ? slPrice : undefined,
         tpPrice: tpPrice > 0 ? tpPrice : undefined,

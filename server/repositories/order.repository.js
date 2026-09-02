@@ -36,6 +36,10 @@ export function buildOrderCorrelationId(accountId, idempotencyKey) {
   return `fw_order_${digest}`;
 }
 
+export function initialOrderStatus(params = {}) {
+  return params.isAmo ? 'AMO_PENDING' : 'PENDING';
+}
+
 export class OrderRepository extends BaseRepository {
   constructor() {
     super('trading_orders');
@@ -161,7 +165,7 @@ export class OrderRepository extends BaseRepository {
       order_group_id: params.orderGroupId || null,
       order_group_type: params.orderGroupType || null,
       is_amo: params.isAmo || false,
-      status: params.isAmo ? 'AMO_PENDING' : 'PENDING',
+      status: initialOrderStatus(params),
       pending_qty: params.qty,
     });
   }

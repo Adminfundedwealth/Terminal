@@ -59,6 +59,22 @@ export class OrderExecutionService {
     return side === 'BUY' ? ltp <= triggerPrice : ltp >= triggerPrice;
   }
 
+  static validateGttTrigger({ side, triggerPrice }) {
+    if (!['BUY', 'SELL'].includes(side)) return 'GTT side must be BUY or SELL';
+    if (!Number.isFinite(Number(triggerPrice)) || Number(triggerPrice) <= 0) return 'GTT trigger price must be greater than 0';
+    return null;
+  }
+
+  static resolveIocLifecycle({ status, filledQty = 0, qty }) {
+    const normalizedStatus = String(status || '').toUpperCase();
+    const filled = Math.max(0, Number(filledQty) || 0);
+    const requested = Math.max(0, Number(qty) || 0);
+    if (['REJECTED', 'FAILED'].includes(normalizedStatus)) return { status: 'REJECTED', filledQty: filled };
+    if (filled >= requested && requested > 0) return { status: 'FILLED', filledQty: requested };
+    if (filled > 0) return { status: 'PARTIALLY_FILLED', filledQty: filled };
+    return { status: 'CANCELLED', filledQty: 0 };
+  }
+
   scheduleGtt(accountId, orderId, orderParams) {
     this._pendingGttOrders.set(orderId, { accountId, orderParams });
   }
@@ -71,7 +87,11 @@ export class OrderExecutionService {
         if (!OrderExecutionService.shouldTriggerGtt(entry.orderParams.side, ltp, Number(entry.orderParams.gttTriggerPrice))) continue;
         this._pendingGttOrders.delete(orderId);
         const account = await this._getAccount(entry.accountId);
-        await this.executeOrder(entry.accountId, orderId, { ...entry.orderParams, validity: 'GTC', isGtt: false }, account);
+        try {
+          await this.executeOrder(entry.accountId, orderId, { ...entry.orderParams, validity: 'GTC', isGtt: false }, account);
+        } catch (error) {
+          try { await orderRepo.markRejected(orderId, `GTT execution failed: ${error.message}`); } catch (_) {}
+        }
       }
     }, 1000);
   }
@@ -516,11 +536,6 @@ export class OrderExecutionService {
         };
         console.log(`[OrderExecution] PAPER MODE: Simulated ${orderParams.orderType} ${orderParams.side} ${orderParams.qty}x${orderParams.symbol} @ ${ltp} [validity=${orderParams.validity||'DAY'}${orderParams.isAmo?' AMO':''}]`);
       } else {
-        if (orderParams.validity === 'IOC') {
-          try { await orderRepo.updateStatus(orderId, 'CANCELLED', { reject_reason: 'IOC order was not immediately filled' }); } catch (e) { /* best effort */ }
-          eventBus.publish('order.updated', { orderId, status: 'CANCELLED', symbol: orderParams.symbol, token: orderParams.token, side: orderParams.side, qty: orderParams.qty, reason: 'IOC not immediately filled' }, { accountId });
-          return { orderId, status: 'CANCELLED', message: 'IOC order was not immediately filled' };
-        }
         let durableOrder;
         try {
           durableOrder = await orderRepo.findById(orderId);
@@ -669,6 +684,31 @@ export class OrderExecutionService {
       const latencyMs = Date.now() - startTime;
       const brokerOrderId = brokerResponse.brokerOrderId || brokerResponse.orderId;
       const brokerStatus = (brokerResponse.status || '').toUpperCase();
+
+      if (orderParams.validity === 'IOC') {
+        const ioc = OrderExecutionService.resolveIocLifecycle({
+          status: brokerStatus,
+          filledQty: brokerResponse.filledQty ?? brokerResponse.filledQuantity,
+          qty: orderParams.qty,
+        });
+        if (ioc.status === 'REJECTED') {
+          const reason = brokerResponse.message || 'IOC order rejected by broker';
+          try { await orderRepo.markRejected(orderId, reason); } catch (_) {}
+          return { orderId, status: 'REJECTED', brokerOrderId, message: reason };
+        }
+        if (ioc.status === 'FILLED' || ioc.status === 'PARTIALLY_FILLED') {
+          if (orderParams.orderType === 'MARKET') {
+            return await this._handleMarketFill(accountId, orderId, orderParams, brokerOrderId, brokerProvider, latencyMs, account);
+          }
+          await this.handleBrokerFill(accountId, orderId, { filledQty: ioc.filledQty, avgPrice: brokerResponse.avgPrice || orderParams.price, brokerOrderId });
+          if (ioc.status === 'PARTIALLY_FILLED') {
+            try { await orderRepo.updateStatus(orderId, 'CANCELLED', { reject_reason: 'IOC remainder cancelled after partial fill' }); } catch (_) {}
+          }
+          return { orderId, status: ioc.status, brokerOrderId, filledQty: ioc.filledQty };
+        }
+        try { await orderRepo.updateStatus(orderId, 'CANCELLED', { broker_order_id: brokerOrderId, reject_reason: 'IOC order was not immediately filled' }); } catch (_) {}
+        return { orderId, status: 'CANCELLED', brokerOrderId, message: 'IOC order was not immediately filled' };
+      }
 
       if (['TIMEOUT', 'UNKNOWN', 'API_ERROR'].includes(brokerStatus) || !brokerStatus) {
         return await this._markPendingReconciliation(

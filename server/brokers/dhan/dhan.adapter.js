@@ -351,6 +351,7 @@ export class DhanAdapter {
     const status = String(payload?.orderStatus || payload?.status || fallback).toUpperCase();
     if (['TRADED', 'FILLED', 'COMPLETE', 'COMPLETED'].includes(status)) return 'FILLED';
     if (['REJECTED', 'FAILED', 'CANCELLED_REJECTED'].includes(status)) return 'REJECTED';
+    if (['PART_TRADED', 'PARTIALLY_FILLED', 'PARTIAL'].includes(status)) return 'PARTIALLY_FILLED';
     if (['SUBMITTED', 'PENDING', 'OPEN', 'TRANSIT', 'ACCEPTED', 'VALIDATED'].includes(status)) return 'SUBMITTED';
     if (status === 'CANCELLED') return 'CANCELLED';
     return fallback;

@@ -21,6 +21,16 @@ import { HolidayService } from './holidayService.js';
 import crypto from 'crypto';
 import { OrderRepository, buildOrderIdempotencyKey, buildOrderCorrelationId } from '../repositories/order.repository.js';
 
+export function deferredOrderLifecycle(params = {}) {
+  if (params.isAmo) return 'AMO_PENDING';
+  if (params.isGtt) return 'GTT_PENDING';
+  return null;
+}
+
+export function amoReleaseState(marketOpen) {
+  return marketOpen ? 'PENDING' : 'AMO_PENDING';
+}
+
 // In-memory order store for when trading_orders table doesn't exist
 const memOrders = new Map();
 const inFlightOrderClaims = new Map();
@@ -529,7 +539,11 @@ export class AccountService {
 
     // Normalise exchange — defaults to segment when not provided
     const exchange = params.exchange || params.segment;
-    const orderParams = { ...params, exchange };
+    const orderParams = {
+      ...params,
+      exchange,
+      ...(params.isGtt ? { orderGroupType: 'gtt' } : {}),
+    };
     const idempotencyKey = params.idempotencyKey || buildOrderIdempotencyKey(accountId, orderParams);
     const correlationId = params.correlationId || buildOrderCorrelationId(accountId, idempotencyKey);
     orderParams.idempotencyKey = idempotencyKey;
@@ -575,10 +589,15 @@ export class AccountService {
       status: 'PENDING',
     }, { accountId });
 
-    if (orderParams.isAmo) return { orderId: data.id, status: 'AMO_PENDING' };
-    if (orderParams.validity === 'GTC' && orderParams.orderType === 'LIMIT' && orderParams.triggerPrice > 0) {
+    const deferredLifecycle = deferredOrderLifecycle(orderParams);
+    if (deferredLifecycle === 'AMO_PENDING') return { orderId: data.id, status: 'AMO_PENDING' };
+    if (deferredLifecycle === 'GTT_PENDING') {
+      if (!['BUY', 'SELL'].includes(orderParams.side) || !Number.isFinite(Number(orderParams.triggerPrice)) || Number(orderParams.triggerPrice) <= 0) {
+        try { await orderRepo.markRejected(data.id, 'GTT trigger price must be greater than 0'); } catch (_) {}
+        return { orderId: data.id, status: 'REJECTED', message: 'GTT trigger price must be greater than 0' };
+      }
       this.executionService.scheduleGtt(accountId, data.id, { ...orderParams, gttTriggerPrice: orderParams.triggerPrice });
-      return { orderId: data.id, status: 'PENDING', gtt: true };
+      return { orderId: data.id, status: 'PENDING', lifecycle: 'GTT_PENDING', gtt: true };
     }
 
     // Paper MARKET orders return only after the confirmed fill is persisted.
@@ -590,6 +609,13 @@ export class AccountService {
     }
 
     return { orderId: data.id, status: 'PENDING' };
+  }
+
+  async releaseAmoOrder(accountId, orderId, params, account = null) {
+    const { open, reason } = HolidayService.isMarketOpen();
+    if (!open) return { orderId, status: amoReleaseState(false), message: `AMO remains queued — ${reason}` };
+    try { await orderRepo.updateStatus(orderId, amoReleaseState(true)); } catch (_) {}
+    return this._executeOrderAsync(accountId, orderId, { ...params, isAmo: false }, account);
   }
 
   async _claimOrder(accountId, params, idempotencyKey, correlationId) {
