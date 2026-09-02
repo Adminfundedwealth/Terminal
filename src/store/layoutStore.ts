@@ -1,5 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { deleteLayout as deleteLayoutRequest, getLayouts, saveLayout, updateLayout } from '@/services/api';
+import { useAppStore } from '@/store/appStore';
+import type { ChartLayout } from '@/types';
 
 /**
  * LAYOUT ENGINE STORE
@@ -13,7 +16,7 @@ import { persist } from 'zustand/middleware';
  * - Workspace restoration per account
  */
 
-export type ChartLayoutMode = '1-chart' | '2-chart-h' | '2-chart-v' | '4-chart';
+export type ChartLayoutMode = ChartLayout;
 
 export interface DockState {
   collapsed: boolean;
@@ -56,9 +59,11 @@ interface LayoutState {
   toggleBottomPanel: () => void;
   setBottomTab: (tab: string) => void;
   updateViewport: (width: number) => void;
-  saveCurrentLayout: (name: string) => void;
+  hydrateLayouts: () => Promise<void>;
+  saveCurrentLayout: (name: string) => Promise<void>;
   loadLayout: (id: string) => void;
-  deleteLayout: (id: string) => void;
+  renameLayout: (id: string, name: string) => Promise<void>;
+  deleteLayout: (id: string) => Promise<void>;
   resetToDefault: () => void;
 }
 
@@ -78,7 +83,7 @@ function clampBottomHeight(h: number): number {
 }
 
 const DEFAULT_STATE = {
-  chartLayout: '1-chart' as ChartLayoutMode,
+  chartLayout: 'single' as ChartLayoutMode,
   leftDock: { collapsed: false, width: 260 },
   rightDock: { collapsed: false, width: 300 },
   bottomPanel: { collapsed: false, height: 200, activeTab: 'positions' },
@@ -150,13 +155,39 @@ export const useLayoutStore = create<LayoutState>()(
         }
       },
 
-      saveCurrentLayout: (name) => {
-        const { chartLayout, leftDock, rightDock, bottomPanel, savedLayouts } = get();
-        if (savedLayouts.length >= 20) return; // Max 20 layouts per user
+      hydrateLayouts: async () => {
+        const rows = await getLayouts();
+        const layouts = rows.map((row: any): LayoutPreset => ({
+          id: row.id,
+          name: row.name || 'Untitled',
+          chartLayout: row.panel_config?.chartLayout || row.chart_config?.chartLayout || DEFAULT_STATE.chartLayout,
+          leftDock: row.panel_config?.leftDock || { collapsed: !!row.sidebar_collapsed, width: row.watchlist_width || 260 },
+          rightDock: row.panel_config?.rightDock || { collapsed: false, width: row.order_panel_width || 300 },
+          bottomPanel: row.panel_config?.bottomPanel || { collapsed: false, height: row.bottom_panel_height || 200, activeTab: 'positions' },
+          createdAt: row.created_at || row.updated_at || new Date().toISOString(),
+        }));
+        set({ savedLayouts: layouts.slice(0, 20) });
+      },
 
+      saveCurrentLayout: async (name) => {
+        const { leftDock, rightDock, bottomPanel, savedLayouts } = get();
+        const chartLayout = useAppStore.getState().chartLayout;
+        const trimmedName = name.trim();
+        if (!trimmedName || savedLayouts.length >= 20) return;
+
+        const saved = await saveLayout({
+          name: trimmedName,
+          layout_type: 'custom',
+          panel_config: { chartLayout, leftDock, rightDock, bottomPanel },
+          chart_config: { chartLayout },
+          sidebar_collapsed: leftDock.collapsed,
+          bottom_panel_height: bottomPanel.height,
+          watchlist_width: leftDock.width,
+          order_panel_width: rightDock.width,
+        });
         const preset: LayoutPreset = {
-          id: crypto.randomUUID(),
-          name,
+          id: saved.id,
+          name: saved.name || trimmedName,
           chartLayout,
           leftDock: { ...leftDock },
           rightDock: { ...rightDock },
@@ -165,23 +196,6 @@ export const useLayoutStore = create<LayoutState>()(
         };
 
         set({ savedLayouts: [preset, ...savedLayouts] });
-
-        // Persist to server (fire-and-forget)
-        fetch('/api/persistence/layouts', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({
-            name,
-            layout_type: 'custom',
-            panel_config: { chartLayout, leftDock, rightDock, bottomPanel },
-            chart_config: { chartLayout },
-            sidebar_collapsed: leftDock.collapsed,
-            bottom_panel_height: bottomPanel.height,
-            watchlist_width: leftDock.width,
-            order_panel_width: rightDock.width,
-          }),
-        }).catch(() => {});
       },
 
       loadLayout: (id) => {
@@ -194,9 +208,18 @@ export const useLayoutStore = create<LayoutState>()(
           rightDock: { ...layout.rightDock },
           bottomPanel: { ...layout.bottomPanel },
         });
+        useAppStore.getState().setChartLayout(layout.chartLayout);
       },
 
-      deleteLayout: (id) => {
+      renameLayout: async (id, name) => {
+        const trimmedName = name.trim();
+        if (!trimmedName) return;
+        const saved = await updateLayout(id, { name: trimmedName });
+        set((s) => ({ savedLayouts: s.savedLayouts.map((layout) => layout.id === id ? { ...layout, name: saved.name || trimmedName } : layout) }));
+      },
+
+      deleteLayout: async (id) => {
+        await deleteLayoutRequest(id);
         set((s) => ({ savedLayouts: s.savedLayouts.filter(l => l.id !== id) }));
       },
 

@@ -1,0 +1,42 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const api = vi.hoisted(() => ({
+  getLayouts: vi.fn(),
+  saveLayout: vi.fn(),
+  updateLayout: vi.fn(),
+  deleteLayout: vi.fn(),
+}));
+
+vi.mock('@/services/api', () => api);
+
+import { useLayoutStore } from '@/store/layoutStore';
+
+describe('P1.3 workspace persistence', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useLayoutStore.setState({ savedLayouts: [], chartLayout: 'single' });
+  });
+
+  it('hydrates server layouts into the local layout model', async () => {
+    api.getLayouts.mockResolvedValue([{ id: 'server-1', name: 'Trading', panel_config: { chartLayout: '4' }, updated_at: '2026-09-02T00:00:00Z' }]);
+    await useLayoutStore.getState().hydrateLayouts();
+    expect(useLayoutStore.getState().savedLayouts).toMatchObject([{ id: 'server-1', name: 'Trading', chartLayout: '4' }]);
+  });
+
+  it('updates local state only after durable save succeeds', async () => {
+    api.saveLayout.mockResolvedValue({ id: 'server-2', name: 'Saved' });
+    await useLayoutStore.getState().saveCurrentLayout('Saved');
+    expect(api.saveLayout).toHaveBeenCalledOnce();
+    expect(useLayoutStore.getState().savedLayouts[0].id).toBe('server-2');
+  });
+
+  it('renames and deletes through server CRUD before updating local state', async () => {
+    useLayoutStore.setState({ savedLayouts: [{ id: 'server-3', name: 'Old', chartLayout: 'single', leftDock: { collapsed: false, width: 260 }, rightDock: { collapsed: false, width: 300 }, bottomPanel: { collapsed: false, height: 200, activeTab: 'positions' }, createdAt: '' }] });
+    api.updateLayout.mockResolvedValue({ id: 'server-3', name: 'New' });
+    api.deleteLayout.mockResolvedValue({ status: 'deleted' });
+    await useLayoutStore.getState().renameLayout('server-3', 'New');
+    expect(useLayoutStore.getState().savedLayouts[0].name).toBe('New');
+    await useLayoutStore.getState().deleteLayout('server-3');
+    expect(useLayoutStore.getState().savedLayouts).toEqual([]);
+  });
+});

@@ -10,6 +10,7 @@ import { X, Moon, Palette, Bell, Keyboard, ChevronDown } from 'lucide-react';
 import { useAppStore } from '@/store/appStore';
 import { cn } from '@/utils/helpers';
 import type { Theme } from '@/types';
+import { LayoutManager } from '@/components/LayoutManager';
 
 interface SettingsPanelProps {
   onClose: () => void;
@@ -111,6 +112,10 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
                 <div className="text-[13px] text-fw-text-muted bg-fw-bg/60 rounded-lg px-3 py-2 border border-fw-border/40">
                   Panel visibility is saved automatically when you toggle panels from the top bar.
                 </div>
+              </SettingSection>
+
+              <SettingSection title="Workspaces" description="Save and restore your terminal layout">
+                <LayoutManager />
               </SettingSection>
             </div>
           )}

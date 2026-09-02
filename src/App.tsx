@@ -19,7 +19,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useWatchlistSync } from '@/hooks/useWatchlistSync';
 import { useAppStore } from '@/store/appStore';
 import { useThemeStore } from '@/store/themeStore';
-import { initLayoutObserver } from '@/store/layoutStore';
+import { initLayoutObserver, useLayoutStore } from '@/store/layoutStore';
 import { wsService } from '@/services/websocket';
 import { startSync, stopSync, startPersistence, stopPersistence } from '@/features/chart-trading';
 import { cn } from '@/utils/helpers';
@@ -129,9 +129,10 @@ export default function App() {
   useWatchlistSync();
 
   // Resizable panel widths/heights
-  const [watchlistWidth, setWatchlistWidth] = useState(250);
-  const [orderPanelWidth, setOrderPanelWidth] = useState(290);
-  const [bottomPanelHeight, setBottomPanelHeight] = useState(180);
+  const { leftDock, rightDock, bottomPanel, setLeftDockWidth, setRightDockWidth, setBottomHeight } = useLayoutStore();
+  const watchlistWidth = leftDock.width;
+  const orderPanelWidth = rightDock.width;
+  const bottomPanelHeight = bottomPanel.height;
   const [depthPanelHeight, setDepthPanelHeight] = useState(320);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
@@ -139,6 +140,10 @@ export default function App() {
 
   // Initialize layout observer (auto-collapse docks on small viewport)
   useEffect(() => { initLayoutObserver(); }, []);
+
+  useEffect(() => {
+    if (isAuthenticated) useLayoutStore.getState().hydrateLayouts().catch(() => {});
+  }, [isAuthenticated]);
 
   // Bootstrap Overlay Engine synchronization — starts watching Zustand store for position changes
   useEffect(() => {
@@ -182,16 +187,16 @@ export default function App() {
   }, [isAuthenticated]);
 
   const handleWatchlistResize = useCallback((dx: number) => {
-    setWatchlistWidth((w) => Math.max(160, Math.min(400, w + dx)));
-  }, []);
+    setLeftDockWidth(watchlistWidth + dx);
+  }, [setLeftDockWidth, watchlistWidth]);
 
   const handleOrderPanelResize = useCallback((dx: number) => {
-    setOrderPanelWidth((w) => Math.max(200, Math.min(420, w - dx)));
-  }, []);
+    setRightDockWidth(orderPanelWidth - dx);
+  }, [orderPanelWidth, setRightDockWidth]);
 
   const handleBottomResize = useCallback((dy: number) => {
-    setBottomPanelHeight((h) => Math.max(120, Math.min(400, h - dy)));
-  }, []);
+    setBottomHeight(bottomPanelHeight - dy);
+  }, [bottomPanelHeight, setBottomHeight]);
 
   const handleDepthResize = useCallback((dy: number) => {
     setDepthPanelHeight((h) => Math.max(160, Math.min(520, h - dy)));
