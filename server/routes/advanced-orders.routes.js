@@ -31,6 +31,34 @@ export function buildBracketLegs({ symbol, token, segment, side, qty, productTyp
   ];
 }
 
+export function normalizeBracketOrderParams(params = {}) {
+  const side = String(params.side || '').toUpperCase();
+  const qty = Number(params.qty ?? 0);
+  const price = Number(params.price ?? 0);
+  const targetPrice = Number(params.targetPrice ?? params.tpPrice ?? 0);
+  const stoplossPrice = Number(params.stoplossPrice ?? params.slPrice ?? 0);
+
+  return {
+    ...params,
+    symbol: String(params.symbol || '').trim(),
+    token: String(params.token || '').trim(),
+    segment: String(params.segment || 'NSE').trim().toUpperCase(),
+    side,
+    qty,
+    price: Number.isFinite(price) ? price : 0,
+    orderType: String(params.orderType || 'LIMIT').toUpperCase(),
+    productType: 'BO',
+    validity: String(params.validity || 'DAY').toUpperCase(),
+    isAmo: !!params.isAmo,
+    targetPrice: Number.isFinite(targetPrice) ? targetPrice : 0,
+    stoplossPrice: Number.isFinite(stoplossPrice) ? stoplossPrice : 0,
+    slPrice: Number.isFinite(stoplossPrice) ? stoplossPrice : 0,
+    tpPrice: Number.isFinite(targetPrice) ? targetPrice : 0,
+    orderGroupId: params.orderGroupId || crypto.randomUUID(),
+    orderGroupType: 'bracket',
+  };
+}
+
 export function createAdvancedOrdersRouter(accountService = null) {
   const router = Router();
   const orderRepo = new OrderRepository();
@@ -116,23 +144,46 @@ export function createAdvancedOrdersRouter(accountService = null) {
    */
   router.post('/orders/bracket', requireAuth, requirePermission('trade'), async (req, res) => {
     try {
-      const { symbol, token, segment, side, productType, qty, price, orderType, targetPrice, stoplossPrice, trailingSl } = req.body;
+      if (!accountService?.placeOrder || !accountService?.resolveAccountId) {
+        return res.status(503).json({ message: 'Bracket execution service unavailable' });
+      }
+
+      const payload = normalizeBracketOrderParams(req.body);
+      const { symbol, token, segment, side, qty, price, orderType, targetPrice, stoplossPrice } = payload;
       if (!symbol || !token || !side || !qty) {
         return res.status(400).json({ message: 'Missing bracket parameters' });
       }
       const validationError = validateBracketPrices({ side, price, targetPrice, stoplossPrice });
       if (validationError) return res.status(400).json({ message: validationError });
 
-      if (!accountService?.placeOrder) return res.status(503).json({ message: 'Bracket execution service unavailable' });
-      const groupId = crypto.randomUUID();
-      const result = await accountService.placeOrder(req.user.accountId, {
-        symbol, token, segment: segment || 'NSE', side,
-        orderType: orderType || 'LIMIT', productType: productType || 'BO', qty, price,
-        targetPrice: Number(targetPrice), stoplossPrice: Number(stoplossPrice), trailingSl,
-        orderGroupId: groupId, orderGroupType: 'bracket',
+      const realAccountId = await accountService.resolveAccountId(req.user.accountId);
+      const result = await accountService.placeOrder(realAccountId, {
+        ...payload,
+        exchange: payload.segment,
+        symbol,
+        token,
+        segment,
+        side,
+        orderType,
+        productType: 'BO',
+        qty,
+        price,
+        targetPrice,
+        stoplossPrice,
+        slPrice: stoplossPrice,
+        tpPrice: targetPrice,
+        validity: payload.validity,
+        isAmo: payload.isAmo,
+        orderGroupId: payload.orderGroupId,
+        orderGroupType: 'bracket',
       });
 
-      res.json({ ...result, groupId, orders: [result.orderId], status: result.status || 'placed' });
+      res.json({
+        ...result,
+        groupId: payload.orderGroupId,
+        orders: result?.orderId ? [result.orderId] : [],
+        status: result?.status || 'PENDING',
+      });
     } catch (err) {
       res.status(500).json({ message: err.message });
     }

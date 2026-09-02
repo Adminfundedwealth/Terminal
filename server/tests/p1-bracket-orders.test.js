@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildBracketLegs, validateBracketPrices } from '../routes/advanced-orders.routes.js';
+import { buildBracketLegs, validateBracketPrices, normalizeBracketOrderParams } from '../routes/advanced-orders.routes.js';
 import { OrderExecutionService } from '../services/orderExecutionService.js';
 
 describe('P1.1 bracket order construction', () => {
@@ -35,6 +35,60 @@ describe('P1.1 bracket order construction', () => {
 
   it('requires both protection prices before an entry can be bracketed', () => {
     expect(validateBracketPrices({ side: 'BUY', price: 24000, targetPrice: 24100, stoplossPrice: 0 })).toContain('both');
+  });
+
+  it('normalizes a bracket order into the canonical execution payload', () => {
+    const payload = normalizeBracketOrderParams({
+      symbol: 'NIFTY FUT',
+      token: '123',
+      segment: 'NFO',
+      side: 'BUY',
+      qty: 65,
+      orderType: 'LIMIT',
+      productType: 'MIS',
+      price: 24000,
+      targetPrice: 24150,
+      stoplossPrice: 23900,
+      validity: 'DAY',
+      isAmo: false,
+    });
+
+    expect(payload).toMatchObject({
+      symbol: 'NIFTY FUT',
+      side: 'BUY',
+      orderType: 'LIMIT',
+      productType: 'BO',
+      qty: 65,
+      price: 24000,
+      targetPrice: 24150,
+      stoplossPrice: 23900,
+      orderGroupType: 'bracket',
+    });
+    expect(payload.orderGroupId).toBeTruthy();
+  });
+
+  it('keeps sell-side bracket pricing directionally valid', () => {
+    const payload = normalizeBracketOrderParams({
+      symbol: 'BANKNIFTY FUT',
+      token: '456',
+      segment: 'NFO',
+      side: 'SELL',
+      qty: 25,
+      orderType: 'LIMIT',
+      productType: 'MIS',
+      price: 50000,
+      targetPrice: 49500,
+      stoplossPrice: 50500,
+    });
+
+    expect(validateBracketPrices({
+      side: payload.side,
+      price: payload.price,
+      targetPrice: payload.targetPrice,
+      stoplossPrice: payload.stoplossPrice,
+    })).toBeNull();
+    expect(payload.productType).toBe('BO');
+    expect(payload.orderGroupType).toBe('bracket');
   });
 
   it('attaches both protections as one bracket lifecycle after a fill', async () => {
