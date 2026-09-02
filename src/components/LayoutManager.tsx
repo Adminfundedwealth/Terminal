@@ -56,7 +56,7 @@ export function LayoutManager() {
               {editingId === layout.id ? (
                 <input aria-label={`Rename ${layout.name}`} value={editingName} onChange={(event) => setEditingName(event.target.value)} className="flex-1 h-8 bg-fw-surface-2 border border-fw-border rounded px-2 text-[13px] text-fw-text" autoFocus />
               ) : <span className="flex-1 text-[13px] font-semibold text-fw-text truncate">{layout.name}</span>}
-              <button onClick={() => editingId === layout.id ? rename(layout.id) : loadLayout(layout.id)} title={editingId === layout.id ? 'Save name' : 'Load workspace'} className="p-1.5 text-fw-accent hover:bg-fw-accent/10 rounded">
+              <button onClick={() => editingId === layout.id ? rename(layout.id) : loadLayout(layout.id).catch(() => setMessage('Workspace could not be loaded'))} title={editingId === layout.id ? 'Save name' : 'Load workspace'} className="p-1.5 text-fw-accent hover:bg-fw-accent/10 rounded">
                 {editingId === layout.id ? <Check size={14} /> : <span className="text-[11px] font-bold">Load</span>}
               </button>
               <button onClick={() => { setEditingId(layout.id); setEditingName(layout.name); }} title="Rename workspace" className="p-1.5 text-fw-text-muted hover:text-fw-text rounded"><Pencil size={14} /></button>

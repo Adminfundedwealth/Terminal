@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { deleteLayout as deleteLayoutRequest, getLayouts, saveLayout, updateLayout } from '@/services/api';
+import { activateLayout, deleteLayout as deleteLayoutRequest, getLayouts, saveLayout, updateLayout } from '@/services/api';
 import { useAppStore } from '@/store/appStore';
 import type { ChartLayout } from '@/types';
 
@@ -32,6 +32,7 @@ export interface BottomPanelState {
 export interface LayoutPreset {
   id: string;
   name: string;
+  isActive?: boolean;
   chartLayout: ChartLayoutMode;
   leftDock: DockState;
   rightDock: DockState;
@@ -61,7 +62,7 @@ interface LayoutState {
   updateViewport: (width: number) => void;
   hydrateLayouts: () => Promise<void>;
   saveCurrentLayout: (name: string) => Promise<void>;
-  loadLayout: (id: string) => void;
+  loadLayout: (id: string, persistActivation?: boolean) => Promise<void>;
   renameLayout: (id: string, name: string) => Promise<void>;
   deleteLayout: (id: string) => Promise<void>;
   resetToDefault: () => void;
@@ -160,13 +161,19 @@ export const useLayoutStore = create<LayoutState>()(
         const layouts = rows.map((row: any): LayoutPreset => ({
           id: row.id,
           name: row.name || 'Untitled',
+          isActive: row.is_active === true,
           chartLayout: row.panel_config?.chartLayout || row.chart_config?.chartLayout || DEFAULT_STATE.chartLayout,
           leftDock: row.panel_config?.leftDock || { collapsed: !!row.sidebar_collapsed, width: row.watchlist_width || 260 },
           rightDock: row.panel_config?.rightDock || { collapsed: false, width: row.order_panel_width || 300 },
           bottomPanel: row.panel_config?.bottomPanel || { collapsed: false, height: row.bottom_panel_height || 200, activeTab: 'positions' },
           createdAt: row.created_at || row.updated_at || new Date().toISOString(),
         }));
-        set({ savedLayouts: layouts.slice(0, 20) });
+        const limitedLayouts = layouts.slice(0, 20);
+        set({ savedLayouts: limitedLayouts });
+        const activeLayout = limitedLayouts.find((layout) => layout.isActive);
+        if (activeLayout) {
+          get().loadLayout(activeLayout.id, false);
+        }
       },
 
       saveCurrentLayout: async (name) => {
@@ -188,6 +195,7 @@ export const useLayoutStore = create<LayoutState>()(
         const preset: LayoutPreset = {
           id: saved.id,
           name: saved.name || trimmedName,
+          isActive: saved.is_active === true,
           chartLayout,
           leftDock: { ...leftDock },
           rightDock: { ...rightDock },
@@ -198,15 +206,18 @@ export const useLayoutStore = create<LayoutState>()(
         set({ savedLayouts: [preset, ...savedLayouts] });
       },
 
-      loadLayout: (id) => {
+      loadLayout: async (id, persistActivation = true) => {
         const layout = get().savedLayouts.find(l => l.id === id);
         if (!layout) return;
+
+        if (persistActivation) await activateLayout(id);
 
         set({
           chartLayout: layout.chartLayout,
           leftDock: { ...layout.leftDock },
           rightDock: { ...layout.rightDock },
           bottomPanel: { ...layout.bottomPanel },
+          savedLayouts: get().savedLayouts.map((savedLayout) => ({ ...savedLayout, isActive: savedLayout.id === id })),
         });
         useAppStore.getState().setChartLayout(layout.chartLayout);
       },
