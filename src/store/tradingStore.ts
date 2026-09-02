@@ -39,6 +39,7 @@ interface TradingState {
   selectedContract: SelectedContract | null;
 
   setPositions: (positions: Position[]) => void;
+  addPosition: (position: Position) => void;
   updatePosition: (id: string, update: Partial<Position>) => void;
   setOrders: (orders: Order[]) => void;
   addOrder: (order: Order) => void;
@@ -80,6 +81,11 @@ export const useTradingStore = create<TradingState>((set) => ({
   selectedContract: null,
 
   setPositions: (positions) => set({ positions }),
+  addPosition: (position) => set((state) => ({
+    positions: state.positions.some((existing) => existing.id === position.id)
+      ? state.positions
+      : [position, ...state.positions],
+  })),
   updatePosition: (id, update) =>
     set((state) => ({
       positions: state.positions.map((p) => (p.id === id ? { ...p, ...update } : p)),

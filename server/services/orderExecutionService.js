@@ -910,9 +910,10 @@ export class OrderExecutionService {
     const filledQty = orderParams.qty;
 
     // Persist the confirmed fill before publishing final lifecycle events.
+    let persistedPosition;
     try {
       await orderRepo.markFilled(orderId, filledQty, fillPrice, brokerOrderId);
-      await positionRepo.upsertPosition(accountId, {
+      persistedPosition = await positionRepo.upsertPosition(accountId, {
         symbol: orderParams.symbol, token: orderParams.token,
         segment: orderParams.segment, exchange: orderParams.exchange || orderParams.segment,
         productType: orderParams.productType, side: orderParams.side,
@@ -943,6 +944,7 @@ export class OrderExecutionService {
     }, { accountId });
 
     eventBus.publish('position.updated', {
+      id: persistedPosition?.id,
       symbol: orderParams.symbol,
       token: orderParams.token,
       segment: orderParams.segment,

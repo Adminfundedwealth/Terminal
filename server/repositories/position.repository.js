@@ -94,6 +94,7 @@ export class PositionRepository extends BaseRepository {
         });
 
         eventBus.publish('position.updated', {
+          id: result.id,
           symbol: existing.symbol, token: existing.token,
           qty: newQty, side: newSide, avgPrice: newAvgPrice,
           pnl: realizedPnl, status: 'open',
@@ -122,6 +123,7 @@ export class PositionRepository extends BaseRepository {
           });
 
           eventBus.publish('position.updated', {
+            id: result.id,
             symbol: existing.symbol, token: existing.token,
             qty: 0, pnl: realizedPnl, status: 'closed',
           }, { accountId });
@@ -171,6 +173,7 @@ export class PositionRepository extends BaseRepository {
           });
 
           eventBus.publish('position.updated', {
+            id: newPos.id,
             symbol: params.symbol, token: params.token,
             qty: excessQty, side: newSide,
             pnl: 0, status: 'open',
@@ -200,6 +203,7 @@ export class PositionRepository extends BaseRepository {
       });
 
       eventBus.publish('position.updated', {
+        id: result.id,
         symbol: params.symbol, token: params.token,
         qty: params.qty, side, pnl: 0, status: 'open',
       }, { accountId });

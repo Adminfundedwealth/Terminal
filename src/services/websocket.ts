@@ -196,7 +196,11 @@ class WebSocketService {
           if ((position.takeProfit == null) && existing?.takeProfit) {
             delete safeUpdate.takeProfit;
           }
-          trading.updatePosition(position.id, safeUpdate);
+          if (existing) {
+            trading.updatePosition(position.id, safeUpdate);
+          } else if (position.qty !== 0 && position.status !== 'closed') {
+            trading.addPosition(position);
+          }
         }
         break;
       }

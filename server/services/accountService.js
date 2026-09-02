@@ -140,6 +140,7 @@ export class AccountService {
           : (avgPrice - ltp) * Math.abs(qty);
 
         eventBus.publish('position.updated', {
+          id: pos.id,
           symbol,
           token,
           qty,
