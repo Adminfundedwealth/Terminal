@@ -78,7 +78,7 @@ export function GreeksPanel() {
   }, [spotPrice, strikePrice, daysToExpiry, riskFreeRate, impliedVol, isCall]);
 
   // Use worker result if available, otherwise main thread
-  const greeks = workerGreeks || mainThreadGreeks;
+  const greeks = workerGreeks && Object.values(workerGreeks).every(Number.isFinite) ? workerGreeks : mainThreadGreeks;
 
   return (
     <div className="h-full flex flex-col bg-fw-bg overflow-y-auto">
