@@ -167,6 +167,7 @@ export const getTrades = (period?: 'today' | 'week' | 'month') =>
   request<Trade[]>(`/trades${period ? `?period=${period}` : ''}`);
 
 export interface PlaceOrderParams {
+  idempotencyKey?: string;
   symbol: string;
   token: string;
   segment: string;
@@ -222,9 +223,10 @@ export const getMarginQuote = (params: {
 export const placeOrder = (params: PlaceOrderParams) => {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
+  const idempotencyKey = params.idempotencyKey || crypto.randomUUID();
   return request<{ orderId: string; status: string }>('/orders/place', {
     method: 'POST',
-    body: JSON.stringify(params),
+    body: JSON.stringify({ ...params, idempotencyKey }),
     signal: controller.signal,
   }).finally(() => clearTimeout(timeoutId));
 };
@@ -326,7 +328,11 @@ export const deleteJournalEntry = (id: string) => request<any>(`/journal/${id}`,
 // Advanced Orders
 export const placeOCOOrder = (params: any) => request<any>('/orders/oco', { method: 'POST', body: JSON.stringify(params) });
 export const placeBasketOrder = (legs: any[]) => request<any>('/orders/basket', { method: 'POST', body: JSON.stringify({ legs }) });
-export const placeBracketOrder = (params: any) => request<any>('/orders/bracket', { method: 'POST', body: JSON.stringify(params) });
+export const placeBracketOrder = (params: PlaceOrderParams & { slPrice: number; tpPrice: number }) =>
+  request<{ groupId: string; orderId: string; orders: string[]; status: string }>('/orders/bracket', {
+    method: 'POST',
+    body: JSON.stringify({ ...params, targetPrice: params.tpPrice, stoplossPrice: params.slPrice }),
+  });
 
 // Equity Curve & Metrics
 export const getEquityCurve = (days?: number) => request<any[]>(`/account/equity-curve${days ? `?days=${days}` : ''}`);

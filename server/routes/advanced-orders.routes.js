@@ -5,6 +5,32 @@ import { Router } from 'express';
 import { requireAuth, requirePermission } from '../middleware/auth.js';
 import { OrderRepository } from '../repositories/order.repository.js';
 
+export function validateBracketPrices({ side, price, targetPrice, stoplossPrice }) {
+  if (!Number.isFinite(Number(targetPrice)) || Number(targetPrice) <= 0 ||
+      !Number.isFinite(Number(stoplossPrice)) || Number(stoplossPrice) <= 0) {
+    return 'Bracket targetPrice and stoplossPrice must both be greater than 0';
+  }
+  if (Number(price) > 0) {
+    const isLong = side === 'BUY';
+    if (isLong && (Number(stoplossPrice) >= Number(price) || Number(targetPrice) <= Number(price))) {
+      return 'For BUY brackets, stoplossPrice must be below entry and targetPrice above entry';
+    }
+    if (!isLong && (Number(stoplossPrice) <= Number(price) || Number(targetPrice) >= Number(price))) {
+      return 'For SELL brackets, stoplossPrice must be above entry and targetPrice below entry';
+    }
+  }
+  return null;
+}
+
+export function buildBracketLegs({ symbol, token, segment, side, qty, productType, price, orderType, targetPrice, stoplossPrice, trailingSl, groupId, entryId }) {
+  const exitSide = side === 'BUY' ? 'SELL' : 'BUY';
+  const common = { symbol, token, segment: segment || 'NSE', side: exitSide, productType: productType || 'BO', qty, orderGroupId: groupId, orderGroupType: 'bracket', parentOrderId: entryId };
+  return [
+    { ...common, orderType: 'SL-M', triggerPrice: stoplossPrice, price: null },
+    { ...common, orderType: 'LIMIT', price: targetPrice, triggerPrice: null },
+  ];
+}
+
 export function createAdvancedOrdersRouter() {
   const router = Router();
   const orderRepo = new OrderRepository();
@@ -94,6 +120,8 @@ export function createAdvancedOrdersRouter() {
       if (!symbol || !token || !side || !qty) {
         return res.status(400).json({ message: 'Missing bracket parameters' });
       }
+      const validationError = validateBracketPrices({ side, price, targetPrice, stoplossPrice });
+      if (validationError) return res.status(400).json({ message: validationError });
 
       const groupId = crypto.randomUUID();
       const accountId = req.user.accountId;
@@ -109,7 +137,11 @@ export function createAdvancedOrdersRouter() {
         orderGroupType: 'bracket',
       });
 
-      res.json({ groupId, orderId: entry.id, status: 'placed' });
+      const legs = buildBracketLegs({ symbol, token, segment, side, qty, productType, price, orderType, targetPrice, stoplossPrice, trailingSl, groupId, entryId: entry.id });
+      const childOrders = [];
+      for (const leg of legs) childOrders.push(await orderRepo.createOrder(accountId, leg));
+
+      res.json({ groupId, orderId: entry.id, orders: [entry.id, ...childOrders.map((order) => order.id)], status: 'placed' });
     } catch (err) {
       res.status(500).json({ message: err.message });
     }

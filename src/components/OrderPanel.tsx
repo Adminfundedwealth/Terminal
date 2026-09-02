@@ -2,7 +2,7 @@
 import { useTradingStore } from '@/store/tradingStore';
 import { useAppStore } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
-import { placeOrder, exitPosition, getMarginQuote, type MarginQuote } from '@/services/api';
+import { placeOrder, placeBracketOrder, exitPosition, getMarginQuote, type MarginQuote } from '@/services/api';
 import { cn, formatPrice } from '@/utils/helpers';
 import { orderSuccessMessage, exitSuccessMessage } from '@/utils/orderMessages';
 import { ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
@@ -185,6 +185,7 @@ export function OrderPanel() {
     const effectiveLotSize = activeSymbol?.lotSize || 1;
     const lotError = validateOrderLotMultiple(orderForm.qty, effectiveLotSize);
     if (lotError) return lotError;
+    if ((slPrice > 0) !== (tpPrice > 0)) return 'Enter both Stop Loss and Target prices for a bracket order';
     if ((orderForm.orderType === 'LIMIT' || orderForm.orderType === 'SL') && (!orderForm.price || orderForm.price <= 0)) {
       return 'Price must be greater than 0 for LIMIT orders — enter a price or switch to MARKET';
     }
@@ -208,7 +209,7 @@ export function OrderPanel() {
     if (!symbol || !token) return;
     setIsSubmitting(true);
     try {
-      const result = await placeOrder({
+      const orderParams = {
         symbol, token,
         segment: activeSymbol?.segment || 'NSE',
         exchange: activeSymbol?.exchange,
@@ -227,7 +228,10 @@ export function OrderPanel() {
         isAmo: orderForm.isAmo,
         slPrice: slPrice > 0 ? slPrice : undefined,
         tpPrice: tpPrice > 0 ? tpPrice : undefined,
-      });
+      };
+      const result = slPrice > 0 && tpPrice > 0
+        ? await placeBracketOrder({ ...orderParams, slPrice, tpPrice })
+        : await placeOrder(orderParams);
       // The backend returns the initial status synchronously.
       // MARKET orders in paper mode return FILLED immediately.
       // LIMIT/SL orders return OPEN/PENDING — final status arrives via WS push.
