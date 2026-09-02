@@ -202,6 +202,17 @@ describe('0.1 derivative default quantity uses one lot', () => {
     expect(getDefaultOrderQuantity({ segment: 'NFO', instrumentType: 'FUT', lotSize: 120 })).toBe(120);
   });
 
+  it.each([
+    ['BANKNIFTY FUT', 30],
+    ['FINNIFTY FUT', 60],
+    ['MIDCPNIFTY FUT', 120],
+    ['RELIANCE FUT', 500],
+  ])('%s defaults to one complete lot', (_symbol, lotSize) => {
+    const quantity = getDefaultOrderQuantity({ segment: 'NFO', instrumentType: 'FUT', lotSize });
+    expect(quantity).toBe(lotSize);
+    expect(validateOrderLotMultiple(quantity, lotSize)).toBeNull();
+  });
+
   it('keeps options on one valid lot', () => {
     expect(getDefaultOrderQuantity({ segment: 'NFO', instrumentType: 'CE', lotSize: 50 })).toBe(50);
     expect(validateOrderLotMultiple(50, 50)).toBeNull();

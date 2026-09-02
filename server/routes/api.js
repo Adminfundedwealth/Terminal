@@ -756,7 +756,7 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
     const { segment } = req.query;
     if (!segment) return res.json([]);
     const instruments = instrumentService.getBySegment(segment);
-    if (!['MCX', 'CDS'].includes(segment)) return res.json(instruments);
+    if (!['NFO', 'MCX', 'CDS'].includes(segment)) return res.json(instruments);
 
     const resolved = await Promise.all(instruments.map(async (instrument) => {
       if (!instrument.isPlaceholder) return instrument;
@@ -766,7 +766,10 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
         return {
           ...instrument,
           token: String(contract.securityId),
-          exchange: segment,
+          exchange: instrument.exchange,
+          instrumentType: contract.instrument === 'FUT' ? 'FUT' : instrument.instrumentType,
+          symbol: contract.tradingSymbol || instrument.symbol,
+          name: contract.tradingSymbol || instrument.name,
           expiry: contract.expiry || instrument.expiry,
           lotSize: contract.lotSize > 1 ? contract.lotSize : instrument.lotSize,
           tickSize: contract.tickSize || instrument.tickSize,
