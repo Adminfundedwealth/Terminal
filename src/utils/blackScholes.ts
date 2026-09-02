@@ -8,6 +8,13 @@ export interface BlackScholesGreeks {
   theoreticalPrice: number;
 }
 
+const INVALID = Number.NaN;
+
+function validInputs(spot: number, strike: number, years: number, rate: number, volatility: number): boolean {
+  return [spot, strike, years, rate, volatility].every(Number.isFinite)
+    && spot > 0 && strike > 0 && years > 0 && volatility > 0;
+}
+
 function normalCDF(value: number): number {
   const coefficients = [0.254829592, -0.284496736, 1.421413741, -1.453152027, 1.061405429];
   const sign = value < 0 ? -1 : 1;
@@ -22,7 +29,7 @@ function normalPDF(value: number): number {
 }
 
 export function blackScholesPrice(spot: number, strike: number, years: number, rate: number, volatility: number, isCall: boolean): number {
-  if (spot <= 0 || strike <= 0 || years <= 0 || volatility <= 0) return 0;
+  if (!validInputs(spot, strike, years, rate, volatility)) return INVALID;
   const rootTime = Math.sqrt(years);
   const d1 = (Math.log(spot / strike) + (rate + volatility * volatility / 2) * years) / (volatility * rootTime);
   const d2 = d1 - volatility * rootTime;
@@ -32,22 +39,28 @@ export function blackScholesPrice(spot: number, strike: number, years: number, r
 }
 
 export function impliedVolatility(spot: number, strike: number, years: number, rate: number, marketPrice: number, isCall: boolean): number {
-  if (marketPrice <= 0 || spot <= 0 || strike <= 0 || years <= 0) return 0.2;
+  if (![spot, strike, years, rate, marketPrice].every(Number.isFinite) || marketPrice <= 0 || !validInputs(spot, strike, years, rate, 1)) return INVALID;
+  const discountedStrike = strike * Math.exp(-rate * years);
+  const intrinsic = isCall ? Math.max(spot - discountedStrike, 0) : Math.max(discountedStrike - spot, 0);
+  const upperBound = isCall ? spot : discountedStrike;
+  if (marketPrice < intrinsic || marketPrice >= upperBound) return INVALID;
+
   let volatility = 0.3;
-  for (let iteration = 0; iteration < 50; iteration += 1) {
+  for (let iteration = 0; iteration < 100; iteration += 1) {
     const price = blackScholesPrice(spot, strike, years, rate, volatility, isCall);
     const rootTime = Math.sqrt(years);
     const d1 = (Math.log(spot / strike) + (rate + volatility * volatility / 2) * years) / (volatility * rootTime);
     const vega = spot * normalPDF(d1) * rootTime;
     const difference = price - marketPrice;
-    if (Math.abs(difference) < 0.0001 || vega < 0.0001) break;
-    volatility = Math.max(0.01, Math.min(5, volatility - difference / vega));
+    if (Math.abs(difference) < 0.000001) return volatility;
+    if (!Number.isFinite(vega) || vega < 0.0000001) break;
+    volatility = Math.max(0.0001, Math.min(5, volatility - difference / vega));
   }
-  return volatility;
+  return INVALID;
 }
 
 export function computeBlackScholesGreeks(spot: number, strike: number, years: number, rate: number, volatility: number, isCall: boolean): BlackScholesGreeks {
-  if (spot <= 0 || strike <= 0 || years <= 0 || volatility <= 0) return { delta: 0, gamma: 0, theta: 0, vega: 0, rho: 0, iv: volatility * 100, theoreticalPrice: 0 };
+  if (!validInputs(spot, strike, years, rate, volatility)) return { delta: INVALID, gamma: INVALID, theta: INVALID, vega: INVALID, rho: INVALID, iv: INVALID, theoreticalPrice: INVALID };
   const rootTime = Math.sqrt(years);
   const d1 = (Math.log(spot / strike) + (rate + volatility * volatility / 2) * years) / (volatility * rootTime);
   const d2 = d1 - volatility * rootTime;

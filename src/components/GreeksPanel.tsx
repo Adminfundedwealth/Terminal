@@ -54,10 +54,12 @@ export function GreeksPanel() {
   const underlyingQuote = underlyingInstrument ? quotes[underlyingInstrument.token] : undefined;
   const spotPrice = underlyingQuote?.ltp || 0;
   const strikePrice = selectedContract?.strike || activeSymbol?.strike || 0;
-  const daysToExpiry = selectedContract?.expiry ? Math.max((new Date(selectedContract.expiry).getTime() - Date.now()) / 86_400_000, 0.001) : 0;
+  const daysToExpiry = selectedContract?.expiry ? Math.max((new Date(selectedContract.expiry).getTime() - Date.now()) / 86_400_000, 0) : 0;
   const riskFreeRate = 0.065; // 6.5% India 10Y
   const isCall = activeSymbol?.instrumentType === 'CE';
-  const impliedVol = quote?.ltp && spotPrice > 0 && strikePrice > 0 ? impliedVolatility(spotPrice, strikePrice, daysToExpiry / 365, riskFreeRate, quote.ltp, isCall) : 0.2;
+  const impliedVol = quote?.ltp && spotPrice > 0 && strikePrice > 0 && daysToExpiry > 0
+    ? impliedVolatility(spotPrice, strikePrice, daysToExpiry / 365, riskFreeRate, quote.ltp, isCall)
+    : Number.NaN;
 
   // Send computation to worker when inputs change
   useEffect(() => {

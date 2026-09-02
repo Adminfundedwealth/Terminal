@@ -20,6 +20,8 @@
  *   OUT: { type: 'error', message: string }
  */
 
+import { computeBlackScholesGreeks, impliedVolatility } from '../utils/blackScholes';
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface StrikeInput {
@@ -93,14 +95,14 @@ function handleGreeks(data: { strikes: StrikeInput[]; spot: number; riskFreeRate
 
   const results: GreeksResult[] = strikes.map(s => {
     const isCall = s.type === 'CE';
-    let sigma = s.iv ? s.iv / 100 : 0.2; // Default 20% IV if not provided
+    let sigma = s.iv && Number.isFinite(s.iv) && s.iv > 0 ? s.iv / 100 : Number.NaN;
 
     // If we have LTP, try to estimate IV via Newton-Raphson
     if (s.ltp > 0 && !s.iv) {
       sigma = impliedVolatility(spot, s.strike, T, r, s.ltp, isCall);
     }
 
-    const greeks = blackScholes(spot, s.strike, T, r, sigma, isCall);
+    const greeks = computeBlackScholesGreeks(spot, s.strike, T, r, sigma, isCall);
     return {
       strike: s.strike,
       type: s.type,

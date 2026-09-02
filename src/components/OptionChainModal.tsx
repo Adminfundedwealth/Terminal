@@ -536,7 +536,8 @@ export function OptionChainModal() {
         // When Dhan supplies IV the worker result is used as fallback only (server IV takes priority).
         if (workerRef.current && spotPrice > 0 && selectedExpiry) {
           const msToExpiry = new Date(selectedExpiry).getTime() - Date.now();
-          const daysToExpiry = Math.max(msToExpiry / 86_400_000, 0.001);
+          const daysToExpiry = msToExpiry / 86_400_000;
+          if (daysToExpiry <= 0) return;
           const strikes = data.flatMap((e) => [
             { strike: e.strike, type: 'CE' as const, ltp: e.callLtp, iv: e.callIv || undefined },
             { strike: e.strike, type: 'PE' as const, ltp: e.putLtp,  iv: e.putIv  || undefined },
