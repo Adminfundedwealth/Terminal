@@ -65,7 +65,7 @@ import { DhanOrderPoller } from './services/dhanOrderPoller.js';
 import { futuresContractService } from './services/futuresContractService.js';
 import { MarginService } from './services/marginService.js';
 
-const PORT = process.env.PORT || 4000;
+const PORT = Number(process.env.PORT) || 9000;
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
 // â”€â”€â”€ Initialize Services â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

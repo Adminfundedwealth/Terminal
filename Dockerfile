@@ -11,6 +11,7 @@ COPY server/package*.json ./
 RUN npm install --production --legacy-peer-deps
 COPY server/ .
 COPY --from=frontend-builder /app/dist ./dist
-EXPOSE 4000
+EXPOSE 9000
 ENV NODE_ENV=production
+ENV PORT=9000
 CMD ["node", "index.js"]
