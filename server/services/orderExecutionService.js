@@ -47,9 +47,33 @@ export class OrderExecutionService {
     this._paperOrderMonitor = null;
     // Track pending paper SL/LIMIT orders: orderId → { accountId, orderParams, triggerPrice, limitPrice }
     this._pendingPaperOrders = new Map();
+    this._pendingGttOrders = new Map();
     // Concurrency guard for exitPosition: positionId → Promise
     this._exitInFlight = new Map();
     this._startPaperOrderMonitor();
+    this._startGttScheduler();
+  }
+
+  static shouldTriggerGtt(side, ltp, triggerPrice) {
+    if (!['BUY', 'SELL'].includes(side) || !Number.isFinite(ltp) || !Number.isFinite(triggerPrice) || triggerPrice <= 0) return false;
+    return side === 'BUY' ? ltp <= triggerPrice : ltp >= triggerPrice;
+  }
+
+  scheduleGtt(accountId, orderId, orderParams) {
+    this._pendingGttOrders.set(orderId, { accountId, orderParams });
+  }
+
+  _startGttScheduler() {
+    this._gttScheduler = setInterval(async () => {
+      for (const [orderId, entry] of this._pendingGttOrders) {
+        const quote = this.marketDataEngine.getQuote(entry.orderParams.token);
+        const ltp = Number(quote?.ltp || 0);
+        if (!OrderExecutionService.shouldTriggerGtt(entry.orderParams.side, ltp, Number(entry.orderParams.gttTriggerPrice))) continue;
+        this._pendingGttOrders.delete(orderId);
+        const account = await this._getAccount(entry.accountId);
+        await this.executeOrder(entry.accountId, orderId, { ...entry.orderParams, validity: 'GTC', isGtt: false }, account);
+      }
+    }, 1000);
   }
 
   /**
@@ -492,6 +516,11 @@ export class OrderExecutionService {
         };
         console.log(`[OrderExecution] PAPER MODE: Simulated ${orderParams.orderType} ${orderParams.side} ${orderParams.qty}x${orderParams.symbol} @ ${ltp} [validity=${orderParams.validity||'DAY'}${orderParams.isAmo?' AMO':''}]`);
       } else {
+        if (orderParams.validity === 'IOC') {
+          try { await orderRepo.updateStatus(orderId, 'CANCELLED', { reject_reason: 'IOC order was not immediately filled' }); } catch (e) { /* best effort */ }
+          eventBus.publish('order.updated', { orderId, status: 'CANCELLED', symbol: orderParams.symbol, token: orderParams.token, side: orderParams.side, qty: orderParams.qty, reason: 'IOC not immediately filled' }, { accountId });
+          return { orderId, status: 'CANCELLED', message: 'IOC order was not immediately filled' };
+        }
         let durableOrder;
         try {
           durableOrder = await orderRepo.findById(orderId);

@@ -575,6 +575,12 @@ export class AccountService {
       status: 'PENDING',
     }, { accountId });
 
+    if (orderParams.isAmo) return { orderId: data.id, status: 'AMO_PENDING' };
+    if (orderParams.validity === 'GTC' && orderParams.orderType === 'LIMIT' && orderParams.triggerPrice > 0) {
+      this.executionService.scheduleGtt(accountId, data.id, { ...orderParams, gttTriggerPrice: orderParams.triggerPrice });
+      return { orderId: data.id, status: 'PENDING', gtt: true };
+    }
+
     // Paper MARKET orders return only after the confirmed fill is persisted.
     const executionPromise = this._executeOrderAsync(accountId, data.id, orderParams);
     const { ExecutionMode } = await import('./executionMode.js');
@@ -615,7 +621,7 @@ export class AccountService {
       order_group_id: params.orderGroupId || null,
       order_group_type: params.orderGroupType || null,
       is_amo: params.isAmo || false,
-      status: 'PENDING',
+      status: params.isAmo ? 'AMO_PENDING' : 'PENDING',
     }).select().single();
 
     if (!error) return { data, duplicate: false };
@@ -651,7 +657,7 @@ export class AccountService {
         trigger_price: params.triggerPrice || null,
         validity: params.validity || 'DAY',
         is_amo: params.isAmo || false,
-        status: 'PENDING',
+        status: params.isAmo ? 'AMO_PENDING' : 'PENDING',
         placed_at: new Date().toISOString(),
       };
       memOrders.set(orderId, order);

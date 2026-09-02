@@ -96,6 +96,8 @@ export function OrderPanel() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [slPrice, setSlPrice] = useState<number>(0);
   const [tpPrice, setTpPrice] = useState<number>(0);
+  const [gttEnabled, setGttEnabled] = useState(false);
+  const [gttTriggerPrice, setGttTriggerPrice] = useState<number>(0);
   const [confirmOrder, setConfirmOrder] = useState<{ side: OrderSide } | null>(null);
   const [marginQuote, setMarginQuote] = useState<MarginQuote | null>(null);
 
@@ -185,6 +187,7 @@ export function OrderPanel() {
     const effectiveLotSize = activeSymbol?.lotSize || 1;
     const lotError = validateOrderLotMultiple(orderForm.qty, effectiveLotSize);
     if (lotError) return lotError;
+    if (gttEnabled && (!gttTriggerPrice || gttTriggerPrice <= 0)) return 'Enter a GTT trigger price';
     if ((slPrice > 0) !== (tpPrice > 0)) return 'Enter both Stop Loss and Target prices for a bracket order';
     if ((orderForm.orderType === 'LIMIT' || orderForm.orderType === 'SL') && (!orderForm.price || orderForm.price <= 0)) {
       return 'Price must be greater than 0 for LIMIT orders — enter a price or switch to MARKET';
@@ -223,9 +226,9 @@ export function OrderPanel() {
         productType: orderForm.productType,
         qty: orderForm.qty,
         price: orderForm.orderType === 'LIMIT' || orderForm.orderType === 'SL' ? orderForm.price : undefined,
-        triggerPrice: orderForm.orderType === 'SL' || orderForm.orderType === 'SL-M' ? orderForm.triggerPrice : undefined,
         validity: orderForm.validity === 'GTD' ? 'GTC' : orderForm.validity,
         isAmo: orderForm.isAmo,
+        triggerPrice: gttEnabled && gttTriggerPrice > 0 ? gttTriggerPrice : (orderForm.orderType === 'SL' || orderForm.orderType === 'SL-M' ? orderForm.triggerPrice : undefined),
         slPrice: slPrice > 0 ? slPrice : undefined,
         tpPrice: tpPrice > 0 ? tpPrice : undefined,
       };
@@ -529,20 +532,18 @@ export function OrderPanel() {
         )}
       </div>
 
-      {/* Quick Action Buttons — GTT/AMO/IOC/EXIT hidden, logic preserved */}
-      <div className="hidden">
+      {/* Order validity controls */}
+      <div className="px-3 pb-2 flex-shrink-0">
         <div className="grid grid-cols-4 gap-1">
           <ActionBtn label="GTT" onClick={() => {
+            setGttEnabled(!gttEnabled);
             setOrderForm({ validity: 'GTC' });
-            showToast('GTT mode — order valid till triggered');
-          }} className={orderForm.validity === 'GTC' ? 'bg-fw-accent/20 text-fw-accent border-fw-accent/30' : ''} />
+          }} className={gttEnabled ? 'bg-fw-accent/20 text-fw-accent border-fw-accent/30' : ''} />
           <ActionBtn label="AMO" onClick={() => {
             setOrderForm({ isAmo: !orderForm.isAmo });
-            showToast(orderForm.isAmo ? 'AMO disabled' : 'AMO enabled — order placed after market hours');
           }} className={orderForm.isAmo ? 'bg-fw-accent/20 text-fw-accent border-fw-accent/30' : ''} />
           <ActionBtn label="IOC" onClick={() => {
             setOrderForm({ validity: orderForm.validity === 'IOC' ? 'DAY' : 'IOC' });
-            showToast(orderForm.validity === 'IOC' ? 'Validity: DAY' : 'IOC — Immediate or Cancel');
           }} className={orderForm.validity === 'IOC' ? 'bg-fw-accent/20 text-fw-accent border-fw-accent/30' : ''} />
           <ActionBtn label="EXIT" onClick={async () => {
             const pos = useTradingStore.getState().positions.find((p) => p.symbol === symbol && p.qty !== 0);
@@ -555,6 +556,7 @@ export function OrderPanel() {
             finally { setIsSubmitting(false); }
           }} className={cn('hover:text-red hover:border-red-800/40', !openPosition && 'opacity-40 cursor-not-allowed')} />
         </div>
+        {gttEnabled && <input type="number" aria-label="GTT trigger price" value={gttTriggerPrice || ''} onChange={(event) => setGttTriggerPrice(Number(event.target.value) || 0)} placeholder="GTT trigger price" className="w-full h-8 mt-1.5 bg-fw-surface-2 border border-fw-accent/30 rounded-md font-mono text-[12px] text-fw-text px-2 outline-none focus:border-fw-accent" />}
       </div>
 
       {/* Spacer */}
