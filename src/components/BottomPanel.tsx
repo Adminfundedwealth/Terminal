@@ -100,15 +100,15 @@ export function BottomPanel() {
   const refreshData = async (signal?: AbortSignal) => {
     setIsRefreshing(true);
     try {
-      const [posData, ordData, trdData] = await Promise.all([
-        getPositions().catch(() => []),
-        getOrders().catch(() => []),
-        getTrades(tradeFilter).catch(() => []),
+      const [posResult, ordResult, trdResult] = await Promise.allSettled([
+        getPositions(),
+        getOrders(),
+        getTrades(tradeFilter),
       ]);
       if (signal?.aborted) return;
-      setPositions(posData);
-      setOrders(ordData);
-      setTrades(trdData);
+      if (posResult.status === 'fulfilled') setPositions(posResult.value);
+      if (ordResult.status === 'fulfilled') setOrders(ordResult.value);
+      if (trdResult.status === 'fulfilled') setTrades(trdResult.value);
     } catch (e) {
       // Silent fail
     } finally {
