@@ -256,7 +256,7 @@ app.use('/api', createPersistenceRouter());
 app.use('/api/persistence', createPersistenceRouter());
 
 // Advanced order routes (OCO, Basket, Bracket, Equity Curve, Chart Templates)
-app.use('/api', createAdvancedOrdersRouter());
+app.use('/api', createAdvancedOrdersRouter(accountService));
 
 // Kill switch routes
 app.use('/api', createKillSwitchRouter());

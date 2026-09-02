@@ -31,7 +31,7 @@ export function buildBracketLegs({ symbol, token, segment, side, qty, productTyp
   ];
 }
 
-export function createAdvancedOrdersRouter() {
+export function createAdvancedOrdersRouter(accountService = null) {
   const router = Router();
   const orderRepo = new OrderRepository();
 
@@ -123,25 +123,16 @@ export function createAdvancedOrdersRouter() {
       const validationError = validateBracketPrices({ side, price, targetPrice, stoplossPrice });
       if (validationError) return res.status(400).json({ message: validationError });
 
+      if (!accountService?.placeOrder) return res.status(503).json({ message: 'Bracket execution service unavailable' });
       const groupId = crypto.randomUUID();
-      const accountId = req.user.accountId;
-
-      // Entry order
-      const entry = await orderRepo.createOrder(accountId, {
+      const result = await accountService.placeOrder(req.user.accountId, {
         symbol, token, segment: segment || 'NSE', side,
-        orderType: orderType || 'LIMIT',
-        productType: 'BO',
-        qty, price,
-        targetPrice, stoplossPrice, trailingSl,
-        orderGroupId: groupId,
-        orderGroupType: 'bracket',
+        orderType: orderType || 'LIMIT', productType: productType || 'BO', qty, price,
+        targetPrice: Number(targetPrice), stoplossPrice: Number(stoplossPrice), trailingSl,
+        orderGroupId: groupId, orderGroupType: 'bracket',
       });
 
-      const legs = buildBracketLegs({ symbol, token, segment, side, qty, productType, price, orderType, targetPrice, stoplossPrice, trailingSl, groupId, entryId: entry.id });
-      const childOrders = [];
-      for (const leg of legs) childOrders.push(await orderRepo.createOrder(accountId, leg));
-
-      res.json({ groupId, orderId: entry.id, orders: [entry.id, ...childOrders.map((order) => order.id)], status: 'placed' });
+      res.json({ ...result, groupId, orders: [result.orderId], status: result.status || 'placed' });
     } catch (err) {
       res.status(500).json({ message: err.message });
     }

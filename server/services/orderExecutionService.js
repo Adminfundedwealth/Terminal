@@ -981,7 +981,28 @@ export class OrderExecutionService {
       }
     }
 
+    if (orderParams.orderGroupType === 'bracket' && orderParams.targetPrice && orderParams.stoplossPrice && persistedPosition?.id) {
+      await this._attachBracketProtection(accountId, persistedPosition, { ...orderParams, _brokerProvider: brokerProvider }, orderId);
+    }
+
     return { orderId, status: 'FILLED', brokerOrderId, avgPrice: fillPrice, filledQty };
+  }
+
+  async _attachBracketProtection(accountId, position, orderParams, entryOrderId) {
+    const protectionArgs = {
+      accountId,
+      position,
+      brokerProvider: orderParams.brokerProvider || orderParams._brokerProvider || 'dhan',
+      entryOrderId,
+      orderGroupId: orderParams.orderGroupId,
+    };
+    const results = await Promise.allSettled([
+      this.attachStopLoss(accountId, position.id, Number(orderParams.stoplossPrice), protectionArgs),
+      this.attachTakeProfit(accountId, position.id, Number(orderParams.targetPrice), protectionArgs),
+    ]);
+    const failed = results.find((result) => result.status === 'rejected');
+    if (failed) console.error(`[OrderExecution] Bracket protection setup failed: ${failed.reason?.message || failed.reason}`);
+    return results;
   }
 
   /**
@@ -1081,6 +1102,7 @@ export class OrderExecutionService {
     }, { accountId });
 
     // Update position
+    let persistedPosition;
     try {
       await positionRepo.upsertPosition(accountId, {
         symbol: order.symbol,
@@ -1091,7 +1113,7 @@ export class OrderExecutionService {
         side: order.side,
         qty: filledQty,
         price: avgPrice,
-      });
+      }).then((position) => { persistedPosition = position; });
     } catch (e) {
       console.error(`[OrderExecution] Position update on fill failed:`, e.message);
     }
@@ -1127,6 +1149,15 @@ export class OrderExecutionService {
         await RiskEngine.postTradeCheck(accountId, quoteProvider);
       }
     } catch (e) { /* non-blocking */ }
+
+    if (isFullyFilled && order.order_group_type === 'bracket' && order.target_price && order.stoploss_price && persistedPosition?.id) {
+      await this._attachBracketProtection(accountId, persistedPosition, {
+        targetPrice: order.target_price,
+        stoplossPrice: order.stoploss_price,
+        orderGroupId: order.order_group_id,
+        _brokerProvider: (await this._getAccount(accountId))?.broker_provider,
+      }, orderId);
+    }
   }
 
   /**
@@ -1300,7 +1331,7 @@ export class OrderExecutionService {
    * the user moves the SL — a common action that previously left the old SL
    * alive in _pendingPaperOrders and could fire after the new SL was set).
    */
-  async attachStopLoss(accountId, positionId, triggerPrice) {
+  async attachStopLoss(accountId, positionId, triggerPrice, bracketOptions = {}) {
     const position = await this._findPosition(positionId);
     if (!position) throw new Error(`Position ${positionId} not found`);
     if (!position.is_open || position.qty === 0) throw new Error('Position is not open');
@@ -1319,6 +1350,9 @@ export class OrderExecutionService {
       productType: position.product_type,
       qty: position.qty,
       triggerPrice,
+      parentOrderId: bracketOptions.entryOrderId || null,
+      orderGroupId: bracketOptions.orderGroupId || position.order_group_id || positionId,
+      orderGroupType: bracketOptions.orderGroupId ? 'bracket' : undefined,
     };
 
     const order = await orderRepo.createOrder(accountId, orderParams);
@@ -1346,7 +1380,7 @@ export class OrderExecutionService {
    *
    * IDEMPOTENCY: Cancels any previous TP order for this position first.
    */
-  async attachTakeProfit(accountId, positionId, targetPrice) {
+  async attachTakeProfit(accountId, positionId, targetPrice, bracketOptions = {}) {
     const position = await this._findPosition(positionId);
     if (!position) throw new Error(`Position ${positionId} not found`);
     if (!position.is_open || position.qty === 0) throw new Error('Position is not open');
@@ -1365,6 +1399,9 @@ export class OrderExecutionService {
       productType: position.product_type,
       qty: position.qty,
       price: targetPrice,
+      parentOrderId: bracketOptions.entryOrderId || null,
+      orderGroupId: bracketOptions.orderGroupId || position.order_group_id || positionId,
+      orderGroupType: bracketOptions.orderGroupId ? 'bracket' : undefined,
     };
 
     const order = await orderRepo.createOrder(accountId, orderParams);

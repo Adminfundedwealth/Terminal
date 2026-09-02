@@ -45,6 +45,10 @@ function orderParametersMatch(existing, params) {
     ['qty', 'qty'],
     ['price', 'price'],
     ['trigger_price', 'triggerPrice'],
+    ['target_price', 'targetPrice'],
+    ['stoploss_price', 'stoplossPrice'],
+    ['order_group_id', 'orderGroupId'],
+    ['order_group_type', 'orderGroupType'],
     ['validity', 'validity'],
     ['is_amo', 'isAmo'],
   ];
@@ -606,6 +610,10 @@ export class AccountService {
       qty: params.qty,
       price: params.price || null,
       trigger_price: params.triggerPrice || null,
+      target_price: params.targetPrice || null,
+      stoploss_price: params.stoplossPrice || null,
+      order_group_id: params.orderGroupId || null,
+      order_group_type: params.orderGroupType || null,
       is_amo: params.isAmo || false,
       status: 'PENDING',
     }).select().single();
