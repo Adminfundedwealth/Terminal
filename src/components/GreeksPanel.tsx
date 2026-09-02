@@ -106,7 +106,7 @@ export function GreeksPanel() {
           </div>
           <div>
             <span className="text-fw-text-muted block">IV</span>
-            <span className="text-fw-accent font-mono font-bold">{greeks.iv.toFixed(1)}%</span>
+            <span className="text-fw-accent font-mono font-bold">{Number.isFinite(greeks.iv) ? `${greeks.iv.toFixed(1)}%` : '—'}</span>
           </div>
         </div>
       </div>
