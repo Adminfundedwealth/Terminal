@@ -15,6 +15,9 @@ export interface JournalEntry {
   mistakes?: string;
   tags?: string[];
   screenshotUrl?: string;
+  tradingAccountId?: string;
+  executionId?: string;
+  positionId?: string;
   tradePhase: 'before' | 'after' | 'during';
   createdAt: string;
   updatedAt: string;
@@ -43,9 +46,9 @@ interface JournalState {
   backendAvailable: boolean;
   _lastHydrated: number;
 
-  addEntry: (entry: Omit<JournalEntry, 'id' | 'createdAt' | 'updatedAt' | 'synced'>) => void;
-  updateEntry: (id: string, update: Partial<JournalEntry>) => void;
-  deleteEntry: (id: string) => void;
+  addEntry: (entry: Omit<JournalEntry, 'id' | 'createdAt' | 'updatedAt' | 'synced'>) => Promise<void>;
+  updateEntry: (id: string, update: Partial<JournalEntry>) => Promise<void>;
+  deleteEntry: (id: string) => Promise<void>;
   hydrateFromBackend: () => Promise<void>;
 
   addAlert: (alert: Omit<PriceAlert, 'id' | 'createdAt' | 'triggered' | 'active'>) => void;
@@ -73,7 +76,7 @@ export const useJournalStore = create<JournalState>()(
 
           const mapped: JournalEntry[] = serverEntries.map((e: any) => ({
             id: e.id,
-            date: e.date || new Date(e.created_at || e.createdAt).toISOString().split('T')[0],
+            date: e.date || (e.created_at || e.createdAt ? new Date(e.created_at || e.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]),
             symbol: e.symbol || '',
             side: e.side || 'BUY',
             notes: e.notes || e.content || '',
@@ -84,6 +87,9 @@ export const useJournalStore = create<JournalState>()(
             mistakes: e.mistakes || '',
             tags: e.tags || [],
             screenshotUrl: e.screenshot_urls?.[0] || e.screenshotUrl || '',
+            tradingAccountId: e.trading_account_id || e.tradingAccountId,
+            executionId: e.execution_id || e.executionId,
+            positionId: e.position_id || e.positionId,
             tradePhase: e.trade_phase || e.tradePhase || 'after',
             createdAt: e.created_at || e.createdAt || new Date().toISOString(),
             updatedAt: e.updated_at || e.updatedAt || new Date().toISOString(),
@@ -105,7 +111,7 @@ export const useJournalStore = create<JournalState>()(
         }
       },
 
-      addEntry: (entry) => {
+      addEntry: async (entry) => {
         const newEntry: JournalEntry = {
           ...entry,
           id: crypto.randomUUID(),
@@ -115,20 +121,25 @@ export const useJournalStore = create<JournalState>()(
         };
         set((s) => ({ entries: [newEntry, ...s.entries] }));
 
-        saveJournalEntry({
-          symbol: newEntry.symbol,
-          side: newEntry.side,
-          date: newEntry.date,
-          pnl: newEntry.pnl,
-          emotion: newEntry.emotion,
-          rating: newEntry.rating,
-          tradePhase: newEntry.tradePhase,
-          notes: newEntry.notes,
-          lessons: newEntry.lessons,
-          mistakes: newEntry.mistakes,
-          tags: newEntry.tags,
-          screenshotUrls: newEntry.screenshotUrl ? [newEntry.screenshotUrl] : [],
-        }).then((saved: any) => {
+        try {
+          const saved = await saveJournalEntry({
+            id: newEntry.id,
+            tradingAccountId: newEntry.tradingAccountId,
+            executionId: newEntry.executionId,
+            positionId: newEntry.positionId,
+            symbol: newEntry.symbol,
+            side: newEntry.side,
+            date: newEntry.date,
+            pnl: newEntry.pnl,
+            emotion: newEntry.emotion,
+            rating: newEntry.rating,
+            tradePhase: newEntry.tradePhase,
+            notes: newEntry.notes,
+            lessons: newEntry.lessons,
+            mistakes: newEntry.mistakes,
+            tags: newEntry.tags,
+            screenshotUrls: newEntry.screenshotUrl ? [newEntry.screenshotUrl] : [],
+          });
           const serverId = saved?.id || saved?.data?.id;
           set((s) => ({
             entries: s.entries.map((e) =>
@@ -136,28 +147,40 @@ export const useJournalStore = create<JournalState>()(
             ),
             backendAvailable: true,
           }));
-        }).catch(() => {});
+        } catch (error) {
+          set((s) => ({ entries: s.entries.filter((e) => e.id !== newEntry.id), backendAvailable: false }));
+          throw error;
+        }
       },
 
-      updateEntry: (id, update) => {
+      updateEntry: async (id, update) => {
+        const previous = get().entries.find((entry) => entry.id === id);
         set((s) => ({
           entries: s.entries.map((e) =>
             e.id === id ? { ...e, ...update, updatedAt: new Date().toISOString(), synced: false } : e
           ),
         }));
-        updateJournalEntry(id, update).then(() => {
+        try {
+          await updateJournalEntry(id, update);
           set((s) => ({
             entries: s.entries.map((e) => e.id === id ? { ...e, synced: true } : e),
             backendAvailable: true,
           }));
-        }).catch(() => {});
+        } catch (error) {
+          if (previous) set((s) => ({ entries: s.entries.map((entry) => entry.id === id ? previous : entry) }));
+          throw error;
+        }
       },
 
-      deleteEntry: (id) => {
-        set((s) => ({ entries: s.entries.filter((e) => e.id !== id) }));
-        deleteJournalEntry(id).then(() => {
-          set({ backendAvailable: true });
-        }).catch(() => {});
+      deleteEntry: async (id) => {
+        const previous = get().entries.find((entry) => entry.id === id);
+        try {
+          await deleteJournalEntry(id);
+          set((s) => ({ entries: s.entries.filter((e) => e.id !== id), backendAvailable: true }));
+        } catch (error) {
+          if (previous) set((s) => ({ entries: s.entries.some((entry) => entry.id === id) ? s.entries : [previous, ...s.entries] }));
+          throw error;
+        }
       },
 
       addAlert: (alert) => set((s) => ({

@@ -40,14 +40,27 @@ export function JournalPanel() {
     tradePhase: 'after' as JournalEntry['tradePhase'],
   });
   const [tagInput, setTagInput] = useState('');
+  const [persistenceError, setPersistenceError] = useState('');
 
-  const handleSave = () => {
+  const handleDelete = async (id: string) => {
+    setPersistenceError('');
+    try { await deleteEntry(id); }
+    catch (error: any) { setPersistenceError(error?.message || 'Journal entry could not be deleted'); }
+  };
+
+  const handleSave = async () => {
     if (!form.notes.trim()) return;
-    if (editId) {
-      updateEntry(editId, { ...form, date: new Date().toISOString().split('T')[0] });
-      setEditId(null);
-    } else {
-      addEntry({ ...form, date: new Date().toISOString().split('T')[0] });
+    setPersistenceError('');
+    try {
+      if (editId) {
+        await updateEntry(editId, { ...form, date: new Date().toISOString().split('T')[0] });
+        setEditId(null);
+      } else {
+        await addEntry({ ...form, date: new Date().toISOString().split('T')[0] });
+      }
+    } catch (error: any) {
+      setPersistenceError(error?.message || 'Journal entry could not be saved');
+      return;
     }
     resetForm();
     setIsAdding(false);
@@ -223,6 +236,7 @@ export function JournalPanel() {
           </div>
         </div>
       )}
+      {persistenceError && <div className="px-3 py-1.5 border-b border-red-800/30 bg-red-900/15 text-[13px] text-red-300" role="alert">{persistenceError}</div>}
 
       {/* Entries List */}
       <div className="flex-1 overflow-y-auto">
@@ -251,7 +265,7 @@ export function JournalPanel() {
                 <div className="flex items-center gap-1">
                   {entry.pnl !== undefined && entry.pnl !== 0 && <span className={cn('text-[13px] font-mono', (entry.pnl || 0) >= 0 ? 'text-green' : 'text-red')}>₹{entry.pnl?.toLocaleString()}</span>}
                   <button onClick={() => startEdit(entry)} className="p-1 text-fw-text-secondary hover:text-fw-text"><Edit2 size={11} /></button>
-                  <button onClick={() => deleteEntry(entry.id)} className="p-1 text-fw-text-secondary hover:text-red-400"><Trash2 size={11} /></button>
+                  <button onClick={() => handleDelete(entry.id)} className="p-1 text-fw-text-secondary hover:text-red-400"><Trash2 size={11} /></button>
                 </div>
               </div>
               <p className="text-[13px] text-fw-text-secondary mt-1">{entry.notes}</p>
