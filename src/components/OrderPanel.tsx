@@ -27,6 +27,31 @@ export function validateOrderQty(value: number): string | null {
   return null;
 }
 
+export function isDerivativeOrderInstrument(opts: {
+  segment?: string;
+  instrumentType?: string;
+}): boolean {
+  const segment = String(opts.segment || '').toUpperCase();
+  const instrumentType = String(opts.instrumentType || '').toUpperCase();
+  return ['NFO', 'BFO', 'MCX', 'CDS'].includes(segment) || ['FUT', 'CE', 'PE'].includes(instrumentType);
+}
+
+export function getDefaultOrderQuantity(opts: {
+  segment?: string;
+  instrumentType?: string;
+  lotSize?: number;
+}): number {
+  return isDerivativeOrderInstrument(opts) ? Math.max(1, opts.lotSize || 1) : 1;
+}
+
+export function validateOrderLotMultiple(value: number, lotSize: number): string | null {
+  if (lotSize > 1 && value % lotSize !== 0) {
+    const lots = Math.round(value / lotSize);
+    return `Quantity must be a multiple of lot size (${lotSize}). Enter ${lots} lot${lots !== 1 ? 's' : ''} = ${lots * lotSize} qty`;
+  }
+  return null;
+}
+
 // Spot indices (NIFTY 50, BANKNIFTY, SENSEX, …) are calculated values — NOT
 // tradeable contracts. They belong to the INDEX tab for charting only. Trading
 // happens through their futures (FUT) or options (CE/PE). This mirrors the
@@ -73,6 +98,11 @@ export function OrderPanel() {
   const [tpPrice, setTpPrice] = useState<number>(0);
   const [confirmOrder, setConfirmOrder] = useState<{ side: OrderSide } | null>(null);
   const [marginQuote, setMarginQuote] = useState<MarginQuote | null>(null);
+
+  useEffect(() => {
+    if (!activeSymbol || !isDerivativeOrderInstrument(activeSymbol)) return;
+    setOrderForm({ qty: getDefaultOrderQuantity(activeSymbol) });
+  }, [activeSymbol?.token, activeSymbol?.segment, activeSymbol?.instrumentType, activeSymbol?.lotSize, setOrderForm]);
 
   // Listen for real order status events pushed via WebSocket → CustomEvent.
   // These fire when the backend async execution completes (FILLED / REJECTED).
@@ -153,9 +183,8 @@ export function OrderPanel() {
     if (qtyError) return qtyError;
     // Lot-size multiple validation for derivative instruments
     const effectiveLotSize = activeSymbol?.lotSize || 1;
-    if (effectiveLotSize > 1 && orderForm.qty % effectiveLotSize !== 0) {
-      return `Quantity must be a multiple of lot size (${effectiveLotSize}). Enter ${Math.round(orderForm.qty / effectiveLotSize)} lot${Math.round(orderForm.qty / effectiveLotSize) !== 1 ? 's' : ''} = ${Math.round(orderForm.qty / effectiveLotSize) * effectiveLotSize} qty`;
-    }
+    const lotError = validateOrderLotMultiple(orderForm.qty, effectiveLotSize);
+    if (lotError) return lotError;
     if ((orderForm.orderType === 'LIMIT' || orderForm.orderType === 'SL') && (!orderForm.price || orderForm.price <= 0)) {
       return 'Price must be greater than 0 for LIMIT orders — enter a price or switch to MARKET';
     }

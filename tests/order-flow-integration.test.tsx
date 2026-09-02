@@ -17,7 +17,11 @@ import { useTradingStore } from '@/store/tradingStore';
 import { useAppStore } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
 import type { Order, Position, AccountInfo } from '@/types';
-import { validateOrderQty } from '@/components/OrderPanel';
+import {
+  getDefaultOrderQuantity,
+  validateOrderLotMultiple,
+  validateOrderQty,
+} from '@/components/OrderPanel';
 
 // Mock the API module
 vi.mock('@/services/api', () => ({
@@ -183,6 +187,32 @@ describe('0. Quantity validation guards invalid order entry', () => {
     expect(validateOrderQty(Number(''))).toBe('Invalid quantity');
     expect(validateOrderQty(1.5)).toBe('Invalid quantity');
     expect(validateOrderQty(2)).toBeNull();
+  });
+});
+
+describe('0.1 derivative default quantity uses one lot', () => {
+  it('defaults NIFTY FUT to its actual 65-unit lot and accepts it', () => {
+    const quantity = getDefaultOrderQuantity({ segment: 'NFO', instrumentType: 'FUT', lotSize: 65 });
+    expect(quantity).toBe(65);
+    expect(validateOrderQty(quantity)).toBeNull();
+    expect(validateOrderLotMultiple(quantity, 65)).toBeNull();
+  });
+
+  it('uses a different resolved futures lot size instead of a hardcoded value', () => {
+    expect(getDefaultOrderQuantity({ segment: 'NFO', instrumentType: 'FUT', lotSize: 120 })).toBe(120);
+  });
+
+  it('keeps options on one valid lot', () => {
+    expect(getDefaultOrderQuantity({ segment: 'NFO', instrumentType: 'CE', lotSize: 50 })).toBe(50);
+    expect(validateOrderLotMultiple(50, 50)).toBeNull();
+  });
+
+  it('keeps cash instruments at one unit', () => {
+    expect(getDefaultOrderQuantity({ segment: 'NSE', instrumentType: 'EQ', lotSize: 500 })).toBe(1);
+  });
+
+  it('continues rejecting a partial derivative quantity', () => {
+    expect(validateOrderLotMultiple(1, 65)).toContain('lot size (65)');
   });
 });
 
