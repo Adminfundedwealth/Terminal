@@ -2,6 +2,7 @@ import { useMemo, useEffect, useRef, useState } from 'react';
 import { useAppStore } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
 import { cn } from '@/utils/helpers';
+import { computeBlackScholesGreeks, impliedVolatility, type BlackScholesGreeks } from '@/utils/blackScholes';
 
 /**
  * Full Greeks Panel
@@ -9,61 +10,10 @@ import { cn } from '@/utils/helpers';
  * Uses Black-Scholes model for computation.
  */
 
-function normalCDF(x: number): number {
-  const a1 = 0.254829592, a2 = -0.284496736, a3 = 1.421413741;
-  const a4 = -1.453152027, a5 = 1.061405429, p = 0.3275911;
-  const sign = x < 0 ? -1 : 1;
-  x = Math.abs(x) / Math.sqrt(2);
-  const t = 1.0 / (1.0 + p * x);
-  const y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
-  return 0.5 * (1.0 + sign * y);
-}
-
-function normalPDF(x: number): number {
-  return Math.exp(-0.5 * x * x) / Math.sqrt(2 * Math.PI);
-}
-
-interface Greeks {
-  delta: number;
-  gamma: number;
-  theta: number;
-  vega: number;
-  rho: number;
-  iv: number;
-  theoreticalPrice: number;
-}
-
-function computeGreeks(S: number, K: number, T: number, r: number, sigma: number, isCall: boolean): Greeks {
-  if (T <= 0 || sigma <= 0 || S <= 0) {
-    return { delta: 0, gamma: 0, theta: 0, vega: 0, rho: 0, iv: sigma * 100, theoreticalPrice: 0 };
-  }
-
-  const sqrtT = Math.sqrt(T);
-  const d1 = (Math.log(S / K) + (r + 0.5 * sigma * sigma) * T) / (sigma * sqrtT);
-  const d2 = d1 - sigma * sqrtT;
-
-  let delta: number, theta: number, rho: number, price: number;
-
-  if (isCall) {
-    delta = normalCDF(d1);
-    price = S * normalCDF(d1) - K * Math.exp(-r * T) * normalCDF(d2);
-    theta = (-(S * normalPDF(d1) * sigma) / (2 * sqrtT) - r * K * Math.exp(-r * T) * normalCDF(d2)) / 365;
-    rho = K * T * Math.exp(-r * T) * normalCDF(d2) / 100;
-  } else {
-    delta = normalCDF(d1) - 1;
-    price = K * Math.exp(-r * T) * normalCDF(-d2) - S * normalCDF(-d1);
-    theta = (-(S * normalPDF(d1) * sigma) / (2 * sqrtT) + r * K * Math.exp(-r * T) * normalCDF(-d2)) / 365;
-    rho = -K * T * Math.exp(-r * T) * normalCDF(-d2) / 100;
-  }
-
-  const gamma = normalPDF(d1) / (S * sigma * sqrtT);
-  const vega = S * normalPDF(d1) * sqrtT / 100;
-
-  return { delta, gamma, theta, vega, rho, iv: sigma * 100, theoreticalPrice: price };
-}
-
 export function GreeksPanel() {
-  const { activeSymbol } = useAppStore();
+  const { activeSymbol, watchlists } = useAppStore();
+  const selectedContract = useTradingStore((state) => state.selectedContract);
+  const quotes = useMarketStore((state) => state.quotes);
   const quote = useMarketStore((s) => activeSymbol ? s.quotes[activeSymbol.token] : undefined);
   const workerRef = useRef<Worker | null>(null);
   const [workerGreeks, setWorkerGreeks] = useState<Greeks | null>(null);
@@ -97,12 +47,16 @@ export function GreeksPanel() {
   }, []);
 
   // Default parameters (user can modify)
-  const spotPrice = quote?.ltp || 22000;
-  const strikePrice = Math.round(spotPrice / 100) * 100; // ATM strike
-  const daysToExpiry = 7;
+  const underlyingInstrument = selectedContract
+    ? watchlists.flatMap((watchlist) => watchlist.items).find((item) => item.symbol.replace(/\s+50$/, '').toUpperCase() === selectedContract.underlying.toUpperCase())
+    : undefined;
+  const underlyingQuote = underlyingInstrument ? quotes[underlyingInstrument.token] : undefined;
+  const spotPrice = underlyingQuote?.ltp || 0;
+  const strikePrice = selectedContract?.strike || activeSymbol?.strike || 0;
+  const daysToExpiry = selectedContract?.expiry ? Math.max((new Date(selectedContract.expiry).getTime() - Date.now()) / 86_400_000, 0.001) : 0;
   const riskFreeRate = 0.065; // 6.5% India 10Y
-  const impliedVol = 0.15; // 15% default IV
   const isCall = activeSymbol?.instrumentType === 'CE';
+  const impliedVol = quote?.ltp && spotPrice > 0 && strikePrice > 0 ? impliedVolatility(spotPrice, strikePrice, daysToExpiry / 365, riskFreeRate, quote.ltp, isCall) : 0.2;
 
   // Send computation to worker when inputs change
   useEffect(() => {
@@ -118,9 +72,8 @@ export function GreeksPanel() {
   }, [spotPrice, strikePrice, daysToExpiry, riskFreeRate, isCall, quote?.ltp]);
 
   // Fallback: main-thread computation (used if worker not available or as initial value)
-  const mainThreadGreeks = useMemo(() => {
-    const T = daysToExpiry / 365;
-    return computeGreeks(spotPrice, strikePrice, T, riskFreeRate, impliedVol, isCall);
+  const mainThreadGreeks = useMemo<BlackScholesGreeks>(() => {
+    return computeBlackScholesGreeks(spotPrice, strikePrice, daysToExpiry / 365, riskFreeRate, impliedVol, isCall);
   }, [spotPrice, strikePrice, daysToExpiry, riskFreeRate, impliedVol, isCall]);
 
   // Use worker result if available, otherwise main thread

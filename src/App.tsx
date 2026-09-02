@@ -3,6 +3,7 @@ import { Sidebar } from '@/components/Sidebar';
 import { TopBar } from '@/components/TopBar';
 import { Watchlist } from '@/components/Watchlist';
 import { ChartPanel } from '@/components/ChartPanel';
+import { GreeksPanel } from '@/components/GreeksPanel';
 import { MultiChartPanel } from '@/components/MultiChartPanel';
 import { OrderPanelTabs } from '@/components/OrderPanelTabs';
 import { BottomPanel } from '@/components/BottomPanel';
@@ -361,6 +362,11 @@ export default function App() {
                       <div className="flex-1 overflow-hidden min-w-0">
                         <ErrorBoundary fallbackTitle="Option Chain Error"><Suspense fallback={null}><OptionChainModal /></Suspense></ErrorBoundary>
                       </div>
+                      {activeWorkspace === 'options' && (
+                        <div className="w-[280px] min-w-[240px] border-l border-fw-border overflow-hidden">
+                          <ErrorBoundary fallbackTitle="Greeks Error"><GreeksPanel /></ErrorBoundary>
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
