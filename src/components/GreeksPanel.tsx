@@ -1,6 +1,7 @@
 import { useMemo, useEffect, useRef, useState } from 'react';
 import { useAppStore } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
+import { useTradingStore } from '@/store/tradingStore';
 import { cn } from '@/utils/helpers';
 import { computeBlackScholesGreeks, impliedVolatility, type BlackScholesGreeks } from '@/utils/blackScholes';
 
