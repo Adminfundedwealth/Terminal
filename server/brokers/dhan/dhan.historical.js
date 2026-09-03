@@ -62,8 +62,8 @@ const TF_CONFIG = {
   '30':  { type: 'intraday', interval: '25', lookbackDays: 30 },
   '60':  { type: 'intraday', interval: '60', lookbackDays: 60 },
   '240': { type: 'historical', interval: 'DAY', lookbackYears: 2 },
-  'D':   { type: 'historical', interval: 'DAY', lookbackYears: 5 },
-  'W':   { type: 'historical', interval: 'DAY', lookbackYears: 5 },
+  'D':   { type: 'historical', interval: 'DAY', lookbackYears: 10 },
+  'W':   { type: 'historical', interval: 'DAY', lookbackYears: 10 },
 };
 
 export class DhanHistoricalService {

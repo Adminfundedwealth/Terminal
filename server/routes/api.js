@@ -1180,7 +1180,18 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
           }
         }
 
-        console.warn(`[API] /market/history returned 0 candles for ${token}/${tf} via ${result.provider}`);
+        console.warn(`[API] /market/history returned 0 candles for ${token}/${tf} via ${result.provider}`, {
+          provider: result.provider,
+          token,
+          exchange: resolvedExchange,
+          resolution: tf,
+          from: fromTs,
+          to: toTs,
+          requestedRangeSeconds: Math.max(0, toTs - fromTs),
+          rawCandleCount: 0,
+          normalizedCandleCount: 0,
+          fallbackUsed: result.provider !== 'DHAN',
+        });
       } catch (err) {
         console.error('[API] /market/history dataProviderSwitch error:', err.message || err);
       }
@@ -1207,8 +1218,17 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
       }
     }
 
-    // Final fallback: return empty
-    res.json([]);
+    // An empty provider response is not equivalent to a successful empty range.
+    // Returning an explicit error prevents the UI from caching "Unavailable" as data.
+    return res.status(502).json({
+      error: 'HISTORICAL_DATA_UNAVAILABLE',
+      message: 'Historical data providers returned no valid candles',
+      token: String(token),
+      exchange: exchange || null,
+      resolution: String(tf),
+      from: from ? parseInt(String(from), 10) : null,
+      to: to ? parseInt(String(to), 10) : null,
+    });
   });
 
   router.get('/market/depth', async (req, res) => {

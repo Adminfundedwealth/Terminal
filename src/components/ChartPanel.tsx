@@ -257,6 +257,10 @@ export function ChartPanel({ symbolOverride, timeframeOverride, onTimeframeChang
       handleScroll: { mouseWheel: true, pressedMouseMove: true },
     });
     chartRef.current = chart;
+    const onVisibleRangeChange = (range: { from: number; to: number } | null) => {
+      if (range && range.from <= 10) void loadOlderHistory();
+    };
+    chart.timeScale().subscribeVisibleLogicalRangeChange(onVisibleRangeChange);
     const ro = new ResizeObserver((entries) => {
       for (const e of entries) chart.applyOptions({ width: e.contentRect.width, height: e.contentRect.height });
     });
@@ -455,6 +459,7 @@ export function ChartPanel({ symbolOverride, timeframeOverride, onTimeframeChang
     window.addEventListener('keydown', handleKey);
 
     return () => {
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange(onVisibleRangeChange);
       ro.disconnect();
       chart.remove();
       chartRef.current = null;
@@ -949,6 +954,51 @@ export function ChartPanel({ symbolOverride, timeframeOverride, onTimeframeChang
   // Tracks the symbol+timeframe for which a load is currently in-flight.
   // If symbol/tf changes before the fetch resolves we discard the stale result.
   const loadingForRef = useRef<string>('');
+  const backfillInFlightRef = useRef(false);
+  const backfillReadyRef = useRef(false);
+
+  const loadOlderHistory = async () => {
+    if (!backfillReadyRef.current || !chartRef.current || !activeSymbol || backfillInFlightRef.current || rawDataRef.current.length === 0) return;
+
+    const oldest = rawDataRef.current[0]?.time;
+    if (!oldest || oldest <= 0) return;
+
+    const minutesPerBar = timeframe === 'D' ? 1440 : timeframe === 'W' ? 10080 : Number(timeframe) || 5;
+    const windowSeconds = minutesPerBar * 60 * 500;
+    const from = Math.max(0, oldest - windowSeconds);
+    const to = oldest - 1;
+    if (to <= from) return;
+
+    backfillInFlightRef.current = true;
+    const range = chartRef.current.timeScale().getVisibleLogicalRange();
+    try {
+      const exchangeHint = (activeSymbol.segment === 'MCX' || activeSymbol.segment === 'CDS')
+        ? activeSymbol.segment
+        : activeSymbol.exchange;
+      const older = await getHistoricalData(activeSymbol.token, timeframe, exchangeHint, from, to);
+      if (!older?.length) return;
+
+      const merged = [...older, ...rawDataRef.current]
+        .filter((bar, index, all) => all.findIndex(candidate => candidate.time === bar.time) === index)
+        .sort((a, b) => a.time - b.time);
+      const added = merged.length - rawDataRef.current.length;
+      if (added <= 0) return;
+
+      rawDataRef.current = merged;
+      updateChartSeries(merged);
+      applyIndicators();
+      if (range) {
+        chartRef.current.timeScale().setVisibleLogicalRange({
+          from: range.from + added,
+          to: range.to + added,
+        });
+      }
+    } catch (error) {
+      console.warn('[ChartPanel] historical backfill failed:', error);
+    } finally {
+      backfillInFlightRef.current = false;
+    }
+  };
 
   // Load chart data when symbol/timeframe/chartType changes
   useEffect(() => {
@@ -960,6 +1010,7 @@ export function ChartPanel({ symbolOverride, timeframeOverride, onTimeframeChang
     // preventing old symbol LTPs from being painted onto the new series.
     rawDataRef.current = [];
     liveBarRef.current = null;
+    backfillReadyRef.current = false;
 
     // ── 2. Clear the series data visually right now ────────────────────
     // We wipe rather than remove+recreate so the chart axes don't flash.
@@ -1055,6 +1106,7 @@ export function ChartPanel({ symbolOverride, timeframeOverride, onTimeframeChang
     if (data && data.length > 0) {
       rawDataRef.current = data;
       updateChartSeries(data);
+      backfillReadyRef.current = true;
       applyIndicators();
       applyOverlayDrawings(drawings);
       applyTextMarkers(drawings);
