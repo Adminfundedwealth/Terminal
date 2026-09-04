@@ -6,8 +6,8 @@
  *   POST /v2/charts/historical  — Full multi-year daily data
  * 
  * Date ranges:
- *   Intraday: 60 trading days back (chunked in 5-day batches)
- *   Daily/Weekly: 5 years back
+ *   Intraday: provider-supported lookback (chunked in 5-day batches)
+ *   Daily/Weekly: 10 years by default, or the requested range
  * 
  * Headers required: access-token, client-id, dhan-client-id, dhanClientId
  */
@@ -83,23 +83,28 @@ export class DhanHistoricalService {
       // Try a refresh before giving up — token may have just expired
       const refreshed = await this.auth.refreshToken();
       if (!refreshed && !this.auth.isTokenValid) {
-        // Return empty array so the caller (DataProviderSwitch) can try Angel One fallback
-        console.warn(`[DhanHist] Token invalid for ${token}/${timeframe} — falling back to Angel`);
-        return [];
+        const error = new Error(`Dhan authentication failed for historical data (${token}/${timeframe})`);
+        error.code = 'DHAN_AUTH_FAILED';
+        error.provider = 'DHAN';
+        throw error;
       }
     }
 
     const tf = TF_CONFIG[timeframe];
     if (!tf) {
-      console.warn(`[DhanHist] Unsupported timeframe: ${timeframe} — falling back to Angel`);
-      return [];
+      const error = new Error(`Dhan does not support historical timeframe: ${timeframe}`);
+      error.code = 'DHAN_UNSUPPORTED_TIMEFRAME';
+      error.provider = 'DHAN';
+      throw error;
     }
 
     // Resolve instrument identity
     const resolved = await this._resolve(token, exchange);
     if (!resolved) {
-      console.warn(`[DhanHist] Cannot resolve ${token}/${exchange} — falling back to Angel`);
-      return [];
+      const error = new Error(`Dhan instrument mapping not found for ${token}/${exchange}`);
+      error.code = 'DHAN_INSTRUMENT_NOT_FOUND';
+      error.provider = 'DHAN';
+      throw error;
     }
 
     // Calculate proper date range
@@ -144,6 +149,8 @@ export class DhanHistoricalService {
 
   async _fetchIntraday(resolved, interval, fromDate, toDate) {
     const allCandles = [];
+    let requestFailures = 0;
+    let lastError = null;
     const startDate = new Date(fromDate);
     const endDate = new Date(toDate);
 
@@ -168,6 +175,8 @@ export class DhanHistoricalService {
         console.log(`[DhanHist] Chunk ${this._fmt(cursor)}→${this._fmt(chunkEnd)}: ${parsed.length} candles`);
         allCandles.push(...parsed);
       } catch (err) {
+        requestFailures++;
+        lastError = err;
         // On auth error, try refresh once.
         // IMPORTANT: Only treat as an auth error when:
         //   (a) HTTP 401 (explicit auth rejection), OR
@@ -216,6 +225,14 @@ export class DhanHistoricalService {
       cursor.setDate(cursor.getDate() + 5);
     }
 
+    if (requestFailures > 0 && allCandles.length === 0) {
+      const error = new Error(`Dhan historical intraday request failed for ${resolved.securityId}/${interval}`);
+      error.code = 'DHAN_HISTORICAL_FAILED';
+      error.provider = 'DHAN';
+      error.status = lastError?.response?.status || null;
+      error.details = lastError?.response?.data || lastError?.message || null;
+      throw error;
+    }
     return this._dedupe(allCandles);
   }
 

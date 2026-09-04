@@ -7,9 +7,7 @@
  *   - Live LTP (via poller in MarketDataEngine)
  *   - Order Execution (place, modify, cancel, positions)
  * 
- * Angel One is available ONLY as:
- *   - Fallback broker adapter (if Dhan execution fails)
- *   - Fallback data source (if Dhan returns empty)
+ * Angel One is available ONLY for unrelated execution and option-chain fallback paths.
  * 
  * If Dhan data fails, return empty — do NOT mix Angel data into charts.
  */
@@ -17,10 +15,10 @@
 import { DhanAdapter } from '../brokers/dhan/dhan.adapter.js';
 
 export class DataProviderSwitch {
-  constructor(angelCandleService, angelOptionChainService) {
+  constructor(angelCandleService, angelOptionChainService, dhanAdapter = null) {
     this._angelCandle = angelCandleService;
     this._angelOptionChain = angelOptionChainService;
-    this._dhan = new DhanAdapter();
+    this._dhan = dhanAdapter || new DhanAdapter();
     this._dhanReady = false;
     this._dhanSuccessCount = 0;
     this._dhanErrorCount = 0;
@@ -45,60 +43,33 @@ export class DataProviderSwitch {
     }
   }
 
-  /**
-   * Historical candles — DHAN ONLY.
-   * If Dhan fails, fall back to Angel to prevent empty charts.
-   */
+  /** Historical candles — DHAN ONLY. Never mix Angel candles into charts. */
   async getHistoricalCandles(token, timeframe, exchange, fromTimestamp, toTimestamp) {
     this._lastRequest = { type: 'historical', token, timeframe, exchange, from: fromTimestamp, to: toTimestamp, time: Date.now() };
 
-    if (this._dhanReady) {
-      try {
-        const candles = await this._dhan.getHistoricalData(token, exchange, timeframe, fromTimestamp, toTimestamp);
-        if (candles && candles.length > 0) {
-          this._dhanSuccessCount++;
-          return { data: candles, provider: 'DHAN' };
-        }
-        console.log(`[DataProvider] Dhan returned 0 candles for ${token}/${timeframe} — trying Angel fallback`);
-      } catch (err) {
-        this._dhanErrorCount++;
-        this._lastDhanError = {
-          time: Date.now(), endpoint: 'charts', token, exchange, timeframe,
-          status: err.response?.status, response: err.response?.data || err.message,
-        };
-        console.error(`[DataProvider] Dhan historical error: ${err.message}`);
-      }
+    if (!this._dhanReady) {
+      const error = new Error('Dhan historical provider is not ready');
+      error.code = 'DHAN_NOT_READY';
+      throw error;
     }
 
-    // Fallback to Angel One — must remap Dhan segment names back to Angel exchange names
-    if (this._angelCandle) {
-      try {
-        // Remap Dhan segment → Angel One exchange name
-        const DHAN_TO_ANGEL_EXCHANGE = {
-          'IDX_I': 'NSE',       // Index → NSE token works for Angel historical
-          'NSE_EQ': 'NSE',
-          'BSE_EQ': 'BSE',
-          'NSE_FNO': 'NFO',
-          'BSE_FNO': 'BFO',
-          'MCX_COMM': 'MCX',
-          'NSE_CURRENCY': 'CDS',
-          'NSE': 'NSE',
-          'BSE': 'BSE',
-          'NFO': 'NFO',
-          'MCX': 'MCX',
-          'CDS': 'CDS',
-        };
-        const angelExchange = DHAN_TO_ANGEL_EXCHANGE[exchange] || exchange || 'NSE';
-        const candles = await this._angelCandle.getHistoricalCandles(token, timeframe, angelExchange, fromTimestamp, toTimestamp);
-        if (candles && candles.length > 0) {
-          console.log(`[DataProvider] Angel fallback returned ${candles.length} candles for ${token}/${timeframe}`);
-          return { data: candles, provider: 'ANGELONE_FALLBACK' };
-        }
-      } catch (err) {
-        console.warn(`[DataProvider] Angel fallback also failed for ${token}/${timeframe}: ${err.message}`);
-      }
+    try {
+      const candles = await this._dhan.getHistoricalData(token, exchange, timeframe, fromTimestamp, toTimestamp);
+      this._dhanSuccessCount += candles?.length ? 1 : 0;
+      return { data: Array.isArray(candles) ? candles : [], provider: 'DHAN' };
+    } catch (err) {
+      this._dhanErrorCount++;
+      this._lastDhanError = {
+        time: Date.now(), endpoint: 'charts', token, exchange, timeframe,
+        status: err.response?.status, response: err.response?.data || err.message,
+      };
+      const error = new Error(`Dhan historical request failed for ${token}/${timeframe}`);
+      error.code = 'DHAN_HISTORICAL_FAILED';
+      error.provider = 'DHAN';
+      error.status = err.response?.status;
+      error.details = err.response?.data || err.details || err.message;
+      throw error;
     }
-    return { data: [], provider: 'NONE' };
   }
 
   /**

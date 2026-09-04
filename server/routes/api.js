@@ -1102,7 +1102,7 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
       }
     }
 
-    // Use DataProviderSwitch for historical data (routes to Dhan or Angel One with failover)
+    // Historical charts are Dhan-only. Angel remains available to unrelated paths.
     if (dataProviderSwitch) {
       try {
         const resolvedExchange = exchange ? String(exchange) : 'NSE';
@@ -1171,15 +1171,6 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
           }
         }
 
-        // If provider returned empty, try live candle fallback
-        if (candleService) {
-          const currentCandle = candleService.getCurrentCandle(token, String(tf));
-          if (currentCandle) {
-            console.warn(`[API] /market/history (${result.provider}) returned 0 candles for ${token}/${tf}, returning live candle fallback`);
-            return res.json([currentCandle]);
-          }
-        }
-
         console.warn(`[API] /market/history returned 0 candles for ${token}/${tf} via ${result.provider}`, {
           provider: result.provider,
           token,
@@ -1193,36 +1184,25 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
           fallbackUsed: result.provider !== 'DHAN',
         });
       } catch (err) {
-        console.error('[API] /market/history dataProviderSwitch error:', err.message || err);
+        console.error('[API] /market/history Dhan error:', err.message || err);
+        return res.status(err.code === 'DHAN_NOT_READY' ? 503 : 502).json({
+          error: err.code || 'DHAN_HISTORICAL_FAILED',
+          message: err.message || 'Dhan historical provider failed',
+          provider: 'DHAN',
+          status: err.status || null,
+          details: err.details || null,
+          token: String(token),
+          exchange: exchange || null,
+          resolution: String(tf),
+        });
       }
     }
 
-    // Legacy fallback: Use CandleService directly (Angel One only)
-    if (candleService) {
-      try {
-        const resolvedExchange = exchange ? String(exchange) : undefined;
-        if (resolvedExchange && token) {
-          candleService.registerTokenExchange(String(token), resolvedExchange);
-        }
-
-        const candles = await candleService.getHistoricalCandles(
-          token,
-          tf,
-          resolvedExchange,
-          from ? parseInt(String(from), 10) : undefined,
-          to ? parseInt(String(to), 10) : undefined
-        );
-        if (candles.length > 0) return res.json(candles);
-      } catch (err) {
-        console.error('[API] /market/history candleService fallback error:', err.message || err);
-      }
-    }
-
-    // An empty provider response is not equivalent to a successful empty range.
-    // Returning an explicit error prevents the UI from caching "Unavailable" as data.
+    // No candles from a valid Dhan response means the requested range is empty.
     return res.status(502).json({
-      error: 'HISTORICAL_DATA_UNAVAILABLE',
-      message: 'Historical data providers returned no valid candles',
+      error: 'DHAN_HISTORICAL_EMPTY',
+      message: 'Dhan returned no candles for the requested range',
+      provider: 'DHAN',
       token: String(token),
       exchange: exchange || null,
       resolution: String(tf),
@@ -1668,7 +1648,7 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
     const token = info?.token || symbol;
     const exchange = info?.exchange || 'NSE';
 
-    // Use DataProviderSwitch if available (Dhan/Angel failover)
+    // TradingView history is Dhan-only, just like /market/history.
     let candles = [];
     if (dataProviderSwitch) {
       try {
@@ -1678,16 +1658,23 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
         candles = result.data || [];
       } catch (err) {
         console.warn(`[TV] DataProviderSwitch error: ${err.message}`);
+        return res.status(err.code === 'DHAN_NOT_READY' ? 503 : 502).json({
+          s: 'error',
+          errmsg: err.message || 'Dhan historical provider failed',
+          provider: 'DHAN',
+          error: err.code || 'DHAN_HISTORICAL_FAILED',
+          details: err.details || null,
+        });
       }
     }
 
-    // Fallback to direct CandleService if DataProviderSwitch returned empty
-    if (candles.length === 0 && candleService) {
-      candles = await candleService.getHistoricalCandles(token, resolution, parseInt(from) || undefined, parseInt(to) || undefined) || [];
-    }
-
     if (!candles || candles.length === 0) {
-      return res.json({ s: 'no_data' });
+      return res.status(502).json({
+        s: 'error',
+        errmsg: 'Dhan returned no historical candles',
+        provider: 'DHAN',
+        error: 'DHAN_HISTORICAL_EMPTY',
+      });
     }
 
     // TradingView UDF format
