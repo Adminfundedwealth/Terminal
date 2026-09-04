@@ -5,6 +5,8 @@ import { useTradingStore } from '@/store/tradingStore';
 import { cn } from '@/utils/helpers';
 import { computeBlackScholesGreeks, impliedVolatility, type BlackScholesGreeks } from '@/utils/blackScholes';
 
+type Greeks = BlackScholesGreeks;
+
 /**
  * Full Greeks Panel
  * Computes Delta, Gamma, Theta, Vega, Rho for active option position.

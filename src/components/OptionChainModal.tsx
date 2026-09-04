@@ -25,6 +25,54 @@ import { isCompleteOptionChain } from '@/utils/optionChainValidation';
 
 const STRIKES_AROUND_ATM = 20;
 
+export type ColumnKey = 'callOi' | 'callOiChange' | 'callVolume' | 'callIv' | 'callLtp' | 'callBid' | 'callAsk'
+  | 'putLtp' | 'putBid' | 'putAsk' | 'putIv' | 'putVolume' | 'putOiChange' | 'putOi';
+
+export const COLUMN_PRESETS: Record<string, ColumnKey[]> = {
+  Basic: ['callOi', 'callIv', 'callLtp', 'callBid', 'callAsk', 'putBid', 'putAsk', 'putLtp', 'putIv', 'putOi'],
+  Trader: ['callOi', 'callOiChange', 'callVolume', 'callIv', 'callLtp', 'callBid', 'callAsk', 'putBid', 'putAsk', 'putLtp', 'putIv', 'putVolume', 'putOiChange', 'putOi'],
+  Greeks: ['callIv', 'callLtp', 'putLtp', 'putIv'],
+  'OI Analysis': ['callOi', 'callOiChange', 'callVolume', 'putVolume', 'putOiChange', 'putOi'],
+  Full: ['callOi', 'callOiChange', 'callVolume', 'callIv', 'callLtp', 'callBid', 'callAsk', 'putBid', 'putAsk', 'putLtp', 'putIv', 'putVolume', 'putOiChange', 'putOi'],
+};
+
+const COLUMN_LABELS: Record<ColumnKey, string> = {
+  callOi: 'Call OI', callOiChange: 'Call OI Chg', callVolume: 'Call Vol', callIv: 'Call IV', callLtp: 'Call LTP', callBid: 'Call Bid', callAsk: 'Call Ask',
+  putLtp: 'Put LTP', putBid: 'Put Bid', putAsk: 'Put Ask', putIv: 'Put IV', putVolume: 'Put Vol', putOiChange: 'Put OI Chg', putOi: 'Put OI',
+};
+
+const ALL_COLUMN_KEYS = Object.keys(COLUMN_LABELS) as ColumnKey[];
+
+function columnsFor(keys: ColumnKey[]): Record<ColumnKey, boolean> {
+  return ALL_COLUMN_KEYS.reduce((result, key) => ({ ...result, [key]: keys.includes(key) }), {} as Record<ColumnKey, boolean>);
+}
+
+function uniqueChain(entries: OptionChainEntry[]): OptionChainEntry[] {
+  const seen = new Set<number>();
+  return entries.filter((entry) => {
+    if (!Number.isFinite(entry.strike) || entry.strike <= 0 || seen.has(entry.strike)) return false;
+    seen.add(entry.strike);
+    return true;
+  }).sort((a, b) => a.strike - b.strike);
+}
+
+export function classifyOptionContract(strike: number, spot: number, side: 'CE' | 'PE'): 'ATM' | 'ITM' | 'OTM' | 'UNAVAILABLE' {
+  if (!(strike > 0) || !(spot > 0)) return 'UNAVAILABLE';
+  if (strike === spot) return 'ATM';
+  return side === 'CE' ? (strike < spot ? 'ITM' : 'OTM') : (strike > spot ? 'ITM' : 'OTM');
+}
+
+export function centerChainAroundAtm<T extends { strike: number }>(entries: T[], spot: number, range: 5 | 10 | 20 | 'all'): T[] {
+  if (range === 'all' || !(spot > 0)) return entries;
+  let atmIndex = 0;
+  let minDifference = Infinity;
+  entries.forEach((entry, index) => {
+    const difference = Math.abs(entry.strike - spot);
+    if (difference < minDifference) { minDifference = difference; atmIndex = index; }
+  });
+  return entries.slice(Math.max(0, atmIndex - range), Math.min(entries.length, atmIndex + range + 1));
+}
+
 // Retry schedule within the 15-second budget
 const MAX_AUTO_RETRIES = 6;
 const retryDelay = (attempt: number) => ([500, 1000, 2000, 3000, 4000, 5000][attempt] ?? 5000);
@@ -170,6 +218,7 @@ interface StrikeRowProps {
   // IV from optionsWorker (0 = not yet computed or unavailable)
   callIv: number;
   putIv: number;
+  visibleColumns: Record<ColumnKey, boolean>;
 }
 
 const StrikeRow = memo(function StrikeRow({
@@ -188,6 +237,7 @@ const StrikeRow = memo(function StrikeRow({
   setOrderForm,
   callIv,
   putIv,
+  visibleColumns,
 }: StrikeRowProps) {
   const callOiChg = e.callOiChange || 0;
   const putOiChg  = e.putOiChange  || 0;
@@ -226,7 +276,7 @@ const StrikeRow = memo(function StrikeRow({
             </div>
           </td>
           {/* OI with bar — green gradient */}
-          <td
+          {visibleColumns.callOi && <td
             className="px-1 py-1 text-right font-mono tabular-nums relative overflow-hidden"
             style={{
               background: callOiPct > 0
@@ -235,15 +285,15 @@ const StrikeRow = memo(function StrikeRow({
             }}
           >
             <span className={cn('relative z-10 block', isSelCE ? 'text-fw-accent' : 'text-fw-text')}>{formatNumber(e.callOi || 0)}</span>
-          </td>
+          </td>}
           {/* OI Change */}
-          <td className="px-1 py-1 text-right font-mono tabular-nums">
+          {visibleColumns.callOiChange && <td className="px-1 py-1 text-right font-mono tabular-nums">
             <span className={cn('font-semibold block', callOiChg > 0 ? 'text-emerald-400' : callOiChg < 0 ? 'text-red-400' : 'text-fw-text-muted')}>
               {callOiChg !== 0 ? (callOiChg > 0 ? '+' : '') + callOiChg.toFixed(1) + '%' : '—'}
             </span>
-          </td>
+          </td>}
           {/* Volume — green bar */}
-          <td
+          {visibleColumns.callVolume && <td
             className="px-1 py-1 text-right font-mono tabular-nums text-fw-text-secondary"
             style={{
               background: callVolPct > 0
@@ -252,13 +302,13 @@ const StrikeRow = memo(function StrikeRow({
             }}
           >
             {formatNumber(e.callVolume || 0)}
-          </td>
+          </td>}
           {/* CALL IV */}
-          <td className="px-1 py-1 text-right font-mono tabular-nums text-fw-text-secondary">
+          {visibleColumns.callIv && <td className="px-1 py-1 text-right font-mono tabular-nums text-fw-text-secondary">
             {displayCallIv > 0 ? displayCallIv.toFixed(1) + '%' : '—'}
-          </td>
+          </td>}
           {/* CALL LTP */}
-          <td
+          {visibleColumns.callLtp && <td
             className={cn(
               'px-1 py-1 text-right font-mono tabular-nums font-bold cursor-pointer hover:underline',
               isSelCE ? 'text-fw-accent' : e.callLtp > 0 ? 'text-emerald-400' : 'text-fw-text-muted',
@@ -266,7 +316,9 @@ const StrikeRow = memo(function StrikeRow({
             onClick={() => onStrikeClick(e.strike, 'CE', e.callLtp, e.callToken)}
           >
             {e.callLtp > 0 ? formatPrice(e.callLtp) : '—'}
-          </td>
+          </td>}
+          {visibleColumns.callBid && <td className="px-1 py-1 text-right font-mono tabular-nums text-fw-text-secondary">{e.callBidPrice ? formatPrice(e.callBidPrice) : '—'}</td>}
+          {visibleColumns.callAsk && <td className="px-1 py-1 text-right font-mono tabular-nums text-fw-text-secondary">{e.callAskPrice ? formatPrice(e.callAskPrice) : '—'}</td>}
         </>
       )}
 
@@ -285,7 +337,7 @@ const StrikeRow = memo(function StrikeRow({
       {viewMode !== 'ce' && (
         <>
           {/* PUT LTP */}
-          <td
+          {visibleColumns.putLtp && <td
             className={cn(
               'px-1 py-1 text-left font-mono tabular-nums font-bold cursor-pointer hover:underline',
               isSelPE ? 'text-fw-accent' : e.putLtp > 0 ? 'text-red-400' : 'text-fw-text-muted',
@@ -293,13 +345,13 @@ const StrikeRow = memo(function StrikeRow({
             onClick={() => onStrikeClick(e.strike, 'PE', e.putLtp, e.putToken)}
           >
             {e.putLtp > 0 ? formatPrice(e.putLtp) : '—'}
-          </td>
+          </td>}
           {/* PUT IV */}
-          <td className="px-1 py-1 text-left font-mono tabular-nums text-fw-text-secondary">
+          {visibleColumns.putIv && <td className="px-1 py-1 text-left font-mono tabular-nums text-fw-text-secondary">
             {displayPutIv > 0 ? displayPutIv.toFixed(1) + '%' : '—'}
-          </td>
+          </td>}
           {/* Volume — red bar */}
-          <td
+          {visibleColumns.putVolume && <td
             className="px-1 py-1 text-left font-mono tabular-nums text-fw-text-secondary"
             style={{
               background: putVolPct > 0
@@ -308,15 +360,15 @@ const StrikeRow = memo(function StrikeRow({
             }}
           >
             {formatNumber(e.putVolume || 0)}
-          </td>
+          </td>}
           {/* OI Change */}
-          <td className="px-1 py-1 text-left font-mono tabular-nums">
+          {visibleColumns.putOiChange && <td className="px-1 py-1 text-left font-mono tabular-nums">
             <span className={cn('font-semibold block', putOiChg > 0 ? 'text-emerald-400' : putOiChg < 0 ? 'text-red-400' : 'text-fw-text-muted')}>
               {putOiChg !== 0 ? (putOiChg > 0 ? '+' : '') + putOiChg.toFixed(1) + '%' : '—'}
             </span>
-          </td>
+          </td>}
           {/* OI with bar — red gradient */}
-          <td
+          {visibleColumns.putOi && <td
             className="px-1 py-1 text-left font-mono tabular-nums relative overflow-hidden"
             style={{
               background: putOiPct > 0
@@ -325,7 +377,9 @@ const StrikeRow = memo(function StrikeRow({
             }}
           >
             <span className={cn('relative z-10 block', isSelPE ? 'text-fw-accent' : 'text-fw-text')}>{formatNumber(e.putOi || 0)}</span>
-          </td>
+          </td>}
+          {visibleColumns.putBid && <td className="px-1 py-1 text-left font-mono tabular-nums text-fw-text-secondary">{e.putBidPrice ? formatPrice(e.putBidPrice) : '—'}</td>}
+          {visibleColumns.putAsk && <td className="px-1 py-1 text-left font-mono tabular-nums text-fw-text-secondary">{e.putAskPrice ? formatPrice(e.putAskPrice) : '—'}</td>}
           {/* B/S */}
           <td className="px-1 py-1 text-center">
             <div className="flex gap-0.5 justify-center">
@@ -351,6 +405,7 @@ export function OptionChainModal() {
   const { activeSymbol, setActiveSymbol } = useAppStore();
   const { setOrderForm, setSelectedContract, selectedContract } = useTradingStore();
   const quotes = useMarketStore((s) => s.quotes);
+  const marketStatus = useMarketStore((s) => s.marketStatus);
 
   // ── Derived from activeSymbol — recalculated on every render, no stale state
   const underlying = useMemo(() =>
@@ -457,18 +512,26 @@ export function OptionChainModal() {
     return q?.ltp || 0;
   }, [activeSymbol?.token, quotes]);
 
+  const [strikeRange, setStrikeRange] = useState<5 | 10 | 20 | 'all'>(20);
+  const [centerOnAtm, setCenterOnAtm] = useState(true);
+  const [showColumns, setShowColumns] = useState(false);
+  const [visibleColumns, setVisibleColumns] = useState<Record<ColumnKey, boolean>>(() => {
+    try {
+      const stored = localStorage.getItem('fw-option-chain-columns');
+      return stored ? { ...columnsFor(COLUMN_PRESETS.Basic), ...JSON.parse(stored) } : columnsFor(COLUMN_PRESETS.Basic);
+    } catch { return columnsFor(COLUMN_PRESETS.Basic); }
+  });
+
+  const updateColumns = useCallback((next: Record<ColumnKey, boolean>) => {
+    setVisibleColumns(next);
+    try { localStorage.setItem('fw-option-chain-columns', JSON.stringify(next)); } catch { /* storage unavailable */ }
+  }, []);
+
   // ── ATM-filtered chain ────────────────────────────────────────────────────
   const filteredChain = useMemo(() => {
-    if (chain.length === 0 || spotPrice === 0) return chain;
-    let atmIdx = 0, minDiff = Infinity;
-    for (let i = 0; i < chain.length; i++) {
-      const d = Math.abs(chain[i].strike - spotPrice);
-      if (d < minDiff) { minDiff = d; atmIdx = i; }
-    }
-    const s = Math.max(0, atmIdx - STRIKES_AROUND_ATM);
-    const e = Math.min(chain.length, atmIdx + STRIKES_AROUND_ATM + 1);
-    return chain.slice(s, e);
-  }, [chain, spotPrice]);
+    if (chain.length === 0 || !centerOnAtm || spotPrice === 0 || strikeRange === 'all') return chain;
+    return centerChainAroundAtm(chain, spotPrice, strikeRange);
+  }, [chain, spotPrice, centerOnAtm, strikeRange]);
 
   // ── Timer management ──────────────────────────────────────────────────────
   const clearAll = useCallback(() => {
@@ -526,8 +589,9 @@ export function OptionChainModal() {
       if (budgetExpired()) return;
 
       if (data && isCompleteOptionChain(data)) {
-        _chainCache.set(ck, { chain: data, cachedAt: Date.now() });
-        setChain(data);
+        const cleanChain = uniqueChain(data);
+        _chainCache.set(ck, { chain: cleanChain, cachedAt: Date.now() });
+        setChain(cleanChain);
         setStatus({ type: 'ready' });
         if (budgetTimerRef.current) { clearTimeout(budgetTimerRef.current); budgetTimerRef.current = null; }
 
@@ -945,6 +1009,9 @@ export function OptionChainModal() {
             </span>
           </div>
         )}
+        {marketStatus !== 'OPEN' && (
+          <span className="text-[9px] font-bold uppercase tracking-widest text-amber-400 border border-amber-400/30 rounded px-1.5 py-0.5">MARKET {marketStatus === 'CLOSED' ? 'CLOSED' : marketStatus.replace('_', ' ')}</span>
+        )}
 
         <div className="flex-1" />
 
@@ -1016,6 +1083,30 @@ export function OptionChainModal() {
           <span className="text-[11px] text-fw-text-muted ml-2">
             {filteredChain.length} strikes
           </span>
+          <div className="flex items-center gap-1 border border-fw-border/50 rounded px-1 py-0.5">
+            <span className="text-[10px] text-fw-text-muted">Range</span>
+            {([5, 10, 20, 'all'] as const).map((range) => (
+              <button
+                key={range}
+                onClick={() => setStrikeRange(range)}
+                className={cn('px-1.5 text-[10px] font-semibold rounded', strikeRange === range ? 'bg-fw-accent text-white' : 'text-fw-text-muted hover:text-fw-text')}
+              >{range === 'all' ? 'ALL' : range}</button>
+            ))}
+          </div>
+          <button
+            onClick={() => setCenterOnAtm(true)}
+            disabled={centerOnAtm}
+            className={cn('px-2 py-0.5 text-[10px] font-bold rounded border', centerOnAtm ? 'border-fw-accent/40 text-fw-accent' : 'border-fw-border text-fw-text-muted hover:text-fw-text')}
+          >{centerOnAtm ? 'ATM CENTERED' : 'BACK TO ATM'}</button>
+          <button
+            onClick={() => setCenterOnAtm((value) => !value)}
+            className="px-2 py-0.5 text-[10px] font-bold rounded border border-fw-border text-fw-text-muted hover:text-fw-text"
+          >{centerOnAtm ? 'SHOW ALL' : 'CENTER ATM'}</button>
+          <button
+            onClick={() => setShowColumns((value) => !value)}
+            aria-expanded={showColumns}
+            className="px-2 py-0.5 text-[10px] font-bold rounded border border-fw-border text-fw-text-muted hover:text-fw-text"
+          >Columns</button>
           {atmStrike > 0 && (
             <span className="text-[11px] text-fw-accent font-mono ml-auto">
               ATM: {atmStrike}
@@ -1026,6 +1117,27 @@ export function OptionChainModal() {
               MaxPain: {maxPainStrike}
             </span>
           )}
+        </div>
+      )}
+
+      {showColumns && (status.type === 'ready' || status.type === 'stale') && (
+        <div className="flex flex-wrap items-center gap-1.5 px-3 py-2 border-b border-fw-border/30 bg-fw-surface text-[10px]">
+          <span className="text-fw-text-muted font-semibold mr-1">Presets</span>
+          {Object.keys(COLUMN_PRESETS).map((preset) => (
+            <button key={preset} onClick={() => updateColumns(columnsFor(COLUMN_PRESETS[preset]))} className="px-2 py-1 rounded border border-fw-border text-fw-text-secondary hover:border-fw-accent/50 hover:text-fw-text">{preset}</button>
+          ))}
+          <span className="w-px h-4 bg-fw-border/50 mx-1" />
+          {ALL_COLUMN_KEYS.map((key) => (
+            <label key={key} className="flex items-center gap-1 text-fw-text-muted">
+              <input
+                type="checkbox"
+                checked={visibleColumns[key]}
+                onChange={(event) => updateColumns({ ...visibleColumns, [key]: event.target.checked })}
+                className="accent-fw-accent"
+              />
+              {COLUMN_LABELS[key]}
+            </label>
+          ))}
         </div>
       )}
 
@@ -1076,32 +1188,14 @@ export function OptionChainModal() {
           /* ── Professional Option Chain Table ── */
           <table className="w-full border-collapse table-fixed" style={{ fontSize: '10px' }}>
             <colgroup>
-              {viewMode !== 'pe' && (
-                <>
-                  <col style={{ width: '6%' }} />   {/* B/S */}
-                  <col style={{ width: '9%' }} />   {/* OI */}
-                  <col style={{ width: '8%' }} />   {/* OI Chg */}
-                  <col style={{ width: '8%' }} />   {/* Vol */}
-                  <col style={{ width: '7%' }} />   {/* IV */}
-                  <col style={{ width: '9%' }} />   {/* LTP */}
-                </>
-              )}
-              <col style={{ width: '10%' }} />       {/* STRIKE */}
-              {viewMode !== 'ce' && (
-                <>
-                  <col style={{ width: '9%' }} />   {/* LTP */}
-                  <col style={{ width: '7%' }} />   {/* IV */}
-                  <col style={{ width: '8%' }} />   {/* Vol */}
-                  <col style={{ width: '8%' }} />   {/* OI Chg */}
-                  <col style={{ width: '9%' }} />   {/* OI */}
-                  <col style={{ width: '6%' }} />   {/* B/S */}
-                </>
-              )}
+              {viewMode !== 'pe' && <><col style={{ width: '6%' }} />{ALL_COLUMN_KEYS.filter((key) => key.startsWith('call') && visibleColumns[key]).map((key) => <col key={key} style={{ width: '8%' }} />)}</>}
+              <col style={{ width: '10%' }} />
+              {viewMode !== 'ce' && <><>{ALL_COLUMN_KEYS.filter((key) => key.startsWith('put') && visibleColumns[key]).map((key) => <col key={key} style={{ width: '8%' }} />)}</><col style={{ width: '6%' }} /></>}
             </colgroup>
             <thead className="sticky top-0 z-10">
               <tr className="bg-fw-surface">
                 {viewMode !== 'pe' && (
-                  <th colSpan={6} className="py-2 text-center text-[11px] font-bold text-emerald-400 uppercase tracking-widest border-b border-emerald-500/20 bg-emerald-500/[0.04]">
+                  <th colSpan={1 + ALL_COLUMN_KEYS.filter((key) => key.startsWith('call') && visibleColumns[key]).length} className="py-2 text-center text-[11px] font-bold text-emerald-400 uppercase tracking-widest border-b border-emerald-500/20 bg-emerald-500/[0.04]">
                     CALLS
                   </th>
                 )}
@@ -1109,33 +1203,15 @@ export function OptionChainModal() {
                   STRIKE
                 </th>
                 {viewMode !== 'ce' && (
-                  <th colSpan={6} className="py-2 text-center text-[11px] font-bold text-red-400 uppercase tracking-widest border-b border-red-500/20 bg-red-500/[0.04]">
+                  <th colSpan={1 + ALL_COLUMN_KEYS.filter((key) => key.startsWith('put') && visibleColumns[key]).length} className="py-2 text-center text-[11px] font-bold text-red-400 uppercase tracking-widest border-b border-red-500/20 bg-red-500/[0.04]">
                     PUTS
                   </th>
                 )}
               </tr>
               <tr className="bg-fw-bg border-b-2 border-fw-border text-[10px] text-fw-text-secondary uppercase font-semibold">
-                {viewMode !== 'pe' && (
-                  <>
-                    <th className="px-1 py-1 text-center">B/S</th>
-                    <th className="px-1 py-1 text-right">OI</th>
-                    <th className="px-1 py-1 text-right">OI Chg</th>
-                    <th className="px-1 py-1 text-right">Vol</th>
-                    <th className="px-1 py-1 text-right">IV</th>
-                    <th className="px-1 py-1 text-right">LTP</th>
-                  </>
-                )}
+                {viewMode !== 'pe' && <><th className="px-1 py-1 text-center">B/S</th>{ALL_COLUMN_KEYS.filter((key) => key.startsWith('call') && visibleColumns[key]).map((key) => <th key={key} className="px-1 py-1 text-right">{COLUMN_LABELS[key].replace('Call ', '')}</th>)}</>}
                 <th className="px-1 py-1 text-center bg-fw-surface-2 border-x border-fw-border/60 text-fw-text">Strike</th>
-                {viewMode !== 'ce' && (
-                  <>
-                    <th className="px-1 py-1 text-left">LTP</th>
-                    <th className="px-1 py-1 text-left">IV</th>
-                    <th className="px-1 py-1 text-left">Vol</th>
-                    <th className="px-1 py-1 text-left">OI Chg</th>
-                    <th className="px-1 py-1 text-left">OI</th>
-                    <th className="px-1 py-1 text-center">B/S</th>
-                  </>
-                )}
+                {viewMode !== 'ce' && <>{ALL_COLUMN_KEYS.filter((key) => key.startsWith('put') && visibleColumns[key]).map((key) => <th key={key} className="px-1 py-1 text-left">{COLUMN_LABELS[key].replace('Put ', '')}</th>)}<th className="px-1 py-1 text-center">B/S</th></>}
               </tr>
             </thead>
             <tbody>
@@ -1167,6 +1243,7 @@ export function OptionChainModal() {
                     setOrderForm={setOrderForm}
                     callIv={workerIv.get(`${e.strike}:CE`) ?? 0}
                     putIv={workerIv.get(`${e.strike}:PE`) ?? 0}
+                    visibleColumns={visibleColumns}
                   />
                 );
               })}

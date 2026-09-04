@@ -236,9 +236,10 @@ export default function App() {
     return <AccessDenied error={error} />;
   }
 
-  const showOC = showOptionChain || activeWorkspace === 'options';
+  const isOptionWorkspace = activeWorkspace === 'options';
+  const showOC = showOptionChain || isOptionWorkspace;
   const isHome     = activeWorkspace === 'home';
-  const isChartWs  = ['index', 'stocks', 'futures', 'options', 'etf', 'mcx', 'cds'].includes(activeWorkspace);
+  const isChartWs  = ['index', 'stocks', 'futures', 'etf', 'mcx', 'cds'].includes(activeWorkspace);
   const isOrd      = activeWorkspace === 'ord';
   const isWl       = activeWorkspace === 'wl';
   const isDom      = activeWorkspace === 'dom';
@@ -348,6 +349,21 @@ export default function App() {
           {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
               CHART WORKSPACES: index/stocks/futures/options/mcx/cds
           ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+          {isOptionWorkspace && (
+            <>
+              {watchlistPanel}
+              <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+                <div className="flex-1 overflow-hidden min-h-0">
+                  <ErrorBoundary fallbackTitle="Option Chain Error">
+                    <Suspense fallback={null}><OptionChainModal /></Suspense>
+                  </ErrorBoundary>
+                </div>
+                {bottomDock}
+              </div>
+              {rightPanel}
+            </>
+          )}
+
           {isChartWs && (
             <>
               {watchlistPanel}
@@ -362,11 +378,6 @@ export default function App() {
                       <div className="flex-1 overflow-hidden min-w-0">
                         <ErrorBoundary fallbackTitle="Option Chain Error"><Suspense fallback={null}><OptionChainModal /></Suspense></ErrorBoundary>
                       </div>
-                      {activeWorkspace === 'options' && (
-                        <div className="w-[280px] min-w-[240px] border-l border-fw-border overflow-hidden">
-                          <ErrorBoundary fallbackTitle="Greeks Error"><GreeksPanel /></ErrorBoundary>
-                        </div>
-                      )}
                     </>
                   )}
                 </div>

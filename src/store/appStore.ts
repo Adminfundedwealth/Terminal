@@ -268,7 +268,7 @@ export const useAppStore = create<AppState>()(
       })),
       setWatchlists: (watchlists) => set({ watchlists }),
       setActiveWorkspace: (ws) => set((state) => {
-        const isChartWs = ['index', 'stocks', 'futures', 'options', 'etf', 'mcx', 'cds'].includes(ws);
+        const isChartWs = ['index', 'stocks', 'futures', 'etf', 'mcx', 'cds'].includes(ws);
         const showOC = ws === 'options';
         const layout: TerminalLayout = ws === 'options' ? 'options' : ws === 'mcx' ? 'commodity' : ws === 'cds' ? 'currency' : 'standard';
 
