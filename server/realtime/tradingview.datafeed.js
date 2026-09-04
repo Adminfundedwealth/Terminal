@@ -18,9 +18,10 @@
  */
 
 export class TradingViewDatafeed {
-  constructor(instrumentService, marketDataEngine) {
+  constructor(instrumentService, marketDataEngine, historicalProvider = null) {
     this.instrumentService = instrumentService;
     this.marketDataEngine = marketDataEngine;
+    this.historicalProvider = historicalProvider;
     this._barSubscriptions = new Map(); // guid -> { token, resolution, callback }
   }
 
@@ -129,7 +130,10 @@ export class TradingViewDatafeed {
    */
   async getBars(token, resolution, from, to) {
     try {
-      const bars = await this.marketDataEngine.getHistoricalData(token, resolution, from, to);
+      const result = this.historicalProvider
+        ? await this.historicalProvider.getHistoricalCandles(token, resolution, 'NSE', from, to)
+        : { data: await this.marketDataEngine.getHistoricalData(token, resolution, from, to), provider: 'ENGINE' };
+      const bars = result.data || [];
 
       if (!bars || bars.length === 0) {
         return { bars: [], noData: true };
@@ -153,6 +157,7 @@ export class TradingViewDatafeed {
           volume: bar.volume || 0,
         })),
         noData: filteredBars.length === 0,
+        nextTime: filteredBars.length > 0 ? filteredBars[0].time * 1000 : undefined,
       };
     } catch (err) {
       console.error(`[TV Datafeed] getBars error for ${token}:`, err.message);

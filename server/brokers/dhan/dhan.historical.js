@@ -55,12 +55,14 @@ const SEGMENT_MAP = {
 // Historical: unlimited range for daily
 // Dhan supported intraday intervals: 1, 3, 5, 10, 15, 25, 60 minutes
 const TF_CONFIG = {
-  '1':   { type: 'intraday', interval: '1',  lookbackDays: 10 },
-  '3':   { type: 'intraday', interval: '3',  lookbackDays: 10 },
-  '5':   { type: 'intraday', interval: '5',  lookbackDays: 15 },
-  '15':  { type: 'intraday', interval: '15', lookbackDays: 30 },
-  '30':  { type: 'intraday', interval: '25', lookbackDays: 30 },
-  '60':  { type: 'intraday', interval: '60', lookbackDays: 60 },
+  // Dhan limits each intraday request to five calendar days. These lookbacks
+  // define the initial range only; _fetchIntraday chunks the full range.
+  '1':   { type: 'intraday', interval: '1',  lookbackDays: 5 },
+  '3':   { type: 'intraday', interval: '3',  lookbackDays: 30 },
+  '5':   { type: 'intraday', interval: '5',  lookbackDays: 90 },
+  '15':  { type: 'intraday', interval: '15', lookbackDays: 90 },
+  '30':  { type: 'intraday', interval: '25', lookbackDays: 90 },
+  '60':  { type: 'intraday', interval: '60', lookbackDays: 90 },
   '240': { type: 'historical', interval: 'DAY', lookbackYears: 2 },
   'D':   { type: 'historical', interval: 'DAY', lookbackYears: 10 },
   'W':   { type: 'historical', interval: 'DAY', lookbackYears: 10 },

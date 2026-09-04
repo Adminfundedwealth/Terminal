@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { DataProviderSwitch } from '../server/services/dataProviderSwitch.js';
 import { DhanHistoricalService, isValidDhanCandle, validateDhanCandleSeries } from '../server/brokers/dhan/dhan.historical.js';
+import { TradingViewDatafeed } from '../server/realtime/tradingview.datafeed.js';
 
 describe('Dhan historical provider isolation', () => {
   it.each([
@@ -55,6 +56,40 @@ describe('Dhan historical provider isolation', () => {
       { time: 3, open: 1300, high: 1320, low: 1290, close: 1310, volume: 1 },
     ];
     expect(validateDhanCandleSeries(series)).toHaveLength(2);
+  });
+
+  it('fetches every requested intraday chunk instead of replacing old ranges with latest data', async () => {
+    const service = new DhanHistoricalService({ isTokenValid: true }, null);
+    const requests: Array<{ fromDate: string; toDate: string }> = [];
+    service._post = vi.fn(async (_url: string, payload: { fromDate: string; toDate: string }) => {
+      requests.push(payload);
+      const start = Math.floor(new Date(`${payload.fromDate}T00:00:00Z`).getTime() / 1000);
+      return { data: { timestamp: [start], open: [1300], high: [1310], low: [1290], close: [1305], volume: [10] } };
+    }) as any;
+
+    const candles = await service.getCandles('99926000', 'IDX_I', '5', 1786000000, 1787190000);
+
+    expect(requests.length).toBeGreaterThan(1);
+    expect(requests[0].fromDate).toBe('2026-08-06');
+    expect(requests.at(-1)?.toDate).toBe('2026-08-20');
+    expect(candles).toHaveLength(requests.length);
+    expect(candles.map(candle => candle.time)).toEqual(
+      [...candles].sort((a, b) => a.time - b.time).map(candle => candle.time),
+    );
+  });
+
+  it('passes an old requested range through TradingView getBars to Dhan', async () => {
+    const provider = { getHistoricalCandles: vi.fn().mockResolvedValue({
+      provider: 'DHAN',
+      data: [{ time: 1514764800, open: 1300, high: 1310, low: 1290, close: 1305, volume: 10 }],
+    }) };
+    const datafeed = new TradingViewDatafeed({ search: () => [] }, {}, provider);
+
+    const result = await datafeed.getBars('2885', 'D', 1514764000, 1514765000);
+
+    expect(provider.getHistoricalCandles).toHaveBeenCalledWith('2885', 'D', 'NSE', 1514764000, 1514765000);
+    expect(result.bars).toHaveLength(1);
+    expect(result.noData).toBe(false);
   });
 
   it('does not call Angel when Dhan returns an empty range', async () => {

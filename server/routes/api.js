@@ -11,7 +11,7 @@ import { validateDhanCandleSeries } from '../brokers/dhan/dhan.historical.js';
 
 export function createApiRouter(accountService, instrumentService, marketDataEngine, candleService, depthService, optionChainService, dataProviderSwitch) {
   const router = Router();
-  const tvDatafeed = new TradingViewDatafeed(instrumentService, marketDataEngine);
+  const tvDatafeed = new TradingViewDatafeed(instrumentService, marketDataEngine, dataProviderSwitch);
 
   // Helper: parse Dhan marketfeed/quote nested response into LTP number
   function _parseDhanQuote(result, securityId, segment) {
@@ -1649,7 +1649,7 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
     let candles = [];
     if (dataProviderSwitch) {
       try {
-        const fromTs = parseInt(from) || Math.floor((Date.now() - 7 * 24 * 60 * 60 * 1000) / 1000);
+        const fromTs = parseInt(from) || 0;
         const toTs = parseInt(to) || Math.floor(Date.now() / 1000);
         const result = await dataProviderSwitch.getHistoricalCandles(token, resolution, exchange, fromTs, toTs);
         candles = result.data || [];
