@@ -519,6 +519,16 @@ export function OptionChainModal() {
   const [centerOnAtm, setCenterOnAtm] = useState(true);
   const [strikeFocusOffset, setStrikeFocusOffset] = useState(0);
   const [showColumns, setShowColumns] = useState(false);
+  const [analyticsCollapsed, setAnalyticsCollapsed] = useState(() => {
+    try { return localStorage.getItem('fw-option-chain-analytics-collapsed') === 'true'; } catch { return false; }
+  });
+  const [analyticsHeight, setAnalyticsHeight] = useState(() => {
+    try {
+      const stored = Number(localStorage.getItem('fw-option-chain-analytics-height'));
+      return stored >= 150 && stored <= 420 ? stored : 240;
+    } catch { return 240; }
+  });
+  const [analyticsTab, setAnalyticsTab] = useState<'market' | 'oi' | 'pcr' | 'maxPain'>('market');
   const [visibleColumns, setVisibleColumns] = useState<Record<ColumnKey, boolean>>(() => {
     try {
       const stored = localStorage.getItem('fw-option-chain-columns');
@@ -530,6 +540,36 @@ export function OptionChainModal() {
     setVisibleColumns(next);
     try { localStorage.setItem('fw-option-chain-columns', JSON.stringify(next)); } catch { /* storage unavailable */ }
   }, []);
+
+  const toggleAnalytics = useCallback(() => {
+    setAnalyticsCollapsed((collapsed) => {
+      const next = !collapsed;
+      try { localStorage.setItem('fw-option-chain-analytics-collapsed', String(next)); } catch { /* storage unavailable */ }
+      return next;
+    });
+  }, []);
+
+  const resizeAnalytics = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const startY = event.clientY;
+    const startHeight = analyticsHeight;
+    let lastHeight = startHeight;
+    const onMove = (moveEvent: MouseEvent) => {
+      lastHeight = Math.max(150, Math.min(420, startHeight + startY - moveEvent.clientY));
+      setAnalyticsHeight(lastHeight);
+    };
+    const onUp = () => {
+      try { localStorage.setItem('fw-option-chain-analytics-height', String(lastHeight)); } catch { /* storage unavailable */ }
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+  }, [analyticsHeight]);
 
   // ── ATM-filtered chain ────────────────────────────────────────────────────
   const filteredChain = useMemo(() => {
@@ -1186,7 +1226,7 @@ export function OptionChainModal() {
       )}
 
       {/* ── Body ── */}
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 min-h-0 overflow-auto">
 
         {/* No active symbol */}
         {!activeSymbol ? (
@@ -1294,45 +1334,92 @@ export function OptionChainModal() {
             </tbody>
           </table>
         )}
-        {chain.length > 0 && (status.type === 'ready' || status.type === 'stale') && (
-          <OptionAnalytics analytics={analytics} maxPainStrike={maxPainStrike} chain={chain} />
-        )}
       </div>
+
+      <OptionAnalyticsPanel
+        analytics={analytics}
+        maxPainStrike={maxPainStrike}
+        chain={chain}
+        collapsed={analyticsCollapsed}
+        height={analyticsHeight}
+        activeTab={analyticsTab}
+        onTabChange={setAnalyticsTab}
+        onToggle={toggleAnalytics}
+        onResize={resizeAnalytics}
+      />
     </div>
   );
 }
 
-function OptionAnalytics({ analytics, maxPainStrike, chain }: {
+function OptionAnalyticsPanel({
+  analytics,
+  maxPainStrike,
+  chain,
+  collapsed,
+  height,
+  activeTab,
+  onTabChange,
+  onToggle,
+  onResize,
+}: {
   analytics: { callOi: number; putOi: number; pcrOi: number | null; pcrVolume: number | null };
   maxPainStrike: number;
   chain: OptionChainEntry[];
+  collapsed: boolean;
+  height: number;
+  activeTab: 'market' | 'oi' | 'pcr' | 'maxPain';
+  onTabChange: (tab: 'market' | 'oi' | 'pcr' | 'maxPain') => void;
+  onToggle: () => void;
+  onResize: (event: React.MouseEvent<HTMLDivElement>) => void;
 }) {
   const maxChange = Math.max(1, ...chain.flatMap((entry) => [Math.abs(entry.callOiChange || 0), Math.abs(entry.putOiChange || 0)]));
+  const tabs = [
+    { id: 'market' as const, label: 'Market Analytics' },
+    { id: 'oi' as const, label: 'OI Buildup' },
+    { id: 'pcr' as const, label: 'PCR' },
+    { id: 'maxPain' as const, label: 'Max Pain' },
+  ];
+
   return (
-    <section className="grid grid-cols-1 gap-3 border-t border-fw-border bg-fw-surface p-3 lg:grid-cols-3">
-      <div className="rounded border border-fw-border/70 bg-fw-bg p-3">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-fw-text-muted">Market analytics</p>
-        <div className="mt-3 grid grid-cols-2 gap-3 text-[11px]">
-          <Detail label="Total Call OI" value={analytics.callOi > 0 ? formatNumber(analytics.callOi) : 'Unavailable'} />
-          <Detail label="Total Put OI" value={analytics.putOi > 0 ? formatNumber(analytics.putOi) : 'Unavailable'} />
-          <Detail label="PCR (OI)" value={analytics.pcrOi !== null ? analytics.pcrOi.toFixed(2) : 'Unavailable'} />
-          <Detail label="PCR (Volume)" value={analytics.pcrVolume !== null ? analytics.pcrVolume.toFixed(2) : 'Unavailable'} />
-          <Detail label="Max Pain" value={maxPainStrike > 0 ? formatPrice(maxPainStrike) : 'Unavailable'} />
-        </div>
+    <section className="flex-shrink-0 border-t border-fw-border bg-fw-surface" style={collapsed ? undefined : { height }}>
+      {!collapsed && <div onMouseDown={onResize} className="group h-2 cursor-row-resize border-b border-fw-border/60 bg-fw-border/20 hover:bg-fw-accent/20" title="Drag to resize analytics" />}
+      <div className="flex h-9 items-center gap-1 border-b border-fw-border px-2">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => onTabChange(tab.id)}
+            className={cn('h-full border-b-2 px-2.5 text-[10px] font-bold uppercase tracking-wider', activeTab === tab.id ? 'border-fw-accent text-fw-accent' : 'border-transparent text-fw-text-muted hover:text-fw-text')}
+          >
+            {tab.label}
+          </button>
+        ))}
+        <div className="flex-1" />
+        <button onClick={onToggle} className="px-2 text-[10px] font-bold text-fw-text-muted hover:text-fw-text" aria-label={collapsed ? 'Expand analytics' : 'Collapse analytics'}>
+          {collapsed ? '▲' : '▼'}
+        </button>
       </div>
-      <AnalyticsBars title="Open interest buildup" chain={chain} maxChange={maxChange} />
-      <div className="rounded border border-fw-border/70 bg-fw-bg p-3">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-fw-text-muted">Put call ratio</p>
-        <div className="mt-3 flex h-20 items-end gap-1 border-b border-fw-border/60">
-          {chain.slice(-18).map((entry) => {
-            const ratio = entry.callOi > 0 ? entry.putOi / entry.callOi : 0;
-            return <div key={entry.strike} title={`${entry.strike}: ${ratio > 0 ? ratio.toFixed(2) : 'Unavailable'}`} className="flex-1 bg-fw-accent/60" style={{ height: `${Math.min(100, ratio * 55)}%` }} />;
-          })}
+      {!collapsed && (
+        <div className="h-[calc(100%-44px)] overflow-auto p-3">
+          {activeTab === 'market' && (
+            <div className="grid grid-cols-2 gap-3 text-[11px] sm:grid-cols-5">
+              <Detail label="Total Call OI" value={analytics.callOi > 0 ? formatNumber(analytics.callOi) : 'Unavailable'} />
+              <Detail label="Total Put OI" value={analytics.putOi > 0 ? formatNumber(analytics.putOi) : 'Unavailable'} />
+              <Detail label="PCR (OI)" value={analytics.pcrOi !== null ? analytics.pcrOi.toFixed(2) : 'Unavailable'} />
+              <Detail label="PCR (Volume)" value={analytics.pcrVolume !== null ? analytics.pcrVolume.toFixed(2) : 'Unavailable'} />
+              <Detail label="Max Pain" value={maxPainStrike > 0 ? formatPrice(maxPainStrike) : 'Unavailable'} />
+            </div>
+          )}
+          {activeTab === 'oi' && <AnalyticsBars title="Open interest buildup" chain={chain} maxChange={maxChange} />}
+          {activeTab === 'pcr' && <PcrChart chain={chain} />}
+          {activeTab === 'maxPain' && <Detail label="Max Pain Strike" value={maxPainStrike > 0 ? formatPrice(maxPainStrike) : 'Unavailable'} />}
         </div>
-        <p className="mt-2 text-[10px] text-fw-text-muted">Actual chain snapshot · stale state follows feed status</p>
-      </div>
+      )}
     </section>
   );
+}
+
+function PcrChart({ chain }: { chain: OptionChainEntry[] }) {
+  return <div className="h-full min-h-[70px]"><p className="text-[10px] font-bold uppercase tracking-widest text-fw-text-muted">Put call ratio</p><div className="mt-2 flex h-[calc(100%-20px)] min-h-[50px] items-end gap-1 border-b border-fw-border/60">{chain.slice(-18).map((entry) => { const ratio = entry.callOi > 0 ? entry.putOi / entry.callOi : 0; return <div key={entry.strike} title={`${entry.strike}: ${ratio > 0 ? ratio.toFixed(2) : 'Unavailable'}`} className="flex-1 bg-fw-accent/60" style={{ height: `${Math.min(100, ratio * 55)}%` }} />; })}</div></div>;
 }
 
 function AnalyticsBars({ title, chain, maxChange }: { title: string; chain: OptionChainEntry[]; maxChange: number }) {
