@@ -261,7 +261,10 @@ export default function App() {
   }
 
   // ── Right panel JSX — reused across chart workspaces ──────────────────────
-  const rightPanel = panels.orderPanel ? (
+  // The dedicated Options workspace always owns its contract/order rail.
+  // Persisted panel state may predate this workspace and rehydrate with the
+  // order panel hidden, which would let the chain expand across the viewport.
+  const rightPanel = (panels.orderPanel || isOptionWorkspace) ? (
     <>
       <VDivider onDrag={handleOrderPanelResize} />
       <div
