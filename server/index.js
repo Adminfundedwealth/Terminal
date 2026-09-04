@@ -289,7 +289,16 @@ if (process.env.NODE_ENV === 'production') {
   const distExists = fs.existsSync(resolvedDistPath);
   console.log('[Terminal] dist exists:', distExists, 'at:', resolvedDistPath);
   if (distExists) {
-    app.use(express.static(resolvedDistPath));
+    app.use(express.static(resolvedDistPath, {
+      setHeaders: (res, filePath) => {
+        // index.html must never be cached — ensures users always get the latest deploy
+        if (filePath.endsWith('index.html')) {
+          res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+          res.setHeader('Pragma', 'no-cache');
+          res.setHeader('Expires', '0');
+        }
+      },
+    }));
     app.get('*', async (req, res, next) => {
       // Don't serve index.html for API/auth/health routes
       if (req.path.startsWith('/api') || req.path.startsWith('/auth') || req.path.startsWith('/health') || req.path.startsWith('/ws')) {
