@@ -1373,57 +1373,55 @@ function OptionAnalyticsPanel({
   onResize: (event: React.MouseEvent<HTMLDivElement>) => void;
 }) {
   const maxChange = Math.max(1, ...chain.flatMap((entry) => [Math.abs(entry.callOiChange || 0), Math.abs(entry.putOiChange || 0)]));
+  const hasChainData = chain.length > 0;
   const tabs = [
     { id: 'market' as const, label: 'Market Analytics' },
     { id: 'oi' as const, label: 'OI Buildup' },
     { id: 'pcr' as const, label: 'PCR' },
     { id: 'maxPain' as const, label: 'Max Pain' },
   ];
-
   return (
     <section className="flex-shrink-0 border-t border-fw-border bg-fw-surface" style={collapsed ? undefined : { height }}>
-      {!collapsed && <div onMouseDown={onResize} className="group h-2 cursor-row-resize border-b border-fw-border/60 bg-fw-border/20 hover:bg-fw-accent/20" title="Drag to resize analytics" />}
+      {!collapsed && <div onMouseDown={onResize} className="h-2 cursor-row-resize border-b border-fw-border/60 bg-fw-border/20 hover:bg-fw-accent/20" title="Drag to resize analytics" />}
       <div className="flex h-9 items-center gap-1 border-b border-fw-border px-2">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => onTabChange(tab.id)}
-            className={cn('h-full border-b-2 px-2.5 text-[10px] font-bold uppercase tracking-wider', activeTab === tab.id ? 'border-fw-accent text-fw-accent' : 'border-transparent text-fw-text-muted hover:text-fw-text')}
-          >
-            {tab.label}
-          </button>
-        ))}
+        {tabs.map((tab) => <button key={tab.id} onClick={() => onTabChange(tab.id)} className={cn('h-full border-b-2 px-2.5 text-[10px] font-bold uppercase tracking-wider', activeTab === tab.id ? 'border-fw-accent text-fw-accent' : 'border-transparent text-fw-text-muted hover:text-fw-text')}>{tab.label}</button>)}
         <div className="flex-1" />
-        <button onClick={onToggle} className="px-2 text-[10px] font-bold text-fw-text-muted hover:text-fw-text" aria-label={collapsed ? 'Expand analytics' : 'Collapse analytics'}>
-          {collapsed ? '▲' : '▼'}
-        </button>
+        <button onClick={onToggle} className="px-2 text-[10px] font-bold text-fw-text-muted hover:text-fw-text" aria-label={collapsed ? 'Expand analytics' : 'Collapse analytics'}>{collapsed ? '▲' : '▼'}</button>
       </div>
       {!collapsed && (
-        <div className="h-[calc(100%-44px)] overflow-auto p-3">
-          {activeTab === 'market' && (
-            <div className="grid grid-cols-2 gap-3 text-[11px] sm:grid-cols-5">
-              <Detail label="Total Call OI" value={analytics.callOi > 0 ? formatNumber(analytics.callOi) : 'Unavailable'} />
-              <Detail label="Total Put OI" value={analytics.putOi > 0 ? formatNumber(analytics.putOi) : 'Unavailable'} />
-              <Detail label="PCR (OI)" value={analytics.pcrOi !== null ? analytics.pcrOi.toFixed(2) : 'Unavailable'} />
-              <Detail label="PCR (Volume)" value={analytics.pcrVolume !== null ? analytics.pcrVolume.toFixed(2) : 'Unavailable'} />
-              <Detail label="Max Pain" value={maxPainStrike > 0 ? formatPrice(maxPainStrike) : 'Unavailable'} />
-            </div>
-          )}
-          {activeTab === 'oi' && <AnalyticsBars title="Open interest buildup" chain={chain} maxChange={maxChange} />}
-          {activeTab === 'pcr' && <PcrChart chain={chain} />}
-          {activeTab === 'maxPain' && <Detail label="Max Pain Strike" value={maxPainStrike > 0 ? formatPrice(maxPainStrike) : 'Unavailable'} />}
+        <div className="h-[calc(100%-44px)] min-h-0 overflow-auto p-3">
+          {!hasChainData && activeTab !== 'maxPain' && <AnalyticsUnavailable message="Waiting for a complete option-chain snapshot. Metrics and charts will populate when live chain data arrives." />}
+          {hasChainData && activeTab === 'market' && <MarketAnalytics analytics={analytics} maxPainStrike={maxPainStrike} chain={chain} />}
+          {hasChainData && activeTab === 'oi' && <AnalyticsBars title="Open interest buildup" chain={chain} maxChange={maxChange} />}
+          {hasChainData && activeTab === 'pcr' && <PcrChart analytics={analytics} chain={chain} />}
+          {activeTab === 'maxPain' && <MaxPainView maxPainStrike={maxPainStrike} hasChainData={hasChainData} />}
         </div>
       )}
     </section>
   );
 }
 
-function PcrChart({ chain }: { chain: OptionChainEntry[] }) {
-  return <div className="h-full min-h-[70px]"><p className="text-[10px] font-bold uppercase tracking-widest text-fw-text-muted">Put call ratio</p><div className="mt-2 flex h-[calc(100%-20px)] min-h-[50px] items-end gap-1 border-b border-fw-border/60">{chain.slice(-18).map((entry) => { const ratio = entry.callOi > 0 ? entry.putOi / entry.callOi : 0; return <div key={entry.strike} title={`${entry.strike}: ${ratio > 0 ? ratio.toFixed(2) : 'Unavailable'}`} className="flex-1 bg-fw-accent/60" style={{ height: `${Math.min(100, ratio * 55)}%` }} />; })}</div></div>;
+function AnalyticsUnavailable({ message }: { message: string }) {
+  return <div className="flex h-full min-h-[80px] items-center justify-center rounded border border-dashed border-fw-border/70 bg-fw-bg px-4 text-center text-[11px] text-fw-text-muted">{message}</div>;
+}
+
+function MarketAnalytics({ analytics, maxPainStrike, chain }: { analytics: { callOi: number; putOi: number; pcrOi: number | null; pcrVolume: number | null }; maxPainStrike: number; chain: OptionChainEntry[] }) {
+  return <div className="grid h-full min-h-[90px] grid-cols-[minmax(260px,1fr)_minmax(260px,1.4fr)] gap-3"><div className="grid grid-cols-5 gap-3 rounded border border-fw-border/70 bg-fw-bg p-3 text-[11px]"><Detail label="Total Call OI" value={formatNumber(analytics.callOi)} /><Detail label="Total Put OI" value={formatNumber(analytics.putOi)} /><Detail label="PCR (OI)" value={analytics.pcrOi !== null ? analytics.pcrOi.toFixed(2) : 'Unavailable'} /><Detail label="PCR (Volume)" value={analytics.pcrVolume !== null ? analytics.pcrVolume.toFixed(2) : 'Unavailable'} /><Detail label="Max Pain" value={maxPainStrike > 0 ? formatPrice(maxPainStrike) : 'Unavailable'} /></div><PcrChart analytics={analytics} chain={chain} compact /></div>;
+}
+
+function PcrChart({ analytics, chain, compact = false }: { analytics: { pcrOi: number | null; pcrVolume: number | null }; chain: OptionChainEntry[]; compact?: boolean }) {
+  const points = chain.filter((entry) => entry.callOi > 0).slice(-24);
+  const maxRatio = Math.max(1, ...points.map((entry) => entry.putOi / entry.callOi));
+  return <div className="flex min-h-[90px] flex-col rounded border border-fw-border/70 bg-fw-bg p-3"><div className="flex items-center justify-between"><p className="text-[10px] font-bold uppercase tracking-widest text-fw-text-muted">Put call ratio</p><span className="text-[10px] text-fw-accent">OI {analytics.pcrOi?.toFixed(2) ?? '—'} · VOL {analytics.pcrVolume?.toFixed(2) ?? '—'}</span></div><div className={cn('mt-2 flex flex-1 items-end gap-1 border-b border-fw-border/60', compact ? 'min-h-[55px]' : 'min-h-[80px]')}>{points.map((entry) => { const ratio = entry.putOi / entry.callOi; return <div key={entry.strike} title={`${entry.strike}: ${ratio.toFixed(2)}`} className="flex h-full flex-1 items-end bg-fw-accent/15"><div className="w-full bg-fw-accent/70" style={{ height: `${Math.max(4, ratio / maxRatio * 100)}%` }} /> </div>; })}</div><div className="mt-1 flex justify-between text-[9px] text-fw-text-muted"><span>{points[0]?.strike ?? 'No strikes'}</span><span>Strike sequence</span><span>{points.at(-1)?.strike ?? 'Unavailable'}</span></div></div>;
+}
+
+function MaxPainView({ maxPainStrike, hasChainData }: { maxPainStrike: number; hasChainData: boolean }) {
+  return maxPainStrike > 0 ? <div className="flex h-full min-h-[90px] items-center justify-center rounded border border-fw-border/70 bg-fw-bg"><div className="text-center"><p className="text-[10px] uppercase tracking-widest text-fw-text-muted">Calculated max pain strike</p><p className="mt-2 font-mono text-2xl font-bold text-amber-400">{formatPrice(maxPainStrike)}</p></div></div> : <AnalyticsUnavailable message={hasChainData ? 'Max Pain is unavailable because the chain does not contain enough valid open-interest data.' : 'Max Pain requires a complete option-chain snapshot.'} />;
 }
 
 function AnalyticsBars({ title, chain, maxChange }: { title: string; chain: OptionChainEntry[]; maxChange: number }) {
-  return <div className="rounded border border-fw-border/70 bg-fw-bg p-3"><div className="flex items-center justify-between"><p className="text-[10px] font-bold uppercase tracking-widest text-fw-text-muted">{title}</p><span className="text-[10px] text-fw-text-muted">Call / Put OI change</span></div><div className="mt-3 flex h-20 items-center gap-1 border-b border-fw-border/60">{chain.slice(-18).map((entry) => <div key={entry.strike} className="flex h-full flex-1 items-center justify-center gap-px" title={`${entry.strike}`}><div className="w-1/2 bg-emerald-400/70" style={{ height: `${Math.min(100, Math.abs(entry.callOiChange || 0) / maxChange * 100)}%` }} /><div className="w-1/2 bg-red-400/70" style={{ height: `${Math.min(100, Math.abs(entry.putOiChange || 0) / maxChange * 100)}%` }} /></div>)}</div></div>;
+  const points = chain.slice(-24);
+  return <div className="flex h-full min-h-[100px] flex-col rounded border border-fw-border/70 bg-fw-bg p-3"><div className="flex items-center justify-between"><p className="text-[10px] font-bold uppercase tracking-widest text-fw-text-muted">{title}</p><span className="text-[10px] text-fw-text-muted"><span className="text-emerald-400">Call OI Change</span> / <span className="text-red-400">Put OI Change</span></span></div><div className="relative mt-2 flex min-h-[82px] flex-1 items-center gap-1 border-b border-fw-border/60"><div className="pointer-events-none absolute inset-x-0 top-1/2 border-t border-fw-border/70" />{points.map((entry) => { const call = Number(entry.callOiChange || 0); const put = Number(entry.putOiChange || 0); return <div key={entry.strike} title={`${entry.strike}: call ${call.toFixed(1)}%, put ${put.toFixed(1)}%`} className="relative flex h-full min-w-0 flex-1 items-center justify-center gap-px"><div className="w-1/2 bg-emerald-400/80" style={{ height: `${Math.max(2, Math.min(46, Math.abs(call) / maxChange * 46))}%`, transform: call < 0 ? 'translateY(50%)' : 'translateY(-50%)' }} /><div className="w-1/2 bg-red-400/80" style={{ height: `${Math.max(2, Math.min(46, Math.abs(put) / maxChange * 46))}%`, transform: put < 0 ? 'translateY(50%)' : 'translateY(-50%)' }} /></div>; })}</div><div className="mt-1 flex justify-between text-[9px] text-fw-text-muted"><span>{points[0]?.strike ?? 'No strikes'}</span><span>Strike</span><span>{points.at(-1)?.strike ?? 'Unavailable'}</span></div></div>;
 }
 
 function Detail({ label, value }: { label: string; value: string }) {
