@@ -185,12 +185,14 @@ export function ChartPanel({ symbolOverride, timeframeOverride, onTimeframeChang
   const drawingModeRef = useRef<DrawingMode>('none');
   const drawingsRef = useRef<any[]>([]);
   const activeSymbolRef = useRef(activeSymbol);
+  const timeframeRef = useRef(timeframe);
   const trendlineSeriesRef = useRef<Map<string, any>>(new Map());
 
   // Keep refs in sync with state/props
   useEffect(() => { drawingModeRef.current = drawingMode; }, [drawingMode]);
   useEffect(() => { drawingsRef.current = drawings; }, [drawings]);
   useEffect(() => { activeSymbolRef.current = activeSymbol; }, [activeSymbol]);
+  useEffect(() => { timeframeRef.current = timeframe; }, [timeframe]);
 
   const setDrawingModeSync = (mode: DrawingMode) => {
     // Lock mode: allow switching to 'none' (pointer) or 'crosshair' (view-only) but block drawing modes
@@ -958,12 +960,14 @@ export function ChartPanel({ symbolOverride, timeframeOverride, onTimeframeChang
   const backfillReadyRef = useRef(false);
 
   const loadOlderHistory = async () => {
-    if (!backfillReadyRef.current || !chartRef.current || !activeSymbol || backfillInFlightRef.current || rawDataRef.current.length === 0) return;
+    const symbol = activeSymbolRef.current;
+    const currentTimeframe = timeframeRef.current;
+    if (!backfillReadyRef.current || !chartRef.current || !symbol || backfillInFlightRef.current || rawDataRef.current.length === 0) return;
 
     const oldest = rawDataRef.current[0]?.time;
     if (!oldest || oldest <= 0) return;
 
-    const minutesPerBar = timeframe === 'D' ? 1440 : timeframe === 'W' ? 10080 : Number(timeframe) || 5;
+    const minutesPerBar = currentTimeframe === 'D' ? 1440 : currentTimeframe === 'W' ? 10080 : Number(currentTimeframe) || 5;
     const windowSeconds = minutesPerBar * 60 * 500;
     const from = Math.max(0, oldest - windowSeconds);
     const to = oldest - 1;
@@ -972,11 +976,13 @@ export function ChartPanel({ symbolOverride, timeframeOverride, onTimeframeChang
     backfillInFlightRef.current = true;
     const range = chartRef.current.timeScale().getVisibleLogicalRange();
     try {
-      const exchangeHint = (activeSymbol.segment === 'MCX' || activeSymbol.segment === 'CDS')
-        ? activeSymbol.segment
-        : activeSymbol.exchange;
-      const older = await getHistoricalData(activeSymbol.token, timeframe, exchangeHint, from, to);
+      const exchangeHint = (symbol.segment === 'MCX' || symbol.segment === 'CDS')
+        ? symbol.segment
+        : symbol.exchange;
+      const expectedKey = `${symbol.token}:${symbol.exchange}:${currentTimeframe}`;
+      const older = await getHistoricalData(symbol.token, currentTimeframe, exchangeHint, from, to);
       if (!older?.length) return;
+      if (loadingForRef.current !== expectedKey) return;
 
       const merged = [...older, ...rawDataRef.current]
         .filter((bar, index, all) => all.findIndex(candidate => candidate.time === bar.time) === index)
