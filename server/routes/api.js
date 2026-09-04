@@ -7,6 +7,7 @@ import { eventBus } from '../events/eventBus.js';
 import { TradingViewDatafeed } from '../realtime/tradingview.datafeed.js';
 import { futuresContractService } from '../services/futuresContractService.js';
 import { enrichOptionChainEntry } from '../services/optionChainNormalizer.js';
+import { validateDhanCandleSeries } from '../brokers/dhan/dhan.historical.js';
 
 export function createApiRouter(accountService, instrumentService, marketDataEngine, candleService, depthService, optionChainService, dataProviderSwitch) {
   const router = Router();
@@ -1146,20 +1147,16 @@ export function createApiRouter(accountService, instrumentService, marketDataEng
 
         if (candles.length > 0) {
           // Normalize candle format: ensure flat array with { time, open, high, low, close, volume }
-          const normalized = candles.map(c => {
-            const close = Number(c.close) || 0;
-            const open  = Number(c.open)  || close;
-            const high  = Number(c.high)  || Math.max(open, close);
-            const low   = Number(c.low)   || Math.min(open, close);
+          const normalized = validateDhanCandleSeries(candles.map(c => {
             return {
-              time:   typeof c.time === 'number' ? c.time : Math.floor(new Date(c.timestamp || c.datetime || c.date || 0).getTime() / 1000),
-              open,
-              high,
-              low,
-              close,
-              volume: Number(c.volume || 0),
+              time: typeof c.time === 'number' ? c.time : Math.floor(new Date(c.timestamp || c.datetime || c.date || 0).getTime() / 1000),
+              open: Number(c.open),
+              high: Number(c.high),
+              low: Number(c.low),
+              close: Number(c.close),
+              volume: Number(c.volume),
             };
-          }).filter(c => c.time > 0 && c.close > 0 && !isNaN(c.time) && !isNaN(c.close));
+          }));
 
           if (normalized.length > 0) {
             // Deduplicate by timestamp and sort ascending — required by Lightweight Charts

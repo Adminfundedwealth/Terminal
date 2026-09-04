@@ -66,6 +66,39 @@ const TF_CONFIG = {
   'W':   { type: 'historical', interval: 'DAY', lookbackYears: 10 },
 };
 
+export function isValidDhanCandle(candle, referencePrice = null) {
+  const values = [candle?.open, candle?.high, candle?.low, candle?.close];
+  if (!Number.isFinite(candle?.time) || candle.time <= 0 ||
+      !values.every(value => Number.isFinite(value) && value > 0) ||
+      !Number.isFinite(candle?.volume) || candle.volume < 0) return false;
+
+  if (candle.high < candle.low || candle.high < candle.open || candle.high < candle.close ||
+      candle.low > candle.open || candle.low > candle.close) return false;
+
+  const candleMin = Math.min(candle.open, candle.high, candle.low, candle.close);
+  const candleMax = Math.max(candle.open, candle.high, candle.low, candle.close);
+  if (candleMax / candleMin > 10) return false;
+  if (referencePrice && (candleMax / referencePrice > 10 || candleMin / referencePrice < 0.1)) return false;
+  return true;
+}
+
+export function validateDhanCandleSeries(candles) {
+  const valid = [];
+  for (let index = 0; index < candles.length; index++) {
+    const candle = candles[index];
+    const neighbors = [candles[index - 1], candles[index + 1]]
+      .filter(Boolean)
+      .map(item => item.close)
+      .filter(value => Number.isFinite(value) && value > 0);
+    const neighborsAgree = neighbors.length === 2 &&
+      Math.max(...neighbors) / Math.min(...neighbors) <= 10;
+    const hasAbruptPriceJump = neighborsAgree &&
+      neighbors.every(price => candle.close / price > 10 || price / candle.close > 10);
+    if (isValidDhanCandle(candle) && !hasAbruptPriceJump) valid.push(candle);
+  }
+  return valid;
+}
+
 export class DhanHistoricalService {
   constructor(authService, marketDataEngine) {
     this.auth = authService;
@@ -822,18 +855,15 @@ export class DhanHistoricalService {
       const candles = [];
       for (let i = 0; i < timestamps.length; i++) {
         const time = this._normalizeTs(timestamps[i]);
-        const o = parseFloat(opens[i]) || 0;
-        const h = parseFloat(highs[i]) || 0;
-        const l = parseFloat(lows[i]) || 0;
-        const c = parseFloat(closes[i]) || 0;
-        const v = parseInt(volumes[i]) || 0;
-
-        if (time <= 0 || c <= 0 || isNaN(time) || isNaN(c)) continue;
-        // Fix degenerate OHLC (Dhan sometimes sends h=0 or l=0 for indices)
-        const fixedH = h > 0 ? h : Math.max(o || c, c);
-        const fixedL = l > 0 ? l : Math.min(o || c, c);
-        const fixedO = o > 0 ? o : c;
-        candles.push({ time, open: fixedO, high: fixedH, low: fixedL, close: c, volume: v });
+        const candle = {
+          time,
+          open: Number(opens[i]),
+          high: Number(highs[i]),
+          low: Number(lows[i]),
+          close: Number(closes[i]),
+          volume: Number(volumes[i]),
+        };
+        if (isValidDhanCandle(candle)) candles.push(candle);
       }
       return candles;
     }
@@ -844,16 +874,15 @@ export class DhanHistoricalService {
       const candles = [];
       for (const bar of raw) {
         const time = this._normalizeTs(bar?.time || bar?.start_Time || bar?.timestamp || bar?.[0]);
-        const o = parseFloat(bar?.open ?? bar?.[1]) || 0;
-        const h = parseFloat(bar?.high ?? bar?.[2]) || 0;
-        const l = parseFloat(bar?.low  ?? bar?.[3]) || 0;
-        const c = parseFloat(bar?.close ?? bar?.[4]) || 0;
-        const v = parseInt(bar?.volume ?? bar?.[5]) || 0;
-        if (time <= 0 || c <= 0 || isNaN(time)) continue;
-        const fixedH = h > 0 ? h : Math.max(o || c, c);
-        const fixedL = l > 0 ? l : Math.min(o || c, c);
-        const fixedO = o > 0 ? o : c;
-        candles.push({ time, open: fixedO, high: fixedH, low: fixedL, close: c, volume: v });
+        const candle = {
+          time,
+          open: Number(bar?.open ?? bar?.[1]),
+          high: Number(bar?.high ?? bar?.[2]),
+          low: Number(bar?.low  ?? bar?.[3]),
+          close: Number(bar?.close ?? bar?.[4]),
+          volume: Number(bar?.volume ?? bar?.[5]),
+        };
+        if (isValidDhanCandle(candle)) candles.push(candle);
       }
       return candles;
     }
