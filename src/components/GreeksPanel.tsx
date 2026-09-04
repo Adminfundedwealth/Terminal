@@ -83,6 +83,7 @@ export function GreeksPanel() {
 
   // Use worker result if available, otherwise main thread
   const greeks = workerGreeks && Object.values(workerGreeks).every(Number.isFinite) ? workerGreeks : mainThreadGreeks;
+  const hasValidGreeks = Object.values(greeks).every(Number.isFinite);
 
   return (
     <div className="h-full flex flex-col bg-fw-bg overflow-y-auto">
@@ -117,19 +118,19 @@ export function GreeksPanel() {
 
       {/* Greeks Display */}
       <div className="px-3 py-3 space-y-3">
-        <GreekRow label="Delta (Δ)" value={greeks.delta} format={v => v.toFixed(4)} description="Price sensitivity" color={greeks.delta >= 0 ? 'green' : 'red'} max={1} />
-        <GreekRow label="Gamma (Γ)" value={greeks.gamma} format={v => v.toFixed(6)} description="Delta acceleration" color="blue" max={0.01} />
-        <GreekRow label="Theta (Θ)" value={greeks.theta} format={v => `₹${v.toFixed(2)}/day`} description="Time decay" color="red" max={Math.abs(greeks.theta) * 2 || 1} />
-        <GreekRow label="Vega (ν)" value={greeks.vega} format={v => `₹${v.toFixed(2)}/1%IV`} description="Volatility sensitivity" color="purple" max={greeks.vega * 2 || 1} />
-        <GreekRow label="Rho (ρ)" value={greeks.rho} format={v => `₹${v.toFixed(4)}/1%r`} description="Interest rate sensitivity" color="yellow" max={Math.abs(greeks.rho) * 2 || 1} />
-
-        {/* Theoretical Price */}
-        <div className="mt-4 p-3 bg-fw-bg border border-fw-border rounded">
-          <div className="flex items-center justify-between">
-            <span className="text-[13px] text-fw-text-secondary">Theoretical Price (B-S)</span>
-            <span className="text-[16px] font-mono font-bold text-fw-accent">₹{greeks.theoreticalPrice.toFixed(2)}</span>
+        {hasValidGreeks ? <>
+          <GreekRow label="Delta (Δ)" value={greeks.delta} format={v => v.toFixed(4)} description="Price sensitivity" color={greeks.delta >= 0 ? 'green' : 'red'} max={1} />
+          <GreekRow label="Gamma (Γ)" value={greeks.gamma} format={v => v.toFixed(6)} description="Delta acceleration" color="blue" max={0.01} />
+          <GreekRow label="Theta (Θ)" value={greeks.theta} format={v => `₹${v.toFixed(2)}/day`} description="Time decay" color="red" max={Math.abs(greeks.theta) * 2 || 1} />
+          <GreekRow label="Vega (ν)" value={greeks.vega} format={v => `₹${v.toFixed(2)}/1%IV`} description="Volatility sensitivity" color="purple" max={greeks.vega * 2 || 1} />
+          <GreekRow label="Rho (ρ)" value={greeks.rho} format={v => `₹${v.toFixed(4)}/1%r`} description="Interest rate sensitivity" color="yellow" max={Math.abs(greeks.rho) * 2 || 1} />
+          <div className="mt-4 p-3 bg-fw-bg border border-fw-border rounded">
+            <div className="flex items-center justify-between">
+              <span className="text-[13px] text-fw-text-secondary">Theoretical Price (B-S)</span>
+              <span className="text-[16px] font-mono font-bold text-fw-accent">₹{greeks.theoreticalPrice.toFixed(2)}</span>
+            </div>
           </div>
-        </div>
+        </> : <div className="flex min-h-[180px] items-center justify-center rounded border border-dashed border-fw-border text-sm text-fw-text-muted">Unavailable</div>}
       </div>
     </div>
   );

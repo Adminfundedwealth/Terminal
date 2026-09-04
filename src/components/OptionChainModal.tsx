@@ -25,20 +25,20 @@ import { isCompleteOptionChain } from '@/utils/optionChainValidation';
 
 const STRIKES_AROUND_ATM = 20;
 
-export type ColumnKey = 'callOi' | 'callOiChange' | 'callVolume' | 'callIv' | 'callLtp' | 'callBid' | 'callAsk'
-  | 'putLtp' | 'putBid' | 'putAsk' | 'putIv' | 'putVolume' | 'putOiChange' | 'putOi';
+export type ColumnKey = 'callOi' | 'callOiChange' | 'callVolume' | 'callIv' | 'callLtp' | 'callBid' | 'callAsk' | 'callDelta'
+  | 'putDelta' | 'putLtp' | 'putBid' | 'putAsk' | 'putIv' | 'putVolume' | 'putOiChange' | 'putOi';
 
 export const COLUMN_PRESETS: Record<string, ColumnKey[]> = {
-  Basic: ['callOi', 'callIv', 'callLtp', 'callBid', 'callAsk', 'putBid', 'putAsk', 'putLtp', 'putIv', 'putOi'],
-  Trader: ['callOi', 'callOiChange', 'callVolume', 'callIv', 'callLtp', 'callBid', 'callAsk', 'putBid', 'putAsk', 'putLtp', 'putIv', 'putVolume', 'putOiChange', 'putOi'],
-  Greeks: ['callIv', 'callLtp', 'putLtp', 'putIv'],
+  Basic: ['callOi', 'callIv', 'callLtp', 'callBid', 'callAsk', 'callDelta', 'putDelta', 'putBid', 'putAsk', 'putLtp', 'putIv', 'putOi'],
+  Trader: ['callOi', 'callOiChange', 'callVolume', 'callIv', 'callLtp', 'callBid', 'callAsk', 'callDelta', 'putDelta', 'putBid', 'putAsk', 'putLtp', 'putIv', 'putVolume', 'putOiChange', 'putOi'],
+  Greeks: ['callIv', 'callDelta', 'callLtp', 'putLtp', 'putDelta', 'putIv'],
   'OI Analysis': ['callOi', 'callOiChange', 'callVolume', 'putVolume', 'putOiChange', 'putOi'],
-  Full: ['callOi', 'callOiChange', 'callVolume', 'callIv', 'callLtp', 'callBid', 'callAsk', 'putBid', 'putAsk', 'putLtp', 'putIv', 'putVolume', 'putOiChange', 'putOi'],
+  Full: ['callOi', 'callOiChange', 'callVolume', 'callIv', 'callLtp', 'callBid', 'callAsk', 'callDelta', 'putDelta', 'putBid', 'putAsk', 'putLtp', 'putIv', 'putVolume', 'putOiChange', 'putOi'],
 };
 
 const COLUMN_LABELS: Record<ColumnKey, string> = {
-  callOi: 'Call OI', callOiChange: 'Call OI Chg', callVolume: 'Call Vol', callIv: 'Call IV', callLtp: 'Call LTP', callBid: 'Call Bid', callAsk: 'Call Ask',
-  putLtp: 'Put LTP', putBid: 'Put Bid', putAsk: 'Put Ask', putIv: 'Put IV', putVolume: 'Put Vol', putOiChange: 'Put OI Chg', putOi: 'Put OI',
+  callOi: 'Call OI', callOiChange: 'Call OI Chg', callVolume: 'Call Vol', callIv: 'Call IV', callLtp: 'Call LTP', callBid: 'Call Bid', callAsk: 'Call Ask', callDelta: 'Call Delta',
+  putDelta: 'Put Delta', putLtp: 'Put LTP', putBid: 'Put Bid', putAsk: 'Put Ask', putIv: 'Put IV', putVolume: 'Put Vol', putOiChange: 'Put OI Chg', putOi: 'Put OI',
 };
 
 const ALL_COLUMN_KEYS = Object.keys(COLUMN_LABELS) as ColumnKey[];
@@ -319,6 +319,7 @@ const StrikeRow = memo(function StrikeRow({
           </td>}
           {visibleColumns.callBid && <td className="px-1 py-1 text-right font-mono tabular-nums text-fw-text-secondary">{e.callBidPrice ? formatPrice(e.callBidPrice) : '—'}</td>}
           {visibleColumns.callAsk && <td className="px-1 py-1 text-right font-mono tabular-nums text-fw-text-secondary">{e.callAskPrice ? formatPrice(e.callAskPrice) : '—'}</td>}
+          {visibleColumns.callDelta && <td className="px-1 py-1 text-right font-mono tabular-nums text-fw-text-secondary">{Number.isFinite(e.callDelta) ? e.callDelta.toFixed(2) : '—'}</td>}
         </>
       )}
 
@@ -380,6 +381,7 @@ const StrikeRow = memo(function StrikeRow({
           </td>}
           {visibleColumns.putBid && <td className="px-1 py-1 text-left font-mono tabular-nums text-fw-text-secondary">{e.putBidPrice ? formatPrice(e.putBidPrice) : '—'}</td>}
           {visibleColumns.putAsk && <td className="px-1 py-1 text-left font-mono tabular-nums text-fw-text-secondary">{e.putAskPrice ? formatPrice(e.putAskPrice) : '—'}</td>}
+          {visibleColumns.putDelta && <td className="px-1 py-1 text-left font-mono tabular-nums text-fw-text-secondary">{Number.isFinite(e.putDelta) ? e.putDelta.toFixed(2) : '—'}</td>}
           {/* B/S */}
           <td className="px-1 py-1 text-center">
             <div className="flex gap-0.5 justify-center">
@@ -402,7 +404,7 @@ const StrikeRow = memo(function StrikeRow({
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function OptionChainModal() {
-  const { activeSymbol, setActiveSymbol } = useAppStore();
+  const { activeSymbol, setActiveSymbol, watchlists, setActiveWorkspace } = useAppStore();
   const { setOrderForm, setSelectedContract, selectedContract } = useTradingStore();
   const quotes = useMarketStore((s) => s.quotes);
   const marketStatus = useMarketStore((s) => s.marketStatus);
@@ -410,6 +412,7 @@ export function OptionChainModal() {
   // ── Derived from activeSymbol — recalculated on every render, no stale state
   const underlying = useMemo(() =>
     activeSymbol ? deriveUnderlying(activeSymbol) : '', [activeSymbol]);
+  const underlyingOptions = useMemo(() => watchlists.find((watchlist) => watchlist.id === 'options')?.items || [], [watchlists]);
   // effectiveLotSize: use the scrip-master value when available; fall back to
   // the instrument-master value (correct for indices) while the API call is in flight.
   const baseLotSize = useMemo(() =>
@@ -514,6 +517,7 @@ export function OptionChainModal() {
 
   const [strikeRange, setStrikeRange] = useState<5 | 10 | 20 | 'all'>(20);
   const [centerOnAtm, setCenterOnAtm] = useState(true);
+  const [strikeFocusOffset, setStrikeFocusOffset] = useState(0);
   const [showColumns, setShowColumns] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<Record<ColumnKey, boolean>>(() => {
     try {
@@ -530,8 +534,11 @@ export function OptionChainModal() {
   // ── ATM-filtered chain ────────────────────────────────────────────────────
   const filteredChain = useMemo(() => {
     if (chain.length === 0 || !centerOnAtm || spotPrice === 0 || strikeRange === 'all') return chain;
-    return centerChainAroundAtm(chain, spotPrice, strikeRange);
-  }, [chain, spotPrice, centerOnAtm, strikeRange]);
+    const atmEntry = chain.reduce((closest, entry) => Math.abs(entry.strike - spotPrice) < Math.abs(closest.strike - spotPrice) ? entry : closest, chain[0]);
+    const atmIndex = chain.indexOf(atmEntry);
+    const focusIndex = Math.max(0, Math.min(chain.length - 1, atmIndex + strikeFocusOffset));
+    return chain.slice(Math.max(0, focusIndex - strikeRange), Math.min(chain.length, focusIndex + strikeRange + 1));
+  }, [chain, spotPrice, centerOnAtm, strikeRange, strikeFocusOffset]);
 
   // ── Timer management ──────────────────────────────────────────────────────
   const clearAll = useCallback(() => {
@@ -738,6 +745,7 @@ export function OptionChainModal() {
     setWorkerIv(new Map());
     setMaxPainStrike(0);
     setResolvedLotSize(0); // will be refetched below
+    setStrikeFocusOffset(0);
 
     // Unsubscribe previous option token when underlying changes
     if (activeOptionTokenRef.current) {
@@ -794,6 +802,7 @@ export function OptionChainModal() {
     setSelectedExpiry(expiry);
     setWorkerIv(new Map());
     setMaxPainStrike(0);
+    setStrikeFocusOffset(0);
     setStatus({ type: 'loading', label: `${underlying} · ${expiry}`, attempt: 0 });
     startBudget(session);
     loadChain(underlying, expiry, 0, session);
@@ -918,15 +927,27 @@ export function OptionChainModal() {
 
   // ATM strike value
   const atmStrike = useMemo(() => {
-    if (filteredChain.length === 0 || spotPrice === 0) return 0;
-    let closest = filteredChain[0]?.strike || 0;
+    if (chain.length === 0 || spotPrice === 0) return 0;
+    let closest = chain[0]?.strike || 0;
     let minDiff = Infinity;
-    for (const e of filteredChain) {
+    for (const e of chain) {
       const d = Math.abs(e.strike - spotPrice);
       if (d < minDiff) { minDiff = d; closest = e.strike; }
     }
     return closest;
-  }, [filteredChain, spotPrice]);
+  }, [chain, spotPrice]);
+
+  const analytics = useMemo(() => {
+    const callOi = chain.reduce((sum, entry) => sum + (Number.isFinite(entry.callOi) ? entry.callOi : 0), 0);
+    const putOi = chain.reduce((sum, entry) => sum + (Number.isFinite(entry.putOi) ? entry.putOi : 0), 0);
+    const callVolume = chain.reduce((sum, entry) => sum + (Number.isFinite(entry.callVolume) ? entry.callVolume : 0), 0);
+    const putVolume = chain.reduce((sum, entry) => sum + (Number.isFinite(entry.putVolume) ? entry.putVolume : 0), 0);
+    return {
+      callOi, putOi,
+      pcrOi: callOi > 0 ? putOi / callOi : null,
+      pcrVolume: callVolume > 0 ? putVolume / callVolume : null,
+    };
+  }, [chain]);
 
   // Format expiry date for display
   const formatExpiry = (exp: string) => {
@@ -983,7 +1004,19 @@ export function OptionChainModal() {
 
       {/* ── Header ── */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-fw-border flex-shrink-0 bg-fw-surface">
+        <button onClick={() => setActiveWorkspace('home')} className="text-[10px] text-fw-text-muted hover:text-fw-text whitespace-nowrap">← Back to Terminal</button>
         <span className="text-[13px] font-bold text-fw-text tracking-wide flex-shrink-0">OPT CHAIN</span>
+        <select
+          aria-label="Underlying"
+          value={activeSymbol?.token || ''}
+          onChange={(event) => {
+            const item = underlyingOptions.find((option) => option.token === event.target.value);
+            if (item) setActiveSymbol({ token: item.token, symbol: item.symbol, name: item.symbol, segment: item.segment, instrumentType: 'INDEX', exchange: item.segment === 'BSE' ? 'BSE' : 'NSE', lotSize: 1, tickSize: 0.05 });
+          }}
+          className="bg-fw-bg text-fw-text text-[11px] border border-fw-border rounded px-1.5 py-0.5 font-semibold"
+        >
+          {underlyingOptions.map((option) => <option key={option.token} value={option.token}>{option.symbol}</option>)}
+        </select>
         {underlying && (
           <>
             <SymbolLogo symbol={underlying} size={18} className="flex-shrink-0" />
@@ -1094,10 +1127,21 @@ export function OptionChainModal() {
             ))}
           </div>
           <button
-            onClick={() => setCenterOnAtm(true)}
-            disabled={centerOnAtm}
+            onClick={() => { setCenterOnAtm(true); setStrikeFocusOffset(0); }}
             className={cn('px-2 py-0.5 text-[10px] font-bold rounded border', centerOnAtm ? 'border-fw-accent/40 text-fw-accent' : 'border-fw-border text-fw-text-muted hover:text-fw-text')}
-          >{centerOnAtm ? 'ATM CENTERED' : 'BACK TO ATM'}</button>
+          >ATM</button>
+          <button
+            onClick={() => setStrikeFocusOffset((offset) => offset - 1)}
+            disabled={!centerOnAtm || strikeRange === 'all'}
+            className="px-2 py-0.5 text-[10px] font-bold rounded border border-fw-border text-fw-text-muted hover:text-fw-text disabled:opacity-40"
+            title="Previous strike"
+          >←</button>
+          <button
+            onClick={() => setStrikeFocusOffset((offset) => offset + 1)}
+            disabled={!centerOnAtm || strikeRange === 'all'}
+            className="px-2 py-0.5 text-[10px] font-bold rounded border border-fw-border text-fw-text-muted hover:text-fw-text disabled:opacity-40"
+            title="Next strike"
+          >→</button>
           <button
             onClick={() => setCenterOnAtm((value) => !value)}
             className="px-2 py-0.5 text-[10px] font-bold rounded border border-fw-border text-fw-text-muted hover:text-fw-text"
@@ -1186,7 +1230,7 @@ export function OptionChainModal() {
 
         ) : (
           /* ── Professional Option Chain Table ── */
-          <table className="w-full border-collapse table-fixed" style={{ fontSize: '10px' }}>
+          <table className="w-full min-w-[1100px] border-collapse table-fixed" style={{ fontSize: '12px' }}>
             <colgroup>
               {viewMode !== 'pe' && <><col style={{ width: '6%' }} />{ALL_COLUMN_KEYS.filter((key) => key.startsWith('call') && visibleColumns[key]).map((key) => <col key={key} style={{ width: '8%' }} />)}</>}
               <col style={{ width: '10%' }} />
@@ -1250,7 +1294,51 @@ export function OptionChainModal() {
             </tbody>
           </table>
         )}
+        {chain.length > 0 && (status.type === 'ready' || status.type === 'stale') && (
+          <OptionAnalytics analytics={analytics} maxPainStrike={maxPainStrike} chain={chain} />
+        )}
       </div>
     </div>
   );
+}
+
+function OptionAnalytics({ analytics, maxPainStrike, chain }: {
+  analytics: { callOi: number; putOi: number; pcrOi: number | null; pcrVolume: number | null };
+  maxPainStrike: number;
+  chain: OptionChainEntry[];
+}) {
+  const maxChange = Math.max(1, ...chain.flatMap((entry) => [Math.abs(entry.callOiChange || 0), Math.abs(entry.putOiChange || 0)]));
+  return (
+    <section className="grid grid-cols-1 gap-3 border-t border-fw-border bg-fw-surface p-3 lg:grid-cols-3">
+      <div className="rounded border border-fw-border/70 bg-fw-bg p-3">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-fw-text-muted">Market analytics</p>
+        <div className="mt-3 grid grid-cols-2 gap-3 text-[11px]">
+          <Detail label="Total Call OI" value={analytics.callOi > 0 ? formatNumber(analytics.callOi) : 'Unavailable'} />
+          <Detail label="Total Put OI" value={analytics.putOi > 0 ? formatNumber(analytics.putOi) : 'Unavailable'} />
+          <Detail label="PCR (OI)" value={analytics.pcrOi !== null ? analytics.pcrOi.toFixed(2) : 'Unavailable'} />
+          <Detail label="PCR (Volume)" value={analytics.pcrVolume !== null ? analytics.pcrVolume.toFixed(2) : 'Unavailable'} />
+          <Detail label="Max Pain" value={maxPainStrike > 0 ? formatPrice(maxPainStrike) : 'Unavailable'} />
+        </div>
+      </div>
+      <AnalyticsBars title="Open interest buildup" chain={chain} maxChange={maxChange} />
+      <div className="rounded border border-fw-border/70 bg-fw-bg p-3">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-fw-text-muted">Put call ratio</p>
+        <div className="mt-3 flex h-20 items-end gap-1 border-b border-fw-border/60">
+          {chain.slice(-18).map((entry) => {
+            const ratio = entry.callOi > 0 ? entry.putOi / entry.callOi : 0;
+            return <div key={entry.strike} title={`${entry.strike}: ${ratio > 0 ? ratio.toFixed(2) : 'Unavailable'}`} className="flex-1 bg-fw-accent/60" style={{ height: `${Math.min(100, ratio * 55)}%` }} />;
+          })}
+        </div>
+        <p className="mt-2 text-[10px] text-fw-text-muted">Actual chain snapshot · stale state follows feed status</p>
+      </div>
+    </section>
+  );
+}
+
+function AnalyticsBars({ title, chain, maxChange }: { title: string; chain: OptionChainEntry[]; maxChange: number }) {
+  return <div className="rounded border border-fw-border/70 bg-fw-bg p-3"><div className="flex items-center justify-between"><p className="text-[10px] font-bold uppercase tracking-widest text-fw-text-muted">{title}</p><span className="text-[10px] text-fw-text-muted">Call / Put OI change</span></div><div className="mt-3 flex h-20 items-center gap-1 border-b border-fw-border/60">{chain.slice(-18).map((entry) => <div key={entry.strike} className="flex h-full flex-1 items-center justify-center gap-px" title={`${entry.strike}`}><div className="w-1/2 bg-emerald-400/70" style={{ height: `${Math.min(100, Math.abs(entry.callOiChange || 0) / maxChange * 100)}%` }} /><div className="w-1/2 bg-red-400/70" style={{ height: `${Math.min(100, Math.abs(entry.putOiChange || 0) / maxChange * 100)}%` }} /></div>)}</div></div>;
+}
+
+function Detail({ label, value }: { label: string; value: string }) {
+  return <div><span className="block text-fw-text-muted">{label}</span><span className="font-mono font-semibold text-fw-text">{value}</span></div>;
 }

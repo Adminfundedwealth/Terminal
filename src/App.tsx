@@ -19,11 +19,13 @@ import { useHotkeys } from '@/hooks/useHotkeys';
 import { useAuth } from '@/hooks/useAuth';
 import { useWatchlistSync } from '@/hooks/useWatchlistSync';
 import { useAppStore } from '@/store/appStore';
+import { useMarketStore } from '@/store/marketStore';
 import { useThemeStore } from '@/store/themeStore';
 import { initLayoutObserver, useLayoutStore } from '@/store/layoutStore';
 import { wsService } from '@/services/websocket';
 import { startSync, stopSync, startPersistence, stopPersistence } from '@/features/chart-trading';
-import { cn } from '@/utils/helpers';
+import { cn, formatPrice } from '@/utils/helpers';
+import { useTradingStore } from '@/store/tradingStore';
 
 // Lazy-loaded non-critical components
 const OptionChainModal = lazy(() => import('@/components/OptionChainModal').then(m => ({ default: m.OptionChainModal })));
@@ -263,9 +265,16 @@ export default function App() {
     <>
       <VDivider onDrag={handleOrderPanelResize} />
       <div
-        style={{ width: orderPanelWidth, minWidth: 240 }}
+        style={{ width: isOptionWorkspace ? Math.max(orderPanelWidth, 340) : orderPanelWidth, minWidth: isOptionWorkspace ? 320 : 240 }}
         className="border-l border-fw-border flex flex-col overflow-hidden flex-shrink-0"
       >
+        {isOptionWorkspace && <OptionContractDetails />}
+        {isOptionWorkspace && (
+          <details className="flex-shrink-0 border-b border-fw-border bg-fw-bg">
+            <summary className="cursor-pointer px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-fw-text-muted">Greeks</summary>
+            <div className="h-[230px] overflow-hidden"><GreeksPanel /></div>
+          </details>
+        )}
         <ErrorBoundary fallbackTitle="Risk Widget Error">
           <Suspense fallback={null}><TerminalReadiness /></Suspense>
           <RiskWidget />
@@ -318,7 +327,7 @@ export default function App() {
     <ToastProvider>
     <div className="h-screen w-screen flex bg-fw-bg overflow-hidden text-[15px]">
       {/* Left Sidebar Rail */}
-      <Sidebar />
+      {!isOptionWorkspace && <Sidebar />}
 
       {/* Main Terminal Area */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
@@ -351,14 +360,12 @@ export default function App() {
           ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
           {isOptionWorkspace && (
             <>
-              {watchlistPanel}
               <div className="flex-1 flex flex-col overflow-hidden min-w-0">
                 <div className="flex-1 overflow-hidden min-h-0">
                   <ErrorBoundary fallbackTitle="Option Chain Error">
                     <Suspense fallback={null}><OptionChainModal /></Suspense>
                   </ErrorBoundary>
                 </div>
-                {bottomDock}
               </div>
               {rightPanel}
             </>
@@ -500,4 +507,39 @@ function OrdWorkspace() {
       </div>
     </div>
   );
+}
+
+function OptionContractDetails() {
+  const contract = useTradingStore((state) => state.selectedContract);
+  const quote = useMarketStore((state) => contract ? state.quotes[contract.token] : undefined);
+  const value = (value: number | undefined, suffix = '') => Number.isFinite(value) && (value || 0) > 0 ? `${value}${suffix}` : 'Unavailable';
+
+  if (!contract) {
+    return <div className="flex-shrink-0 border-b border-fw-border bg-fw-surface px-3 py-3 text-[11px] text-fw-text-muted">Select a call or put to view contract details.</div>;
+  }
+
+  return (
+    <div className="flex-shrink-0 border-b border-fw-border bg-fw-surface px-3 py-3">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <p className="text-[10px] uppercase tracking-widest text-fw-text-muted">Contract details</p>
+          <p className="mt-1 text-[14px] font-bold text-fw-text">{contract.symbol}</p>
+          <p className="text-[10px] text-fw-text-muted">{contract.expiry} · {contract.optionType} · {quote?.exchange || 'NSE'}</p>
+        </div>
+        <span className="text-[16px] font-mono font-bold text-fw-accent">{quote?.ltp && quote.ltp > 0 ? formatPrice(quote.ltp) : contract.ltp && contract.ltp > 0 ? formatPrice(contract.ltp) : 'Unavailable'}</span>
+      </div>
+      <div className="mt-3 grid grid-cols-3 gap-x-3 gap-y-2 text-[10px]">
+        <DetailMetric label="Bid" value={value(quote?.bid)} />
+        <DetailMetric label="Ask" value={value(quote?.ask)} />
+        <DetailMetric label="Lot size" value={String(contract.lotSize || 'Unavailable')} />
+        <DetailMetric label="Tick size" value={String(quote?.exchange ? '0.05' : 'Unavailable')} />
+        <DetailMetric label="OI" value={value(quote?.oi)} />
+        <DetailMetric label="Volume" value={value(quote?.volume)} />
+      </div>
+    </div>
+  );
+}
+
+function DetailMetric({ label, value }: { label: string; value: string }) {
+  return <div><span className="block text-fw-text-muted">{label}</span><span className="font-mono font-semibold text-fw-text">{value}</span></div>;
 }
