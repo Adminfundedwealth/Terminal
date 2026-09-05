@@ -1,7 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import { useMarketStore } from '@/store/marketStore';
-import { useAppStore } from '@/store/appStore';
-import SymbolLogo from '@/components/SymbolLogo';
 import { wsService } from '@/services/websocket';
 import { cn } from '@/utils/helpers';
 import { Wifi, WifiOff, Loader2 } from 'lucide-react';
@@ -10,7 +8,6 @@ type WsState = 'connected' | 'connecting' | 'reconnecting' | 'disconnected';
 
 export function StatusBar() {
   const marketStatus = useMarketStore((s) => s.marketStatus);
-  const { activeSymbol } = useAppStore();
   const [wsState, setWsState] = useState<WsState>('disconnected');
   const [latency, setLatency] = useState<number | null>(null);
   const lastPingAt = useRef<number | null>(null);
@@ -51,6 +48,8 @@ export function StatusBar() {
       clearInterval(interval);
     };
   }, [wsState]);
+
+  return null;
 
   const statusColor: Record<string, string> = {
     OPEN: 'text-green',
@@ -94,15 +93,6 @@ export function StatusBar() {
         </span>
       </div>
 
-      <div className="flex-1" />
-
-      {/* Active Symbol */}
-      {activeSymbol && (
-        <div className="flex items-center gap-1.5">
-          <SymbolLogo symbol={activeSymbol.symbol} size={14} />
-          <span className="text-fw-text-secondary font-mono">{activeSymbol.symbol}</span>
-        </div>
-      )}
     </div>
   );
 }
