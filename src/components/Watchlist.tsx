@@ -19,6 +19,7 @@ import { cn, formatPrice, getChangeColor, debounce, hasUsableQuote } from '@/uti
 import { searchInstruments, getInstruments } from '@/services/api';
 import { SymbolLogo } from '@/components/SymbolLogo';
 import type { WatchlistItem, Instrument } from '@/types';
+import { getWatchlistInstrumentMetadata } from '@/utils/instrumentCapabilities';
 
 // --- Master Instrument Catalogs -----------------------------------------------
 // These are the authoritative lists used to ensure the UI always renders
@@ -217,25 +218,6 @@ function formatRelativeTime(iso: string): string {
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h ago`;
   return `${Math.floor(hrs / 24)}d ago`;
-}
-
-/**
- * Resolve exchange + instrumentType from a WatchlistItem � preserves the
- * exact logic from the original Watchlist.tsx handleSelectItem.
- */
-function resolveInstrumentFields(item: WatchlistItem): { exchange: string; instrumentType: 'EQ' | 'FUT' | 'CE' | 'PE' } {
-  switch (item.segment) {
-    case 'NFO':
-      return {
-        exchange: 'NFO',
-        instrumentType: item.symbol.includes('FUT') ? 'FUT' : item.symbol.endsWith('CE') ? 'CE' : 'PE',
-      };
-    case 'MCX': return { exchange: 'MCX', instrumentType: 'FUT' };
-    case 'CDS': return { exchange: 'CDS', instrumentType: 'FUT' };
-    case 'BSE':
-    case 'BFO': return { exchange: item.segment, instrumentType: 'EQ' };
-    default:    return { exchange: 'NSE', instrumentType: 'EQ' };
-  }
 }
 
 // --- Portal floating UI helpers -----------------------------------------------
@@ -1195,6 +1177,7 @@ export function Watchlist() {
     activeSymbol, setWatchlists, pinnedTokens, togglePinToken,
     activeWatchlistTab, setActiveWatchlistTab,
   } = useAppStore();
+  const quotes = useMarketStore((s) => s.quotes);
 
   const [panelMode, setPanelMode] = useState<PanelMode>('watchlist');
   const [newsInstrumentSymbol, setNewsInstrumentSymbol] = useState<string | undefined>(undefined);
@@ -1279,6 +1262,9 @@ export function Watchlist() {
       items = items.filter(item => item.segment === segFilter);
     }
 
+    // Do not render catalog placeholders without live market data.
+    items = items.filter(item => hasUsableQuote(quotes[item.token]));
+
     // Pinned items sort to top
     items.sort((a, b) => {
       const aP = pinnedTokens.includes(a.token) ? 0 : 1;
@@ -1286,12 +1272,12 @@ export function Watchlist() {
       return aP - bP;
     });
     return items;
-  }, [activeWatchlist, activeWatchlistTab, activeWorkspace, inlineQuery, segFilter, pinnedTokens]);
+  }, [activeWatchlist, activeWatchlistTab, activeWorkspace, inlineQuery, quotes, segFilter, pinnedTokens]);
 
   // handleSelectItem — enhanced with dynamic option linking
   const handleSelectItem = useCallback(async (item: WatchlistItem) => {
     useTradingStore.getState().setSelectedContract(null);
-    const { exchange, instrumentType } = resolveInstrumentFields(item);
+    const { exchange, instrumentType, canViewChart, canTrade } = getWatchlistInstrumentMetadata(item);
 
     if (['NFO', 'MCX', 'CDS'].includes(item.segment)) {
       if (['MCX', 'CDS'].includes(item.segment)) {
@@ -1304,6 +1290,8 @@ export function Watchlist() {
           exchange: item.segment,
           lotSize: 1,
           tickSize: 0.05,
+          canViewChart,
+          canTrade,
         });
         return;
       }
@@ -1330,6 +1318,8 @@ export function Watchlist() {
       exchange,
       lotSize: 1,
       tickSize: 0.05,
+      canViewChart,
+      canTrade,
     });
 
     // Dynamic option linking: when a stock is clicked in the STOCKS tab,

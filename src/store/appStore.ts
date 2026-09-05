@@ -69,11 +69,11 @@ interface AppState {
 
 const defaultWatchlists: Watchlist[] = [
   { id: 'index', name: 'INDEX', color: '#2962ff', items: [
-    { token: '99926000', symbol: 'NIFTY 50', segment: 'NSE' },
-    { token: '99926009', symbol: 'BANKNIFTY', segment: 'NSE' },
-    { token: '99926037', symbol: 'FINNIFTY', segment: 'NSE' },
-    { token: '99926074', symbol: 'MIDCPNIFTY', segment: 'NSE' },
-    { token: '99919000', symbol: 'SENSEX', segment: 'BSE' },
+    { token: '99926000', symbol: 'NIFTY 50', segment: 'NSE', instrumentType: 'INDEX', canViewChart: true, canTrade: false, tradable: false },
+    { token: '99926009', symbol: 'BANKNIFTY', segment: 'NSE', instrumentType: 'INDEX', canViewChart: true, canTrade: false, tradable: false },
+    { token: '99926037', symbol: 'FINNIFTY', segment: 'NSE', instrumentType: 'INDEX', canViewChart: true, canTrade: false, tradable: false },
+    { token: '99926074', symbol: 'MIDCPNIFTY', segment: 'NSE', instrumentType: 'INDEX', canViewChart: true, canTrade: false, tradable: false },
+    { token: '99919000', symbol: 'SENSEX', segment: 'BSE', instrumentType: 'INDEX', canViewChart: true, canTrade: false, tradable: false },
   ]},
   { id: 'stocks', name: 'STOCKS', color: '#26a69a', items: [
     { token: '2885', symbol: 'RELIANCE', segment: 'NSE' },

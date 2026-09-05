@@ -2,6 +2,7 @@
 import { useTradingStore } from '@/store/tradingStore';
 import { useAppStore } from '@/store/appStore';
 import { useMarketStore } from '@/store/marketStore';
+import { getInstrumentCapabilities } from '@/utils/instrumentCapabilities';
 import { placeOrder, placeBracketOrder, exitPosition, getMarginQuote, type MarginQuote } from '@/services/api';
 import { cn, formatPrice } from '@/utils/helpers';
 import { orderSuccessMessage, exitSuccessMessage } from '@/utils/orderMessages';
@@ -89,8 +90,9 @@ export function OrderPanel() {
   const { orderForm, setOrderForm } = useTradingStore();
   const account = useTradingStore((s) => s.account);
   const selectedContract = useTradingStore((s) => s.selectedContract);
-  const { activeSymbol } = useAppStore();
-  const quote = useMarketStore((s) => activeSymbol ? s.quotes[activeSymbol.token] : undefined);
+  const { activeSymbol, activeWorkspace, setActiveWorkspace } = useAppStore();
+  const selectedToken = selectedContract?.token || orderForm.token || activeSymbol?.token || '';
+  const quote = useMarketStore((s) => selectedToken ? s.quotes[selectedToken] : undefined);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -133,15 +135,31 @@ export function OrderPanel() {
     };
   }, [orderForm.symbol, activeSymbol?.symbol]);
 
-  const symbol = orderForm.symbol || activeSymbol?.symbol || '';
-  const token = orderForm.token || activeSymbol?.token || '';
+  const symbol = selectedContract?.symbol || orderForm.symbol || activeSymbol?.symbol || '';
+  const token = selectedContract?.token || orderForm.token || activeSymbol?.token || '';
+  const tradeSegment = selectedContract ? 'NFO' : activeSymbol?.segment;
+  const tradeInstrumentType = selectedContract ? selectedContract.optionType : activeSymbol?.instrumentType;
+  const tradeExchange = selectedContract ? 'NSE' : activeSymbol?.exchange;
+  const tradeExpiry = selectedContract?.expiry || activeSymbol?.expiry;
+  const tradeStrike = selectedContract?.strike || activeSymbol?.strike;
+  const tradeLotSize = selectedContract?.lotSize || activeSymbol?.lotSize || 1;
+  const capabilities = selectedContract
+    ? { canViewChart: true, canTrade: true }
+    : activeSymbol
+      ? getInstrumentCapabilities(activeSymbol)
+      : { canViewChart: true, canTrade: false };
+
+  if (activeWorkspace === 'options' && !selectedContract) {
+    return (
+      <div className="flex h-full items-center justify-center bg-fw-bg px-4 text-center">
+        <p className="text-[14px] text-fw-text-secondary">Select a Call or Put contract to trade</p>
+      </div>
+    );
+  }
 
   // Is the current instrument a non-tradeable spot index?
-  const isSpotIndex = isSpotIndexInstrument({
-    symbol,
-    segment: activeSymbol?.segment,
-    instrumentType: activeSymbol?.instrumentType,
-  });
+  const isSpotIndex = Boolean(activeSymbol && !selectedContract && !capabilities.canTrade);
+  const canTrade = capabilities.canTrade;
 
   // ── Fetch the authoritative margin quote from the backend ────────────────
   // This is the SINGLE SOURCE OF TRUTH. The number shown here is exactly what
@@ -155,9 +173,9 @@ export function OrderPanel() {
     const handle = setTimeout(() => {
       getMarginQuote({
         symbol, token,
-        segment: activeSymbol?.segment || 'NSE',
+        segment: tradeSegment || 'NSE',
         productType: orderForm.productType,
-        instrumentType: activeSymbol?.instrumentType,
+        instrumentType: tradeInstrumentType,
         qty: orderForm.qty,
         price: orderForm.orderType === 'LIMIT' || orderForm.orderType === 'SL' ? orderForm.price : undefined,
       })
@@ -165,7 +183,7 @@ export function OrderPanel() {
         .catch(() => { if (!cancelled) setMarginQuote(null); });
     }, 250);
     return () => { cancelled = true; clearTimeout(handle); };
-  }, [symbol, token, activeSymbol?.segment, activeSymbol?.instrumentType, orderForm.qty, orderForm.productType, orderForm.orderType, orderForm.price, isSpotIndex]);
+  }, [symbol, token, tradeSegment, tradeInstrumentType, orderForm.qty, orderForm.productType, orderForm.orderType, orderForm.price, isSpotIndex]);
 
   // Find open position for the current symbol (for EXIT button)
   const openPosition = useTradingStore.getState().positions.find(
@@ -184,8 +202,7 @@ export function OrderPanel() {
     const qtyError = validateOrderQty(orderForm.qty);
     if (qtyError) return qtyError;
     // Lot-size multiple validation for derivative instruments
-    const effectiveLotSize = activeSymbol?.lotSize || 1;
-    const lotError = validateOrderLotMultiple(orderForm.qty, effectiveLotSize);
+    const lotError = validateOrderLotMultiple(orderForm.qty, tradeLotSize);
     if (lotError) return lotError;
     if (gttEnabled && (!gttTriggerPrice || gttTriggerPrice <= 0)) return 'Enter a GTT trigger price';
     if ((slPrice > 0) !== (tpPrice > 0)) return 'Enter both Stop Loss and Target prices for a bracket order';
@@ -214,13 +231,13 @@ export function OrderPanel() {
     try {
       const orderParams = {
         symbol, token,
-        segment: activeSymbol?.segment || 'NSE',
-        exchange: activeSymbol?.exchange,
-        instrumentType: activeSymbol?.instrumentType,
-        expiry: activeSymbol?.expiry,
-        strike: activeSymbol?.strike,
-        optionType: activeSymbol?.optionType,
-        lotSize: activeSymbol?.lotSize,
+        segment: tradeSegment || 'NSE',
+        exchange: tradeExchange,
+        instrumentType: tradeInstrumentType,
+        expiry: tradeExpiry,
+        strike: tradeStrike,
+        optionType: selectedContract?.optionType || activeSymbol?.optionType,
+        lotSize: tradeLotSize,
         side,
         orderType: orderForm.orderType,
         productType: orderForm.productType,
@@ -269,6 +286,35 @@ export function OrderPanel() {
       <div className="flex flex-col items-center justify-center h-full gap-2 px-3 py-4 bg-fw-bg">
         <p className="text-[14px] text-fw-text-secondary">Select a symbol</p>
         <p className="text-[14px] text-fw-text-muted">Ctrl+K to search</p>
+      </div>
+    );
+  }
+
+  if (!canTrade && activeSymbol) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-3 bg-fw-bg px-4 text-center">
+        <div>
+          <p className="text-[14px] font-semibold text-fw-text">{symbol} Spot Index</p>
+          <p className="mt-1 text-[12px] leading-relaxed text-fw-text-muted">
+            Chart and market data only. Trade {symbol.replace(/\s*50$/, '').trim() || symbol} Futures or Options from the relevant tab.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveWorkspace('futures')}
+            className="rounded border border-fw-border px-3 py-1.5 text-[11px] font-semibold text-fw-text-secondary hover:border-fw-accent/50 hover:text-fw-text"
+          >
+            View Futures
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveWorkspace('options')}
+            className="rounded border border-fw-border px-3 py-1.5 text-[11px] font-semibold text-fw-text-secondary hover:border-fw-accent/50 hover:text-fw-text"
+          >
+            View Options
+          </button>
+        </div>
       </div>
     );
   }
@@ -329,11 +375,11 @@ export function OrderPanel() {
         <div className="flex items-center gap-2">
           <SymbolLogo symbol={symbol} size={22} className="flex-shrink-0" />
           <span className="tv-symbol-lg">{symbol}</span>
-          {activeSymbol?.segment && (
-            <span className="tv-support bg-fw-surface-2 px-1.5 py-0.5 rounded border border-fw-border/50">{activeSymbol.segment}</span>
+          {tradeSegment && (
+            <span className="tv-support bg-fw-surface-2 px-1.5 py-0.5 rounded border border-fw-border/50">{tradeSegment}</span>
           )}
-          {activeSymbol?.lotSize && activeSymbol.lotSize > 1 && (
-            <span className="tv-support text-fw-accent bg-fw-accent/8 px-1 py-0.5 rounded">Lot {activeSymbol.lotSize}</span>
+          {tradeLotSize > 1 && (
+            <span className="tv-support text-fw-accent bg-fw-accent/8 px-1 py-0.5 rounded">Lot {tradeLotSize}</span>
           )}
         </div>
         {/* L1 — Current price: must be instantly readable */}
@@ -350,7 +396,7 @@ export function OrderPanel() {
       </div>
 
       {/* Selected Option Contract Context */}
-      {selectedContract && activeSymbol?.segment === 'NFO' && (
+      {selectedContract && (tradeSegment === 'NFO' || tradeSegment === 'BFO') && (
         <div className="px-3 py-1.5 border-b border-fw-accent/20 bg-fw-accent/[0.03] flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-2">
             <span className="text-[13px] font-bold text-fw-accent uppercase">Option</span>
@@ -387,8 +433,8 @@ export function OrderPanel() {
       </div>
 
       {/* Product Type Pills — visible for derivative instruments (NFO/FUT need NRML for overnight) */}
-      {activeSymbol && (activeSymbol.segment === 'NFO' || activeSymbol.segment === 'BFO' ||
-        activeSymbol.instrumentType === 'FUT' || activeSymbol.instrumentType === 'CE' || activeSymbol.instrumentType === 'PE') && (
+      {tradeSegment && (tradeSegment === 'NFO' || tradeSegment === 'BFO' ||
+        tradeInstrumentType === 'FUT' || tradeInstrumentType === 'CE' || tradeInstrumentType === 'PE') && (
         <div className="px-3 pb-2 flex-shrink-0">
           <label className="tv-label uppercase tracking-wider mb-1 block">Product</label>
           <div className="flex gap-1">

@@ -16,6 +16,9 @@ export interface Instrument {
   exchange: string;
   lotSize: number;
   tickSize: number;
+  canViewChart?: boolean;
+  canTrade?: boolean;
+  tradable?: boolean;
   expiry?: string;
   strike?: number;
   optionType?: 'CE' | 'PE';
@@ -123,6 +126,11 @@ export interface WatchlistItem {
   token: string;
   symbol: string;
   segment: Segment;
+  instrumentType?: InstrumentType;
+  exchange?: string;
+  canViewChart?: boolean;
+  canTrade?: boolean;
+  tradable?: boolean;
 }
 
 export interface Watchlist {
